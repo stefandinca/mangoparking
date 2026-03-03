@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    function isStaff() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'staff'];
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Settings - public read, admin write
+    match /settings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Pricing tiers - public read, admin write
+    match /pricingTiers/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Add-ons - public read, admin write
+    match /addOns/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Bookings - customer reads own, staff reads all
+    match /bookings/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow create: if isAuthenticated();
+      allow update: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // Subscriptions - customer reads own, admin read/write
+    match /subscriptions/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow create: if isAuthenticated();
+      allow update: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // Spots - public read, staff/admin write
+    match /spots/{id} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // Shuttle schedule - public read, staff/admin write
+    match /shuttleSchedule/{id} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // Train schedule - public read
+    match /trainSchedule/{id} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // Users - self read/write (except role on update), admin write
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isStaff();
+      allow create: if isOwner(uid);
+      allow update: if (isOwner(uid) && request.resource.data.role == resource.data.role) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Audit log - staff/admin read, append-only
+    match /auditLog/{id} {
+      allow read: if isStaff();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Contact messages - public create, admin read
+    match /contactMessages/{id} {
+      allow create: if true;
+      allow read: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Reviews - public read
+    match /reviews/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
