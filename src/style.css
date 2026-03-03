@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/* ===== Theme Tokens ===== */
+@theme {
+  --color-mango: #F28C28;
+  --color-mango-hover: #E07D1A;
+  --color-leaf: #34D399;
+  --color-charcoal: #2D4A47;
+  --color-dim: #4B5563;
+  --color-frost: #F0F2F5;
+  --color-frost-deep: #E4E7EC;
+  --color-surface: #FFFFFF;
+  --color-danger: #D94F3B;
+
+  --font-heading: "Space Grotesk", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* ===== Base ===== */
+html {
+  font-size: 17px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* ===== Glassmorphism ===== */
+.glass {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+/* ===== Cards ===== */
+.card-solid {
+  background: #fff;
+  border: 1px solid var(--color-frost-deep);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+@media (hover: hover) {
+  .card-solid:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* ===== Hero ===== */
+.hero-glow {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hero-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%;
+}
+
+.hero-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(240, 242, 245, 0.92) 0%,
+    rgba(240, 242, 245, 0.8) 50%,
+    rgba(240, 242, 245, 0.55) 100%
+  );
+}
+
+/* ===== Utilities ===== */
+.img-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ===== FAQ ===== */
+.faq-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.faq-body.open {
+  grid-template-rows: 1fr;
+}
+
+.faq-body > div {
+  overflow: hidden;
+}
+
+/* ===== Shuttle ===== */
+.shuttle-row {
+  transition: background 0.15s ease;
+}
+
+.shuttle-row:hover {
+  background: rgba(242, 140, 40, 0.03);
+}
+
+/* ===== Toast ===== */
+.toast {
+  animation: toast-in 0.3s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== Page transitions ===== */
+.page-enter {
+  animation: fade-in 0.2s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ===== Mobile nav ===== */
+.mobile-nav {
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mobile-nav.open {
+  transform: translateX(0);
+}
+
+/* ===== Admin sidebar ===== */
+.admin-sidebar-link.active {
+  background: rgba(242, 140, 40, 0.08);
+  color: var(--color-mango);
+}
+
+/* ===== Flatpickr overrides ===== */
+.flatpickr-calendar {
+  border-radius: 16px !important;
+  border: 1px solid var(--color-frost-deep) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08) !important;
+  font-family: var(--font-body) !important;
+}
+
+.flatpickr-day.selected {
+  background: var(--color-mango) !important;
+  border-color: var(--color-mango) !important;
+}
