@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mango Parking — Parcare Aeroport Otopeni | Parcare lungă durată & abonament Shuttle</title>
+<meta name="description" content="Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Shuttle gratuită, securitate 24/7, de la 29 lei/zi. Prima parcare pentru navetiști din Otopeni.">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        mango: '#F28C28',
+        'mango-hover': '#E07D1A',
+        leaf: '#34D399',
+        charcoal: '#2D4A47',
+        dim: '#6B7280',
+        frost: '#F0F2F5',
+        'frost-deep': '#E4E7EC',
+        surface: '#FFFFFF',
+      },
+      fontFamily: {
+        heading: ['"Space Grotesk"', 'sans-serif'],
+        body: ['"DM Sans"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      }
+    }
+  }
+}
+</script>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+  body { background: #F0F2F5; }
+
+  .glass {
+    background: rgba(255,255,255,0.55);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.8);
+  }
+  .glass-strong {
+    background: rgba(255,255,255,0.75);
+    backdrop-filter: blur(32px);
+    -webkit-backdrop-filter: blur(32px);
+    border: 1px solid rgba(255,255,255,0.9);
+  }
+  .card-solid {
+    background: #fff;
+    border: 1px solid #E4E7EC;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .card-solid:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.06);
+  }
+
+  .hero-glow {
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.12;
+    pointer-events: none;
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+  .hero-bg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 40%;
+  }
+  .hero-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(240,242,245,0.92) 0%, rgba(240,242,245,0.80) 50%, rgba(240,242,245,0.55) 100%);
+  }
+
+  .img-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .faq-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .faq-body.open { grid-template-rows: 1fr; }
+  .faq-body > div { overflow: hidden; }
+
+  .shuttle-row { transition: background 0.15s ease; }
+  .shuttle-row:hover { background: rgba(242,140,40,0.03); }
+</style>
+</head>
+<body class="font-body text-charcoal">
+
+<!-- ===== NAV ===== -->
+<nav class="fixed top-0 w-full z-50">
+  <div class="max-w-7xl mx-auto px-6 pt-4">
+    <div class="glass-strong rounded-2xl px-6 h-14 flex items-center justify-between shadow-sm">
+      <a href="#" class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-mango flex items-center justify-center shadow-sm">
+          <span class="text-white font-heading font-bold text-sm">M</span>
+        </div>
+        <span class="font-heading font-bold text-[15px] tracking-tight">Mango Parking</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8 text-[13px] font-medium text-charcoal/40">
+        <a href="#cum-functioneaza" class="hover:text-charcoal transition-colors duration-200">Cum funcționează</a>
+        <a href="#tarife" class="hover:text-charcoal transition-colors duration-200">Tarife</a>
+        <a href="#naveta" class="hover:text-charcoal transition-colors duration-200">Shuttle</a>
+        <a href="#intrebari" class="hover:text-charcoal transition-colors duration-200">Întrebări</a>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="text-[11px] font-mono text-charcoal/30 hover:text-charcoal/60 transition-colors px-2 py-1 rounded-lg border border-transparent hover:border-frost-deep">EN</button>
+        <a href="#" class="bg-charcoal hover:bg-charcoal/85 text-white text-[13px] font-semibold px-5 py-2 rounded-xl transition-all duration-200 shadow-sm">Rezervă Acum</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<section class="min-h-screen flex items-center pt-24 pb-16 relative overflow-hidden">
+  <div class="hero-bg">
+    <img src="https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=1920&q=80" alt="Aeroport parking lot aerial" loading="eager">
+  </div>
+  <div class="hero-glow bg-mango top-20 -left-40"></div>
+  <div class="hero-glow bg-blue-400 bottom-0 right-0"></div>
+
+  <div class="max-w-7xl mx-auto px-6 w-full relative z-10">
+    <div class="grid lg:grid-cols-12 gap-12 items-center">
+      <div class="lg:col-span-7">
+        <div class="inline-flex items-center gap-2 bg-white/60 backdrop-blur-sm border border-white/80 rounded-full px-4 py-1.5 mb-8 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-leaf animate-[pulse_2s_ease-in-out_infinite]"></span>
+          <span class="text-charcoal/60 text-[13px] font-medium">87 locuri disponibile acum</span>
+        </div>
+
+        <h1 class="font-heading text-[clamp(3rem,6vw,5.5rem)] font-bold leading-[1.02] tracking-[-0.03em] mb-6">
+          Parchează Smart.<br>
+          <span class="text-mango">Călătorește Ușor.</span>
+        </h1>
+
+        <p class="text-[17px] text-dim leading-relaxed max-w-md mb-10">
+          Parcare securizată lungă durată & pentru navetiști la Aeroportul Otopeni. Shuttle gratuită, securitate 24/7, de la 29 lei/zi.
+        </p>
+
+        <div class="flex flex-col sm:flex-row gap-3 mb-14">
+          <a href="#" class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">
+            Rezervă Locul Tău
+          </a>
+          <a href="#" class="glass font-semibold text-[15px] px-8 py-4 rounded-2xl text-center hover:bg-white/70 transition-all duration-200 shadow-sm">
+            Abonament Navetiști →
+          </a>
+        </div>
+
+        <div class="flex items-center gap-8">
+          <div>
+            <p class="font-heading font-bold text-2xl tracking-tight">110</p>
+            <p class="text-[11px] text-dim uppercase tracking-wider mt-0.5">Locuri Total</p>
+          </div>
+          <div class="w-px h-8 bg-frost-deep"></div>
+          <div>
+            <p class="font-heading font-bold text-2xl tracking-tight">15<span class="text-dim text-base font-normal"> min</span></p>
+            <p class="text-[11px] text-dim uppercase tracking-wider mt-0.5">Frecv. Shuttle</p>
+          </div>
+          <div class="w-px h-8 bg-frost-deep"></div>
+          <div>
+            <p class="font-heading font-bold text-2xl tracking-tight">24/7</p>
+            <p class="text-[11px] text-dim uppercase tracking-wider mt-0.5">Securitate</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-5 relative">
+        <div class="relative w-full aspect-square max-w-md mx-auto">
+          <div class="absolute inset-8 rounded-[32px] overflow-hidden shadow-2xl">
+            <img src="https://images.unsplash.com/photo-1568738009519-52d1bad47858?q=80&w=774&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Parcare securizată cu barieră" class="img-cover" loading="eager">
+            <div class="absolute inset-0 bg-gradient-to-t from-charcoal/30 to-transparent"></div>
+          </div>
+
+          <div class="absolute top-0 left-0 glass rounded-2xl p-5 shadow-lg w-56">
+            <p class="text-[10px] font-mono uppercase text-dim tracking-[0.15em] mb-3">Capacitate Live</p>
+            <div class="flex items-baseline gap-1.5 mb-3">
+              <span class="font-heading font-bold text-4xl tracking-tight">87</span>
+              <span class="text-dim text-sm">/ 110</span>
+            </div>
+            <div class="h-2 bg-frost-deep rounded-full overflow-hidden">
+              <div class="h-full rounded-full bg-gradient-to-r from-leaf to-mango" style="width:79%"></div>
+            </div>
+          </div>
+
+          <div class="absolute top-4 right-0 glass rounded-2xl p-5 shadow-lg w-48">
+            <p class="text-[10px] font-mono uppercase text-dim tracking-[0.15em] mb-2">Următoarea Shuttle</p>
+            <p class="font-heading font-bold text-3xl tracking-tight font-mono">14:30</p>
+            <p class="text-dim text-xs mt-1">→ Terminal Aeroport</p>
+          </div>
+
+          <div class="absolute bottom-12 left-4 glass rounded-2xl p-5 shadow-lg w-48">
+            <p class="text-[10px] font-mono uppercase text-dim tracking-[0.15em] mb-2">De la</p>
+            <div class="flex items-baseline gap-1">
+              <span class="font-heading font-bold text-3xl tracking-tight">29</span>
+              <span class="text-dim text-sm">lei/zi</span>
+            </div>
+          </div>
+
+          <div class="absolute bottom-0 right-0 glass rounded-2xl p-4 shadow-lg w-52">
+            <div class="flex gap-0.5 mb-2">
+              <svg class="w-3 h-3 text-mango" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+              <svg class="w-3 h-3 text-mango" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+              <svg class="w-3 h-3 text-mango" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+              <svg class="w-3 h-3 text-mango" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+              <svg class="w-3 h-3 text-mango" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+            </div>
+            <p class="text-[12px] text-charcoal/60 leading-snug">"Cea mai bună parcare la Otopeni. Naveta mereu la timp."</p>
+            <p class="text-[11px] text-dim mt-2 font-medium">Andrei P.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CUM FUNCȚIONEAZĂ ===== -->
+<section id="cum-functioneaza" class="py-28">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="text-center mb-20">
+      <p class="text-[11px] font-mono uppercase text-mango tracking-[0.2em] mb-3">Cum Funcționează</p>
+      <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">Trei pași. Zero bătăi de cap.</h2>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="card-solid rounded-3xl overflow-hidden">
+        <div class="h-48 overflow-hidden">
+          <img src="https://images.unsplash.com/photo-1520088096110-20308c23a3cd?q=80&w=1740&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Rezervare online pe telefon" class="img-cover hover:scale-105 transition-transform duration-500" loading="lazy">
+        </div>
+        <div class="p-8">
+          <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mb-6">
+            <span class="font-heading font-bold text-lg text-mango">01</span>
+          </div>
+          <h3 class="font-heading font-bold text-xl mb-3 tracking-tight">Rezervă Online</h3>
+          <p class="text-dim text-[15px] leading-relaxed">Alege datele și vehiculul. Confirmă în mai puțin de 60 de secunde. Plătești la sosire.</p>
+        </div>
+      </div>
+      <div class="card-solid rounded-3xl overflow-hidden">
+        <div class="h-48 overflow-hidden">
+          <img src="https://images.unsplash.com/photo-1559050695-edde77c73609?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OXx8bWluaWJ1c3xlbnwwfHwwfHx8Mg%3D%3D" alt="Shuttle bus transport" class="img-cover hover:scale-105 transition-transform duration-500" loading="lazy">
+        </div>
+        <div class="p-8">
+          <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mb-6">
+            <span class="font-heading font-bold text-lg text-mango">02</span>
+          </div>
+          <h3 class="font-heading font-bold text-xl mb-3 tracking-tight">Parchează & Shuttle</h3>
+          <p class="text-dim text-[15px] leading-relaxed">Lasă mașina la noi. Urcă în naveta gratuită către aeroport sau gara de tren.</p>
+        </div>
+      </div>
+      <div class="card-solid rounded-3xl overflow-hidden">
+        <div class="h-48 overflow-hidden">
+          <img src="https://images.unsplash.com/photo-1574113230879-84d1bb15d277?q=80&w=872&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Avion la decolare" class="img-cover hover:scale-105 transition-transform duration-500" loading="lazy">
+        </div>
+        <div class="p-8">
+          <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mb-6">
+            <span class="font-heading font-bold text-lg text-mango">03</span>
+          </div>
+          <h3 class="font-heading font-bold text-xl mb-3 tracking-tight">Zboară & Relaxează-te</h3>
+          <p class="text-dim text-[15px] leading-relaxed">Pază 24/7, camere CCTV, acces cu barieră. Mașina ta e monitorizată cât ești plecat.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TARIFE ===== -->
+<section id="tarife" class="py-28 bg-charcoal rounded-[40px] mx-4 relative overflow-hidden">
+  <div class="absolute top-0 right-0 w-96 h-96 rounded-full bg-mango/5 filter blur-[100px]"></div>
+  <div class="max-w-7xl mx-auto px-6 relative z-10">
+    <div class="text-center mb-20">
+      <p class="text-[11px] font-mono uppercase text-mango tracking-[0.2em] mb-3">Tarife</p>
+      <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-white">Prețuri simple, transparente.</h2>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+      <!-- Călători -->
+      <div class="bg-white/[0.05] border border-white/[0.08] rounded-3xl p-8 hover:border-white/15 transition-colors duration-300">
+        <div class="flex items-center gap-3 mb-8">
+          <div class="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center">
+            <svg class="w-5 h-5 text-white/40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
+          </div>
+          <div>
+            <h3 class="text-white font-heading font-bold text-lg">Călători</h3>
+            <p class="text-white/30 text-[13px]">Parcare lungă durată</p>
+          </div>
+        </div>
+        <div class="flex items-baseline gap-1.5 mb-2">
+          <span class="font-heading font-bold text-5xl text-white tracking-tight">29</span>
+          <span class="text-white/30 text-sm">lei / zi</span>
+        </div>
+        <p class="text-white/20 text-[13px] mb-8">Tarif de bază. Reduceri pentru 7+ zile.</p>
+
+        <ul class="space-y-3 mb-8">
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-leaf flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Shuttle gratuită la fiecare 15 min
+          </li>
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-leaf flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Securitate 24/7, CCTV, acces cu barieră
+          </li>
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-leaf flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Reduceri progresive pentru sejururi lungi
+          </li>
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-leaf flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Spălătorie auto & încărcare EV opțional
+          </li>
+        </ul>
+        <a href="#" class="block text-center bg-white/10 hover:bg-white/15 text-white font-semibold text-[15px] py-4 rounded-2xl transition-colors duration-200">Rezervă Acum</a>
+      </div>
+
+      <!-- Navetiști -->
+      <div class="bg-white/[0.05] border border-mango/25 rounded-3xl p-8 hover:border-mango/40 transition-colors duration-300 relative">
+        <div class="absolute -top-3 right-8 bg-mango text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">Doar la Mango</div>
+        <div class="flex items-center gap-3 mb-8">
+          <div class="w-10 h-10 rounded-xl bg-mango/10 flex items-center justify-center">
+            <svg class="w-5 h-5 text-mango" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-white font-heading font-bold text-lg">Navetiști</h3>
+            <p class="text-white/30 text-[13px]">Luni–Vineri, 6:00 – 20:00</p>
+          </div>
+        </div>
+        <div class="flex items-baseline gap-1.5 mb-2">
+          <span class="font-heading font-bold text-5xl text-white tracking-tight">500</span>
+          <span class="text-white/30 text-sm">lei / lună</span>
+        </div>
+        <p class="text-white/20 text-[13px] mb-8">Intrări nelimitate în zilele lucrătoare. Prima parcare pentru navetiști la Otopeni.</p>
+
+        <ul class="space-y-3 mb-8">
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-mango flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Shuttle sincronizată cu trenurile
+          </li>
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-mango flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Loc garantat zilnic
+          </li>
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-mango flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Economisești 600+ lei/lună față de parcarea zilnică
+          </li>
+          <li class="flex items-center gap-2.5 text-white/50 text-[14px]">
+            <svg class="w-4 h-4 text-mango flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            Securitate 24/7 inclusă
+          </li>
+        </ul>
+        <a href="#" class="block text-center bg-mango hover:bg-mango-hover text-white font-semibold text-[15px] py-4 rounded-2xl transition-colors duration-200 shadow-md">Abonează-te Acum</a>
+      </div>
+    </div>
+    <p class="text-center mt-8"><a href="#" class="text-white/25 hover:text-white/50 text-[13px] transition-colors">Vezi toate tarifele →</a></p>
+  </div>
+</section>
+
+<!-- ===== FACILITĂȚI ===== -->
+<section class="py-28">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="text-center mb-20">
+      <p class="text-[11px] font-mono uppercase text-mango tracking-[0.2em] mb-3">Facilități</p>
+      <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">Totul inclus.</h2>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-5 max-w-4xl mx-auto">
+      <div class="card-solid rounded-2xl p-6 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mx-auto mb-4">
+          <svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0H21M3.375 14.25h.008M3.375 14.25c-.621 0-1.125.504-1.125 1.125v2.25c0 .621.504 1.125 1.125 1.125m0-4.5V6.375c0-.621.504-1.125 1.125-1.125h8.25c.621 0 1.125.504 1.125 1.125v8.25"/></svg>
+        </div>
+        <p class="font-heading font-semibold text-[15px]">Shuttle Gratuită</p>
+        <p class="text-dim text-[13px] mt-1">Aeroport & gară</p>
+      </div>
+      <div class="card-solid rounded-2xl p-6 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mx-auto mb-4">
+          <svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+        </div>
+        <p class="font-heading font-semibold text-[15px]">Securitate 24/7</p>
+        <p class="text-dim text-[13px] mt-1">Pază, CCTV, barieră</p>
+      </div>
+      <div class="card-solid rounded-2xl p-6 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mx-auto mb-4">
+          <svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-1.5 4.5H6.5L5 14.5m14 0H5"/></svg>
+        </div>
+        <p class="font-heading font-semibold text-[15px]">Spălătorie Auto</p>
+        <p class="text-dim text-[13px] mt-1">Serviciu opțional</p>
+      </div>
+      <div class="card-solid rounded-2xl p-6 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mx-auto mb-4">
+          <svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>
+        </div>
+        <p class="font-heading font-semibold text-[15px]">Încărcare EV</p>
+        <p class="text-dim text-[13px] mt-1">Disponibil la cerere</p>
+      </div>
+      <div class="card-solid rounded-2xl p-6 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mx-auto mb-4">
+          <svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21"/></svg>
+        </div>
+        <p class="font-heading font-semibold text-[15px]">Parcare Acoperită</p>
+        <p class="text-dim text-[13px] mt-1">Upgrade premium</p>
+      </div>
+      <div class="card-solid rounded-2xl p-6 text-center">
+        <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mx-auto mb-4">
+          <svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38"/></svg>
+        </div>
+        <p class="font-heading font-semibold text-[15px]">Ajutor Bagaje</p>
+        <p class="text-dim text-[13px] mt-1">Asistență la cerere</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Shuttle ===== -->
+<section id="naveta" class="py-28">
+  <div class="max-w-3xl mx-auto px-6">
+    <div class="text-center mb-14">
+      <p class="text-[11px] font-mono uppercase text-mango tracking-[0.2em] mb-3">Shuttle</p>
+      <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">Următoarele plecări</h2>
+    </div>
+
+    <div class="card-solid rounded-3xl overflow-hidden">
+      <div class="grid grid-cols-3 text-[11px] font-mono uppercase tracking-[0.12em] text-dim px-8 py-4 border-b border-frost-deep">
+        <span>Ruta</span>
+        <span class="text-center">Plecare</span>
+        <span class="text-right">Status</span>
+      </div>
+      <div class="divide-y divide-frost-deep/60">
+        <div class="shuttle-row grid grid-cols-3 items-center px-8 py-5">
+          <span class="text-[14px] font-medium">Parcare → Aeroport</span>
+          <span class="text-[14px] text-center font-mono font-medium">14:30</span>
+          <span class="text-right"><span class="text-[11px] font-bold bg-mango/10 text-mango px-3 py-1 rounded-full">Îmbarcare</span></span>
+        </div>
+        <div class="shuttle-row grid grid-cols-3 items-center px-8 py-5">
+          <span class="text-[14px] font-medium">Aeroport → Parcare</span>
+          <span class="text-[14px] text-center font-mono font-medium">14:45</span>
+          <span class="text-right"><span class="text-[11px] font-bold bg-frost text-dim px-3 py-1 rounded-full">Următorul</span></span>
+        </div>
+        <div class="shuttle-row grid grid-cols-3 items-center px-8 py-5">
+          <span class="text-[14px] font-medium">Parcare → Gară</span>
+          <span class="text-[14px] text-center font-mono font-medium">15:00</span>
+          <span class="text-right"><span class="text-[11px] font-bold bg-frost text-dim px-3 py-1 rounded-full">Următorul</span></span>
+        </div>
+        <div class="shuttle-row grid grid-cols-3 items-center px-8 py-5">
+          <span class="text-[14px] font-medium">Parcare → Aeroport</span>
+          <span class="text-[14px] text-center font-mono font-medium">15:15</span>
+          <span class="text-right"><span class="text-[11px] font-bold bg-frost text-dim px-3 py-1 rounded-full">Următorul</span></span>
+        </div>
+      </div>
+    </div>
+    <p class="text-center mt-6"><a href="#" class="text-mango hover:text-mango-hover text-[13px] font-semibold transition-colors">Vezi programul complet →</a></p>
+  </div>
+</section>
+
+<!-- ===== RECENZII ===== -->
+<section class="py-28">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="text-center mb-20">
+      <p class="text-[11px] font-mono uppercase text-mango tracking-[0.2em] mb-3">Recenzii</p>
+      <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">Ce spun clienții noștri.</h2>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+      <div class="card-solid rounded-3xl p-7">
+        <div class="flex gap-0.5 mb-4">
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+        </div>
+        <p class="text-[14px] text-charcoal/60 leading-relaxed mb-6">"Am lăsat mașina 10 zile. Naveta a fost mereu la timp. Mașina era impecabilă la întoarcere. Cea mai bună parcare de la Otopeni."</p>
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-full bg-frost flex items-center justify-center text-[11px] font-bold">AP</div>
+          <div>
+            <p class="text-[13px] font-semibold">Andrei P.</p>
+            <p class="text-[11px] text-dim">Călător</p>
+          </div>
+        </div>
+      </div>
+      <div class="card-solid rounded-3xl p-7">
+        <div class="flex gap-0.5 mb-4">
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+        </div>
+        <p class="text-[14px] text-charcoal/60 leading-relaxed mb-6">"Abonamentul pentru navetiști e incredibil. Economisesc peste 600 lei lunar. Naveta se sincronizează perfect cu trenul meu."</p>
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-full bg-frost flex items-center justify-center text-[11px] font-bold">MI</div>
+          <div>
+            <p class="text-[13px] font-semibold">Maria I.</p>
+            <p class="text-[11px] text-dim">Navetist</p>
+          </div>
+        </div>
+      </div>
+      <div class="card-solid rounded-3xl p-7">
+        <div class="flex gap-0.5 mb-4">
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-mango"></div>
+          <div class="w-6 h-1 rounded-full bg-frost-deep"></div>
+        </div>
+        <p class="text-[14px] text-charcoal/60 leading-relaxed mb-6">"Super profesioniști. Am rezervat la miezul nopții, naveta era acolo la 5 dimineața. Voi folosi la fiecare călătorie."</p>
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-full bg-frost flex items-center justify-center text-[11px] font-bold">DV</div>
+          <div>
+            <p class="text-[13px] font-semibold">Dan V.</p>
+            <p class="text-[11px] text-dim">Călător</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ÎNTREBĂRI FRECVENTE ===== -->
+<section id="intrebari" class="py-28">
+  <div class="max-w-2xl mx-auto px-6">
+    <div class="text-center mb-14">
+      <p class="text-[11px] font-mono uppercase text-mango tracking-[0.2em] mb-3">Întrebări Frecvente</p>
+      <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">Întrebări frecvente.</h2>
+    </div>
+
+    <div class="space-y-3">
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full flex items-center justify-between px-7 py-5 text-left">
+          <span class="font-heading font-semibold text-[15px]">Cum funcționează naveta?</span>
+          <span class="text-dim/40 text-xl leading-none transition-transform duration-200" data-icon>+</span>
+        </button>
+        <div class="faq-body"><div><p class="px-7 pb-5 text-dim text-[14px] leading-relaxed">Naveta noastră gratuită circulă la fiecare 15–20 de minute între parcare, Terminalul Aeroportului Otopeni și gara de tren din apropiere. Fă check-in la recepție și urcă în următoarea cursă.</p></div></div>
+      </div>
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full flex items-center justify-between px-7 py-5 text-left">
+          <span class="font-heading font-semibold text-[15px]">Este mașina mea în siguranță?</span>
+          <span class="text-dim/40 text-xl leading-none transition-transform duration-200" data-icon>+</span>
+        </button>
+        <div class="faq-body"><div><p class="px-7 pb-5 text-dim text-[14px] leading-relaxed">Da. Avem pază 24/7, supraveghere video CCTV completă, acces cu barieră și documentare foto pentru fiecare vehicul la check-in.</p></div></div>
+      </div>
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full flex items-center justify-between px-7 py-5 text-left">
+          <span class="font-heading font-semibold text-[15px]">Ce se întâmplă dacă zborul meu întârzie?</span>
+          <span class="text-dim/40 text-xl leading-none transition-transform duration-200" data-icon>+</span>
+        </button>
+        <div class="faq-body"><div><p class="px-7 pb-5 text-dim text-[14px] leading-relaxed">Nicio problemă. Sunați-ne când aterizați. Naveta circulă non-stop — vă preluăm indiferent de oră, fără costuri suplimentare.</p></div></div>
+      </div>
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full flex items-center justify-between px-7 py-5 text-left">
+          <span class="font-heading font-semibold text-[15px]">Pot anula rezervarea?</span>
+          <span class="text-dim/40 text-xl leading-none transition-transform duration-200" data-icon>+</span>
+        </button>
+        <div class="faq-body"><div><p class="px-7 pb-5 text-dim text-[14px] leading-relaxed">Anulare gratuită cu până la 24 de ore înainte de sosire. Poți modifica oricând din contul tău sau telefonic.</p></div></div>
+      </div>
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full flex items-center justify-between px-7 py-5 text-left">
+          <span class="font-heading font-semibold text-[15px]">Cum funcționează abonamentul pentru navetiști?</span>
+          <span class="text-dim/40 text-xl leading-none transition-transform duration-200" data-icon>+</span>
+        </button>
+        <div class="faq-body"><div><p class="px-7 pb-5 text-dim text-[14px] leading-relaxed">Plătești un abonament lunar fix pentru parcare nelimitată Luni–Vineri (6:00 – 20:00). Include Shuttle sincronizată cu mersul trenurilor. Singura parcare pentru navetiști de la Otopeni.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== GALERIE ===== -->
+<section class="py-20 overflow-hidden">
+  <div class="max-w-7xl mx-auto px-6 mb-12">
+    <p class="text-[11px] font-mono uppercase text-mango tracking-[0.2em] mb-3 text-center">Facilitatea Noastră</p>
+    <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-center">Vezi unde parchezi.</h2>
+  </div>
+  <div class="flex gap-4 px-6 max-w-7xl mx-auto">
+    <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80">
+      <img src="https://images.unsplash.com/photo-1573348722427-f1d6819fdf98?w=800&q=80" alt="Parcare organizată" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+    </div>
+    <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden sm:block">
+      <img src="https://images.unsplash.com/photo-1494515843206-f3117d3f51b7?w=800&q=80" alt="Avion pe pistă" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+    </div>
+    <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden md:block">
+      <img src="https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800&q=80" alt="Cameră de supraveghere securitate" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+    </div>
+    <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden lg:block">
+      <img src="https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&q=80" alt="Terminal aeroport" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<!-- ===== CTA ===== -->
+<section class="py-20">
+  <div class="max-w-5xl mx-auto px-6">
+    <div class="rounded-[32px] overflow-hidden shadow-lg relative min-h-[400px] flex items-center">
+      <img src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1400&q=80" alt="Drum spre aeroport" class="absolute inset-0 img-cover" loading="lazy">
+      <div class="absolute inset-0 bg-gradient-to-r from-charcoal/85 via-charcoal/70 to-charcoal/40"></div>
+      <div class="relative z-10 p-12 md:p-16 max-w-lg">
+        <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-[-0.02em] mb-4 text-white">Gata de parcare?</h2>
+        <p class="text-white/60 text-[16px] mb-8">Rezervi în 60 de secunde. Plătești la sosire. Shuttle gratuită inclusă.</p>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <a href="#" class="bg-mango hover:bg-mango-hover text-white font-semibold text-[15px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">Rezervă Locul Tău</a>
+          <a href="#" class="bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white font-medium text-[15px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">Indicații de Orientare</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer class="py-16">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-10 mb-16">
+      <div class="col-span-2 md:col-span-1">
+        <div class="flex items-center gap-2.5 mb-4">
+          <div class="w-7 h-7 rounded-lg bg-mango flex items-center justify-center">
+            <span class="text-white font-heading font-bold text-[11px]">M</span>
+          </div>
+          <span class="font-heading font-bold text-[14px]">Mango Parking</span>
+        </div>
+        <p class="text-dim text-[13px] leading-relaxed">Parcare securizată lângă Aeroportul Otopeni cu Shuttle gratuită.</p>
+      </div>
+      <div>
+        <p class="text-[10px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-4">Navigare</p>
+        <div class="space-y-2.5 text-[13px] text-dim">
+          <a href="#" class="block hover:text-charcoal transition-colors">Cum funcționează</a>
+          <a href="#" class="block hover:text-charcoal transition-colors">Tarife</a>
+          <a href="#" class="block hover:text-charcoal transition-colors">Program Shuttle</a>
+          <a href="#" class="block hover:text-charcoal transition-colors">Abonament navetiști</a>
+        </div>
+      </div>
+      <div>
+        <p class="text-[10px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-4">Contact</p>
+        <div class="space-y-2.5 text-[13px] text-dim">
+          <p>+40 721 000 000</p>
+          <p>contact@mangoparking.ro</p>
+          <p>Str. Exemplu 42, Otopeni</p>
+        </div>
+      </div>
+      <div>
+        <p class="text-[10px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-4">Program</p>
+        <div class="space-y-2.5 text-[13px] text-dim">
+          <p>Parcare: 24/7</p>
+          <p>Birou: 6:00 – 22:00</p>
+          <p>Shuttle: La fiecare 15 min</p>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-frost-deep">
+      <p class="text-[12px] text-charcoal/20">Mango Parking &copy; 2026. Toate drepturile rezervate.</p>
+      <div class="flex gap-6 text-[12px] text-charcoal/20">
+        <a href="#" class="hover:text-charcoal/40 transition-colors">Confidențialitate</a>
+        <a href="#" class="hover:text-charcoal/40 transition-colors">Termeni</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+function toggleFaq(btn) {
+  const body = btn.nextElementSibling;
+  const icon = btn.querySelector('[data-icon]');
+  const isOpen = body.classList.contains('open');
+  document.querySelectorAll('.faq-body').forEach(el => el.classList.remove('open'));
+  document.querySelectorAll('[data-icon]').forEach(el => el.textContent = '+');
+  if (!isOpen) { body.classList.add('open'); icon.textContent = '−'; }
+}
+</script>
+</body>
+</html>

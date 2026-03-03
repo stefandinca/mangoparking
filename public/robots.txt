@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /account/
+Disallow: /admin/
+Disallow: /login
+Disallow: /register
+Disallow: /en/account/
+Disallow: /en/admin/
+Disallow: /en/login
+Disallow: /en/register
+
+Sitemap: https://mangoparking.ro/sitemap.xml

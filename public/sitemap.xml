@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://mangoparking.ro/</loc>
+    <xhtml:link rel="alternate" hreflang="ro" href="https://mangoparking.ro/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mangoparking.ro/en/"/>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://mangoparking.ro/booking</loc>
+    <xhtml:link rel="alternate" hreflang="ro" href="https://mangoparking.ro/booking"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mangoparking.ro/en/booking"/>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://mangoparking.ro/pricing</loc>
+    <xhtml:link rel="alternate" hreflang="ro" href="https://mangoparking.ro/pricing"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mangoparking.ro/en/pricing"/>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://mangoparking.ro/shuttle</loc>
+    <xhtml:link rel="alternate" hreflang="ro" href="https://mangoparking.ro/shuttle"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mangoparking.ro/en/shuttle"/>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://mangoparking.ro/commuter</loc>
+    <xhtml:link rel="alternate" hreflang="ro" href="https://mangoparking.ro/commuter"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mangoparking.ro/en/commuter"/>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://mangoparking.ro/about</loc>
+    <xhtml:link rel="alternate" hreflang="ro" href="https://mangoparking.ro/about"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mangoparking.ro/en/about"/>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://mangoparking.ro/contact</loc>
+    <xhtml:link rel="alternate" hreflang="ro" href="https://mangoparking.ro/contact"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mangoparking.ro/en/contact"/>
+    <priority>0.6</priority>
+  </url>
+  <!-- EN versions -->
+  <url><loc>https://mangoparking.ro/en/</loc><priority>1.0</priority></url>
+  <url><loc>https://mangoparking.ro/en/booking</loc><priority>0.9</priority></url>
+  <url><loc>https://mangoparking.ro/en/pricing</loc><priority>0.8</priority></url>
+  <url><loc>https://mangoparking.ro/en/shuttle</loc><priority>0.8</priority></url>
+  <url><loc>https://mangoparking.ro/en/commuter</loc><priority>0.8</priority></url>
+  <url><loc>https://mangoparking.ro/en/about</loc><priority>0.6</priority></url>
+  <url><loc>https://mangoparking.ro/en/contact</loc><priority>0.6</priority></url>
+</urlset>
