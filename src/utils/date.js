@@ -1,8 +1,15 @@
 /**
+ * Convert short locale to Intl locale string
+ */
+export function intlLocale(locale) {
+  return locale === 'ro' ? 'ro-RO' : 'en-GB';
+}
+
+/**
  * Format a date for display
  */
-export function formatDate(date, locale = 'ro-RO') {
-  return new Date(date).toLocaleDateString(locale, {
+export function formatDate(date, locale = 'ro') {
+  return new Date(date).toLocaleDateString(intlLocale(locale), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -12,8 +19,8 @@ export function formatDate(date, locale = 'ro-RO') {
 /**
  * Format time (HH:MM)
  */
-export function formatTime(date) {
-  return new Date(date).toLocaleTimeString('ro-RO', {
+export function formatTime(date, locale = 'ro') {
+  return new Date(date).toLocaleTimeString(intlLocale(locale), {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,

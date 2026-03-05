@@ -1,5 +1,6 @@
-import { getDocument, subscribeDoc, updateDocument, getCollection } from '../firebase/db.js';
+import { getDocument, subscribeDoc, updateDocument, getCollection, incrementField } from '../firebase/db.js';
 import { TOTAL_CAPACITY } from '../utils/constants.js';
+import { auditLog } from './auditService.js';
 
 /**
  * Get current capacity (from settings/global)
@@ -43,4 +44,19 @@ export async function updateOccupied(count) {
  */
 export async function getAllSpots() {
   return getCollection('spots');
+}
+
+/**
+ * Update a spot's status and recalculate global occupied count
+ */
+export async function updateSpotStatus(spotId, status) {
+  const old = await getDocument('spots', spotId);
+  await updateDocument('spots', spotId, { status });
+  await auditLog('spot_updated', 'spot', spotId, { status: old?.status }, { status });
+  // Update occupied count with atomic increment
+  const wasOccupied = old?.status === 'occupied';
+  const nowOccupied = status === 'occupied';
+  if (wasOccupied !== nowOccupied) {
+    await incrementField('settings', 'global', 'occupiedSpots', nowOccupied ? 1 : -1);
+  }
 }

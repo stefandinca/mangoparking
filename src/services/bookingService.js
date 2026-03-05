@@ -1,4 +1,4 @@
-import { addDocument, getCollection, getDocument, updateDocument, query, where, orderBy } from '../firebase/db.js';
+import { addDocument, getCollection, getDocument, updateDocument, query, where, orderBy, limit } from '../firebase/db.js';
 import { getCurrentUser } from '../firebase/auth.js';
 import { auditLog } from './auditService.js';
 
@@ -47,29 +47,6 @@ export async function createBooking(data) {
 }
 
 /**
- * Create a commuter subscription
- */
-export async function createSubscription(data) {
-  const user = getCurrentUser();
-  const code = generateCode();
-  const sub = {
-    code,
-    customerId: user?.uid || null,
-    customerName: data.name,
-    customerPhone: data.phone,
-    customerEmail: data.email,
-    status: 'active',
-    licensePlate: data.licensePlate,
-    makeModel: data.makeModel || '',
-    startDate: data.startMonth,
-    monthlyRate: data.monthlyRate,
-  };
-  const id = await addDocument('subscriptions', sub);
-  await auditLog('subscription_created', 'subscription', id, null, { code });
-  return { id, code };
-}
-
-/**
  * Get bookings for the current user
  */
 export async function getMyBookings() {
@@ -81,8 +58,8 @@ export async function getMyBookings() {
 /**
  * Get all bookings (admin)
  */
-export async function getAllBookings() {
-  return getCollection('bookings', orderBy('createdAt', 'desc'));
+export async function getAllBookings(limitCount = 200) {
+  return getCollection('bookings', orderBy('createdAt', 'desc'), limit(limitCount));
 }
 
 /**
@@ -90,6 +67,7 @@ export async function getAllBookings() {
  */
 export async function checkInBooking(bookingId, spotId) {
   const old = await getDocument('bookings', bookingId);
+  if (!old) throw new Error(`Booking ${bookingId} not found`);
   await updateDocument('bookings', bookingId, {
     status: 'active',
     spotId,
@@ -103,6 +81,7 @@ export async function checkInBooking(bookingId, spotId) {
  */
 export async function checkOutBooking(bookingId) {
   const old = await getDocument('bookings', bookingId);
+  if (!old) throw new Error(`Booking ${bookingId} not found`);
   await updateDocument('bookings', bookingId, {
     status: 'completed',
     checkoutTimestamp: new Date().toISOString(),
@@ -118,6 +97,7 @@ export async function checkOutBooking(bookingId) {
  */
 export async function cancelBooking(bookingId) {
   const old = await getDocument('bookings', bookingId);
+  if (!old) throw new Error(`Booking ${bookingId} not found`);
   await updateDocument('bookings', bookingId, { status: 'cancelled' });
   await auditLog('booking_cancelled', 'booking', bookingId, { status: old.status }, { status: 'cancelled' });
 }

@@ -1,4 +1,4 @@
-import { getCollection, updateDocument, addDocument, removeDocument } from '../firebase/db.js';
+import { getCollection, getDocument, updateDocument, addDocument } from '../firebase/db.js';
 import { auditLog } from './auditService.js';
 
 // Fallback pricing tiers (used when Firestore is not available)
@@ -45,16 +45,21 @@ export async function getAddOns() {
 /**
  * Get commuter rate
  */
-export function getCommuterRate() {
-  return COMMUTER_RATE;
+export async function getCommuterRate() {
+  try {
+    const settings = await getDocument('settings', 'global');
+    return settings?.commuterMonthlyRate || COMMUTER_RATE;
+  } catch {
+    return COMMUTER_RATE;
+  }
 }
 
 /**
  * Calculate price for a traveler booking
  */
-export async function calculatePrice(days, addOns = []) {
-  const tiers = await getPricingTiers();
-  const allAddons = await getAddOns();
+export async function calculatePrice(days, addOns = [], { tiers: prefetchedTiers, addons: prefetchedAddons } = {}) {
+  const tiers = prefetchedTiers || await getPricingTiers();
+  const allAddons = prefetchedAddons || await getAddOns();
 
   // Find matching tier
   const tier = tiers.find((t) => days >= t.minDays && days <= t.maxDays) || tiers[tiers.length - 1];
@@ -80,10 +85,19 @@ export async function calculatePrice(days, addOns = []) {
 }
 
 /**
+ * Update an add-on (admin)
+ */
+export async function updateAddOn(addonId, data) {
+  const old = await getDocument('addOns', addonId);
+  await updateDocument('addOns', addonId, data);
+  await auditLog('addon_updated', 'addOn', addonId, old, data);
+}
+
+/**
  * Update a pricing tier (admin)
  */
 export async function updateTier(tierId, data) {
-  const old = (await getCollection('pricingTiers')).find((t) => t.id === tierId);
+  const old = await getDocument('pricingTiers', tierId);
   await updateDocument('pricingTiers', tierId, data);
   await auditLog('pricing_updated', 'pricingTier', tierId, old, data);
 }

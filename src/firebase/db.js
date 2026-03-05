@@ -13,11 +13,12 @@ import {
   limit,
   onSnapshot,
   serverTimestamp,
+  increment,
 } from 'firebase/firestore';
 import { db } from './config.js';
 
 // Re-export for convenience
-export { db, collection, doc, query, where, orderBy, limit, onSnapshot, serverTimestamp };
+export { db, collection, doc, query, where, orderBy, limit, onSnapshot, serverTimestamp, increment };
 
 /**
  * Get a single document
@@ -71,6 +72,13 @@ export async function updateDocument(collectionName, docId, data) {
  */
 export async function removeDocument(collectionName, docId) {
   await deleteDoc(doc(db, collectionName, docId));
+}
+
+/**
+ * Atomically increment a numeric field
+ */
+export async function incrementField(collectionName, docId, field, delta) {
+  await updateDoc(doc(db, collectionName, docId), { [field]: increment(delta) });
 }
 
 /**
