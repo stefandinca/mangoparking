@@ -1,4 +1,4 @@
-import { addDocument } from '../firebase/db.js';
+import { addDocument, getCollection, orderBy, limit } from '../firebase/db.js';
 import { getCurrentUser } from '../firebase/auth.js';
 
 /**
@@ -16,4 +16,25 @@ export async function auditLog(action, entityType, entityId, oldValue, newValue)
     userEmail: user?.email || 'anonymous',
     timestamp: new Date().toISOString(),
   });
+}
+
+/**
+ * Get audit log entries
+ */
+export async function getAuditLog(limitCount = 50) {
+  try {
+    const entries = await getCollection('auditLog', orderBy('timestamp', 'desc'), limit(limitCount));
+    return entries.map(e => ({
+      id: e.id,
+      timestamp: e.timestamp,
+      action: e.action,
+      entity: (e.entityType || '') + ' ' + (e.entityId || ''),
+      user: e.userEmail || e.userId || 'unknown',
+      details: e.oldValue && e.newValue
+        ? JSON.stringify(e.oldValue) + ' → ' + JSON.stringify(e.newValue)
+        : e.newValue ? JSON.stringify(e.newValue) : '',
+    }));
+  } catch {
+    return [];
+  }
 }

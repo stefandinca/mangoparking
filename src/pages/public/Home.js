@@ -5,23 +5,13 @@ import { html, delegate } from '../../utils/dom.js';
 import { checkIcon, starIcon, planeIcon, clockIcon } from '../../components/widgets/icons.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
 import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS } from '../../utils/constants.js';
-
-// Mock data (will be replaced with Firestore in M3)
-const MOCK_CAPACITY = 87;
-const MOCK_NEXT_SHUTTLE = '14:30';
-const MOCK_SHUTTLE_DEST = 'Terminal Aeroport';
+import { subscribeCapacity } from '../../services/capacityService.js';
+import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
 
 const MOCK_REVIEWS = [
   { initials: 'AP', name: 'Andrei P.', type: 'traveler', rating: 5 },
   { initials: 'MI', name: 'Maria I.', type: 'commuter', rating: 5 },
   { initials: 'DV', name: 'Dan V.', type: 'traveler', rating: 4 },
-];
-
-const MOCK_SHUTTLE_ROWS = [
-  { route: 'parkingToAirport', time: '14:30', status: 'boarding' },
-  { route: 'airportToParking', time: '14:45', status: 'next' },
-  { route: 'parkingToTrain', time: '15:00', status: 'next' },
-  { route: 'parkingToAirport', time: '15:15', status: 'next' },
 ];
 
 export default function Home(container) {
@@ -78,7 +68,11 @@ export default function Home(container) {
         '"Super professional. Booked at midnight, shuttle was there at 5 AM. Will use again for every trip."',
       ];
 
-  const capacityPct = Math.round((MOCK_CAPACITY / TOTAL_CAPACITY) * 100);
+  // Initial capacity values (will be updated by real-time subscription)
+  const MOCK_CAPACITY = 0;
+  const MOCK_NEXT_SHUTTLE = '--:--';
+  const MOCK_SHUTTLE_DEST = '...';
+  const capacityPct = 0;
 
   const page = html`<div>
     ${''/* Navbar is inserted programmatically */}
@@ -307,19 +301,8 @@ export default function Home(container) {
             <span class="text-center">${t('shuttle.departs')}</span>
             <span class="text-right">${t('shuttle.status')}</span>
           </div>
-          <div class="divide-y divide-frost-deep/60">
-            ${MOCK_SHUTTLE_ROWS.map(row => {
-              const statusClass = row.status === 'boarding'
-                ? 'bg-mango/10 text-mango'
-                : 'bg-frost text-dim';
-              return `
-                <div class="shuttle-row grid grid-cols-3 items-center px-4 sm:px-8 py-5">
-                  <span class="text-[15px] font-medium">${t('shuttle.' + row.route)}</span>
-                  <span class="text-[15px] text-center font-mono font-medium">${row.time}</span>
-                  <span class="text-right"><span class="text-[12px] font-bold ${statusClass} px-3 py-1 rounded-full">${t('shuttle.' + row.status)}</span></span>
-                </div>
-              `;
-            }).join('')}
+          <div class="divide-y divide-frost-deep/60" data-shuttle-rows>
+            <div class="px-4 sm:px-8 py-8 text-center text-dim text-[15px]">...</div>
           </div>
         </div>
         <p class="text-center mt-6"><a href="${localePath('/shuttle')}" class="text-mango hover:text-mango-hover text-[14px] font-semibold transition-colors">${t('shuttle.viewFull')}</a></p>
@@ -438,4 +421,45 @@ export default function Home(container) {
   });
 
   container.appendChild(page);
+
+  // Real-time capacity subscription
+  const unsubCapacity = subscribeCapacity((cap) => {
+    const badge = page.querySelector('[data-capacity-badge]');
+    const number = page.querySelector('[data-capacity-number]');
+    const bar = page.querySelector('[data-capacity-bar]');
+    if (badge) badge.textContent = t('hero.badge', { count: cap.occupied });
+    if (number) number.textContent = cap.occupied;
+    if (bar) bar.style.width = (cap.total > 0 ? Math.round((cap.occupied / cap.total) * 100) : 0) + '%';
+  });
+
+  // Fetch shuttle schedule and populate widgets
+  getShuttleSchedule().then(schedule => {
+    const upcoming = getUpcomingDepartures(schedule, 4);
+
+    // Update next shuttle widget
+    const nextShuttleEl = page.querySelector('[data-next-shuttle]');
+    if (nextShuttleEl && upcoming.length > 0) {
+      nextShuttleEl.textContent = upcoming[0].departureTime;
+      const destEl = nextShuttleEl.nextElementSibling;
+      if (destEl) destEl.textContent = '→ ' + t('shuttle.' + getRouteKey(upcoming[0].route));
+    }
+
+    // Update shuttle table
+    const rowsContainer = page.querySelector('[data-shuttle-rows]');
+    if (rowsContainer) {
+      rowsContainer.innerHTML = upcoming.map((row, i) => {
+        const statusClass = i === 0 ? 'bg-mango/10 text-mango' : 'bg-frost text-dim';
+        const statusText = i === 0 ? t('shuttle.boarding') : t('shuttle.next');
+        return `
+          <div class="shuttle-row grid grid-cols-3 items-center px-4 sm:px-8 py-5">
+            <span class="text-[15px] font-medium">${t('shuttle.' + getRouteKey(row.route))}</span>
+            <span class="text-[15px] text-center font-mono font-medium">${row.departureTime}</span>
+            <span class="text-right"><span class="text-[12px] font-bold ${statusClass} px-3 py-1 rounded-full">${statusText}</span></span>
+          </div>`;
+      }).join('');
+    }
+  }).catch(() => {});
+
+  // Return cleanup
+  return () => { unsubCapacity(); };
 }

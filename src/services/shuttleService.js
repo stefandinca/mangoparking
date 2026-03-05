@@ -1,5 +1,6 @@
 import { getCollection, subscribeCollection, updateDocument } from '../firebase/db.js';
 import { orderBy } from 'firebase/firestore';
+import { auditLog } from './auditService.js';
 
 // Fallback mock data
 const MOCK_SHUTTLE = [
@@ -96,6 +97,14 @@ export function getUpcomingDepartures(schedule, count = 4) {
 /**
  * Get route display name i18n key
  */
+/**
+ * Update shuttle status
+ */
+export async function updateShuttleStatus(id, status) {
+  await updateDocument('shuttleSchedule', id, { status });
+  await auditLog('shuttle_updated', 'shuttle', id, null, { status });
+}
+
 export function getRouteKey(route) {
   const map = {
     parking_to_airport: 'parkingToAirport',
