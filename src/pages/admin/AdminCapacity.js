@@ -1,7 +1,8 @@
 import { html, delegate } from '../../utils/dom.js';
 import { t, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getAllSpots, updateSpotStatus } from '../../services/capacityService.js';
+import { getAllSpots, updateSpotStatus, subscribeCapacity } from '../../services/capacityService.js';
+import { TOTAL_CAPACITY } from '../../utils/constants.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 
 const SPOT_STATES = ['available', 'occupied', 'reserved', 'maintenance'];
@@ -44,6 +45,31 @@ export default async function AdminCapacity(container) {
         <div class="mb-8">
           <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('admin.capacityMap')}</h1>
           <p class="text-dim text-[15px] mt-1">${t('admin.capacityMapSubtitle')}</p>
+        </div>
+
+        <!-- Live Capacity -->
+        <div class="card-solid rounded-2xl p-6 mb-6">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-2.5 h-2.5 rounded-full bg-leaf animate-pulse"></span>
+            <h2 class="font-heading font-bold text-lg text-charcoal">${t('hero.liveCapacity')}</h2>
+          </div>
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <p class="text-[12px] font-mono uppercase text-dim tracking-wider mb-1">${t('admin.totalSpots')}</p>
+              <p class="font-heading font-bold text-3xl tracking-tight font-mono" data-live-total>${TOTAL_CAPACITY}</p>
+            </div>
+            <div>
+              <p class="text-[12px] font-mono uppercase text-dim tracking-wider mb-1">${t('admin.occupied')}</p>
+              <p class="font-heading font-bold text-3xl tracking-tight font-mono text-red-500" data-live-occupied>0</p>
+            </div>
+            <div>
+              <p class="text-[12px] font-mono uppercase text-dim tracking-wider mb-1">${t('admin.available')}</p>
+              <p class="font-heading font-bold text-3xl tracking-tight font-mono text-leaf" data-live-available>${TOTAL_CAPACITY}</p>
+            </div>
+          </div>
+          <div class="mt-3 h-2 bg-frost-deep rounded-full overflow-hidden">
+            <div class="h-full rounded-full bg-gradient-to-r from-leaf to-mango transition-all duration-500" data-live-bar style="width:0%"></div>
+          </div>
         </div>
 
         <!-- Legend & Summary -->
@@ -142,8 +168,25 @@ export default async function AdminCapacity(container) {
     }
   });
 
+  // Real-time capacity subscription
+  const unsubCapacity = subscribeCapacity((cap) => {
+    const liveTotal = page.querySelector('[data-live-total]');
+    const liveOccupied = page.querySelector('[data-live-occupied]');
+    const liveAvailable = page.querySelector('[data-live-available]');
+    const liveBar = page.querySelector('[data-live-bar]');
+    if (liveTotal) liveTotal.textContent = cap.total;
+    if (liveOccupied) liveOccupied.textContent = cap.occupied;
+    if (liveAvailable) liveAvailable.textContent = cap.available;
+    if (liveBar) liveBar.style.width = (cap.total > 0 ? Math.round((cap.occupied / cap.total) * 100) : 0) + '%';
+  });
+
   // Wire mobile admin nav
   initAdminNav(page);
 
   container.appendChild(page);
+
+  // Return cleanup function
+  return () => {
+    if (unsubCapacity) unsubCapacity();
+  };
 }

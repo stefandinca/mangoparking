@@ -1,36 +1,33 @@
 import { html, delegate } from '../../utils/dom.js';
-import { t, localePath } from '../../i18n/index.js';
+import { t, localePath, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCapacity } from '../../services/capacityService.js';
-import { getAllBookings } from '../../services/bookingService.js';
-import { getAllSubscriptions } from '../../services/subscriptionService.js';
+import { getAllRecentTransactions } from '../../services/tokenService.js';
 import { getAuditLog } from '../../services/auditService.js';
 import { navigate } from '../../router/index.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 
 export default async function AdminDashboard(container) {
+  const locale = getLocale();
   updateMeta({ title: 'Admin Dashboard — Mango Parking', description: 'Admin dashboard overview.' });
 
   // Fetch real data
-  const [capacity, bookings, subscriptions, recentActivity] = await Promise.all([
+  const [capacity, tokenTx, recentActivity] = await Promise.all([
     getCapacity().catch(() => ({ total: 110, occupied: 0, available: 110 })),
-    getAllBookings().catch(() => []),
-    getAllSubscriptions().catch(() => []),
+    getAllRecentTransactions(200).catch(() => []),
     getAuditLog(5).catch(() => []),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
-  const checkInsToday = bookings.filter(b => b.checkinTimestamp && b.checkinTimestamp.slice(0, 10) === today).length;
-  const checkOutsToday = bookings.filter(b => b.checkoutTimestamp && b.checkoutTimestamp.slice(0, 10) === today).length;
-  const activeSubscriptions = subscriptions.filter(s => s.status === 'active').length;
+  const tokensUsedToday = tokenTx.filter(tx => tx.type === 'use' && tx.timestamp?.slice(0, 10) === today).length;
+  const tokensPurchasedToday = tokenTx.filter(tx => tx.type === 'purchase' && tx.timestamp?.slice(0, 10) === today).reduce((sum, tx) => sum + (tx.quantity || 0), 0);
 
   const STATS = {
     totalSpots: capacity.total,
     occupied: capacity.occupied,
     available: capacity.available,
-    checkInsToday,
-    checkOutsToday,
-    activeSubscriptions,
+    tokensUsedToday,
+    tokensPurchasedToday,
   };
 
   const occupancyPct = STATS.totalSpots > 0 ? Math.round((STATS.occupied / STATS.totalSpots) * 100) : 0;
@@ -45,6 +42,12 @@ export default async function AdminDashboard(container) {
     pricing_updated: 'bg-yellow-100 text-yellow-700',
     addon_updated: 'bg-yellow-100 text-yellow-700',
     subscription_created: 'bg-mango/10 text-mango',
+    token_purchase: 'bg-leaf/10 text-leaf',
+    token_used: 'bg-blue-100 text-blue-600',
+    token_checkout: 'bg-purple-100 text-purple-600',
+    token_refund: 'bg-mango/10 text-mango',
+    token_pack_created: 'bg-yellow-100 text-yellow-700',
+    token_pack_updated: 'bg-yellow-100 text-yellow-700',
   };
 
   const page = AdminLayout('/admin', `
@@ -64,7 +67,7 @@ export default async function AdminDashboard(container) {
         </div>` : ''}
 
         <!-- Stat Cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
           <div class="card-solid rounded-2xl p-6">
             <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('admin.totalSpots')}</p>
             <p class="font-heading font-bold text-3xl tracking-tight font-mono">${STATS.totalSpots}</p>
@@ -81,16 +84,12 @@ export default async function AdminDashboard(container) {
             <p class="font-heading font-bold text-3xl tracking-tight font-mono text-leaf">${STATS.available}</p>
           </div>
           <div class="card-solid rounded-2xl p-6">
-            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('admin.checkInsToday')}</p>
-            <p class="font-heading font-bold text-3xl tracking-tight font-mono">${STATS.checkInsToday}</p>
+            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${locale === 'ro' ? 'Tokens Folosite Azi' : 'Tokens Used Today'}</p>
+            <p class="font-heading font-bold text-3xl tracking-tight font-mono">${STATS.tokensUsedToday}</p>
           </div>
           <div class="card-solid rounded-2xl p-6">
-            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('admin.checkOutsToday')}</p>
-            <p class="font-heading font-bold text-3xl tracking-tight font-mono">${STATS.checkOutsToday}</p>
-          </div>
-          <div class="card-solid rounded-2xl p-6">
-            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('admin.activeSubscriptions')}</p>
-            <p class="font-heading font-bold text-3xl tracking-tight font-mono text-mango">${STATS.activeSubscriptions}</p>
+            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${locale === 'ro' ? 'Tokens Cumpărate Azi' : 'Tokens Purchased Today'}</p>
+            <p class="font-heading font-bold text-3xl tracking-tight font-mono text-mango">${STATS.tokensPurchasedToday}</p>
           </div>
         </div>
 
@@ -100,9 +99,8 @@ export default async function AdminDashboard(container) {
           <div class="flex flex-wrap gap-3">
             <button class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="bookings">${t('admin.newBookingBtn')}</button>
             <button class="bg-mango hover:bg-mango-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="bookings">${t('admin.checkInVehicle')}</button>
-            <button class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="bookings">${t('admin.checkOutVehicle')}</button>
+            <button class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="pricing">${t('admin.exportReport')}</button>
             <button class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="shuttle">${t('admin.dispatchShuttle')}</button>
-            <button class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="reports">${t('admin.exportReport')}</button>
           </div>
         </div>
 
