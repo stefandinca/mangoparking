@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/mango/',
+  base: '/',
   root: '.',
   publicDir: 'public',
   build: {
