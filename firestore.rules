@@ -34,6 +34,33 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Token packs - public read, admin write
+    match /tokenPacks/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Token balances - owner/guest read+write, staff full access
+    match /tokenBalances/{docId} {
+      allow read: if isStaff() || (isAuthenticated() && docId == request.auth.uid) || docId.matches('plate_.*');
+      allow create: if true;
+      allow update: if isStaff() || (isAuthenticated() && docId == request.auth.uid) || docId.matches('plate_.*');
+      allow delete: if isAdmin();
+    }
+
+    // Token transactions - append-only log
+    match /tokenTransactions/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
+    // Active check-ins - staff read/write
+    match /activeCheckIns/{plate} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
     // Bookings - customer reads own, staff reads all
     match /bookings/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
@@ -68,10 +95,10 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
-    // Users - self read/write (except role on update), admin write
+    // Users - self read/write (except role), admin full access
     match /users/{uid} {
       allow read: if isOwner(uid) || isStaff();
-      allow create: if isOwner(uid);
+      allow create: if isOwner(uid) && request.resource.data.role == 'customer';
       allow update: if (isOwner(uid) && request.resource.data.role == resource.data.role) || isAdmin();
       allow delete: if isAdmin();
     }

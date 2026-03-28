@@ -52,7 +52,7 @@ export async function createBooking(data) {
 export async function getMyBookings() {
   const user = getCurrentUser();
   if (!user) return [];
-  return getCollection('bookings', where('customerId', '==', user.uid), orderBy('createdAt', 'desc'));
+  return getCollection('bookings', where('customerId', '==', user.uid), orderBy('dates.dropOff', 'desc'));
 }
 
 /**

@@ -27,6 +27,7 @@ onAuthStateChanged(auth, async (user) => {
       const profile = {
         email: user.email,
         displayName: user.displayName || '',
+        phone: '',
         role: 'customer',
         loyaltyPoints: 0,
         loyaltyTier: 'bronze',
