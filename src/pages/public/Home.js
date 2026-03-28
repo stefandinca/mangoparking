@@ -10,7 +10,7 @@ import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../se
 
 const MOCK_REVIEWS = [
   { initials: 'AP', name: 'Andrei P.', type: 'traveler', rating: 5 },
-  { initials: 'MI', name: 'Maria I.', type: 'commuter', rating: 5 },
+  { initials: 'MI', name: 'Maria I.', type: 'traveler', rating: 5 },
   { initials: 'DV', name: 'Dan V.', type: 'traveler', rating: 4 },
 ];
 
@@ -20,11 +20,11 @@ export default function Home(container) {
   // SEO
   updateMeta({
     title: locale === 'ro'
-      ? 'Mango Parking — Parcare Aeroport Otopeni | Parcare lungă durată & abonament Shuttle'
-      : 'Mango Parking — Otopeni Airport Parking | Long-term & Commuter Shuttle',
+      ? 'Mango Parking — Parcare Aeroport Otopeni | Tokens Parcare Zilnică & Shuttle'
+      : 'Mango Parking — Otopeni Airport Parking | Daily Parking Tokens & Shuttle',
     description: locale === 'ro'
-      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Shuttle gratuită, securitate 24/7, de la 29 lei/zi. Prima parcare pentru navetiști din Otopeni.'
-      : 'Secure parking near Henri Coandă Otopeni Airport. Free shuttle, 24/7 security, from 29 lei/day. First commuter parking at Otopeni.',
+      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără tokens, parchează flexibil. Shuttle gratuită, securitate 24/7.'
+      : 'Secure parking near Henri Coandă Otopeni Airport. Buy tokens, park flexibly. Free shuttle, 24/7 security.',
     lang: locale,
     hreflang: { ro: SITE_URL + '/', en: SITE_URL + '/en' },
   });
@@ -34,7 +34,7 @@ export default function Home(container) {
     '@context': 'https://schema.org',
     '@type': ['ParkingFacility', 'LocalBusiness'],
     name: 'Mango Parking',
-    description: 'Secure long-term and commuter parking near Otopeni Airport with free shuttle service.',
+    description: 'Secure daily parking near Otopeni Airport with free shuttle service. Flexible token system.',
     url: SITE_URL,
     telephone: CONTACT_PHONE,
     email: CONTACT_EMAIL,
@@ -51,7 +51,6 @@ export default function Home(container) {
     amenityFeature: [
       { '@type': 'LocationFeatureSpecification', name: 'Free Shuttle', value: true },
       { '@type': 'LocationFeatureSpecification', name: '24/7 Security', value: true },
-      { '@type': 'LocationFeatureSpecification', name: 'EV Charging', value: true },
     ],
   });
 
@@ -59,12 +58,12 @@ export default function Home(container) {
   const reviewTexts = locale === 'ro'
     ? [
         '"Am lăsat mașina 10 zile. Naveta a fost mereu la timp. Mașina era impecabilă la întoarcere. Cea mai bună parcare de la Otopeni."',
-        '"Abonamentul pentru navetiști e incredibil. Economisesc peste 600 lei lunar. Naveta se sincronizează perfect cu trenul meu."',
+        '"Sistemul cu tokens e genial. Cumpăr un pachet, parchez oricând. Naveta la aeroport e mereu la timp."',
         '"Super profesioniști. Am rezervat la miezul nopții, naveta era acolo la 5 dimineața. Voi folosi la fiecare călătorie."',
       ]
     : [
         '"Left my car for 10 days. Shuttle was on time every single time. Car was spotless. The best airport parking experience."',
-        '"The commuter subscription is incredible. I save over 600 lei monthly. Shuttle syncs perfectly with my train."',
+        '"The token system is brilliant. Buy a pack, park anytime. Shuttle to the airport is always on time."',
         '"Super professional. Booked at midnight, shuttle was there at 5 AM. Will use again for every trip."',
       ];
 
@@ -103,7 +102,7 @@ export default function Home(container) {
 
             <div class="flex flex-col sm:flex-row gap-3 mb-14">
               <a href="${localePath('/booking')}" class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('hero.cta1')}</a>
-              <a href="${localePath('/commuter')}" class="glass font-semibold text-[16px] px-8 py-4 rounded-2xl text-center hover:bg-white/70 transition-all duration-200 shadow-sm">${t('hero.cta2')}</a>
+              <a href="${localePath('/pricing')}" class="glass font-semibold text-[16px] px-8 py-4 rounded-2xl text-center hover:bg-white/70 transition-all duration-200 shadow-sm">${t('hero.cta2')}</a>
             </div>
 
             <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -231,7 +230,7 @@ export default function Home(container) {
             </ul>
             <a href="${localePath('/booking')}" class="block text-center bg-white/10 hover:bg-white/15 text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200">${t('pricing.bookNow')}</a>
           </div>
-          <!-- Commuter -->
+          <!-- Token Packs -->
           <div class="bg-white/[0.05] border border-mango/25 rounded-3xl p-8 hover:border-mango/40 transition-colors duration-300 relative">
             <div class="absolute -top-3 right-8 bg-mango text-white text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
             <div class="flex items-center gap-3 mb-8">
@@ -239,23 +238,23 @@ export default function Home(container) {
                 ${clockIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-mango"')}
               </div>
               <div>
-                <h3 class="text-white font-heading font-bold text-lg">${t('pricing.commuter')}</h3>
-                <p class="text-white/30 text-[14px]">${t('pricing.commuterSub')}</p>
+                <h3 class="text-white font-heading font-bold text-lg">${locale === 'ro' ? 'Pachete Tokens' : 'Token Packs'}</h3>
+                <p class="text-white/30 text-[14px]">${locale === 'ro' ? 'Luni–Vineri, 6:00 – 20:00' : 'Mon–Fri, 6 AM – 8 PM'}</p>
               </div>
             </div>
             <div class="flex items-baseline gap-1.5 mb-2">
-              <span class="font-heading font-bold text-5xl text-white tracking-tight">500</span>
-              <span class="text-white/30 text-sm">${t('pricing.leiMonth')}</span>
+              <span class="font-heading font-bold text-5xl text-white tracking-tight">1</span>
+              <span class="text-white/30 text-sm">${locale === 'ro' ? 'token = 1 zi' : 'token = 1 day'}</span>
             </div>
-            <p class="text-white/20 text-[14px] mb-8">${t('pricing.commuterNote')}</p>
+            <p class="text-white/20 text-[14px] mb-8">${locale === 'ro' ? 'Cumperi pachete de tokens. Folosești oricând, Luni–Vineri.' : 'Buy token packs. Use anytime, Monday–Friday.'}</p>
             <ul class="space-y-3 mb-8">
-              ${t('pricing.commuterFeatures').map(f => `
+              ${[t('token.rule1'), t('token.rule2'), t('token.rule3'), t('token.rule4')].map(f => `
                 <li class="flex items-center gap-2.5 text-white/50 text-[15px]">
                   <span class="text-mango">${checkIcon}</span> ${f}
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200 shadow-md">${t('pricing.subscribeNow')}</a>
+            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200 shadow-md">${t('token.buyTokens')}</a>
           </div>
         </div>
         <p class="text-center mt-8"><a href="${localePath('/pricing')}" class="text-white/25 hover:text-white/50 text-[14px] transition-colors">${t('pricing.viewAll')}</a></p>
@@ -273,9 +272,6 @@ export default function Home(container) {
           ${[
             { icon: 'shuttle', label: t('amenities.shuttle'), sub: t('amenities.shuttleSub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0H21M3.375 14.25h.008M3.375 14.25c-.621 0-1.125.504-1.125 1.125v2.25c0 .621.504 1.125 1.125 1.125m0-4.5V6.375c0-.621.504-1.125 1.125-1.125h8.25c.621 0 1.125.504 1.125 1.125v8.25"/></svg>` },
             { icon: 'shield', label: t('amenities.security'), sub: t('amenities.securitySub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>` },
-            { icon: 'wash', label: t('amenities.carWash'), sub: t('amenities.carWashSub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-1.5 4.5H6.5L5 14.5m14 0H5"/></svg>` },
-            { icon: 'bolt', label: t('amenities.evCharging'), sub: t('amenities.evChargingSub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>` },
-            { icon: 'building', label: t('amenities.covered'), sub: t('amenities.coveredSub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21"/></svg>` },
             { icon: 'luggage', label: t('amenities.luggage'), sub: t('amenities.luggageSub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38"/></svg>` },
           ].map(a => `
             <div class="card-solid rounded-2xl p-6 text-center">
@@ -427,8 +423,8 @@ export default function Home(container) {
     const badge = page.querySelector('[data-capacity-badge]');
     const number = page.querySelector('[data-capacity-number]');
     const bar = page.querySelector('[data-capacity-bar]');
-    if (badge) badge.textContent = t('hero.badge', { count: cap.occupied });
-    if (number) number.textContent = cap.occupied;
+    if (badge) badge.textContent = t('hero.badge', { count: cap.available });
+    if (number) number.textContent = cap.available;
     if (bar) bar.style.width = (cap.total > 0 ? Math.round((cap.occupied / cap.total) * 100) : 0) + '%';
   });
 

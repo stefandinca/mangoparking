@@ -57,11 +57,8 @@ export default function About(container) {
           <div class="grid sm:grid-cols-3 gap-4">
             ${[
               { label: t('amenities.shuttle'), sub: t('amenities.shuttleSub') },
-              { label: t('amenities.carWash'), sub: t('amenities.carWashSub') },
-              { label: t('amenities.evCharging'), sub: t('amenities.evChargingSub') },
-              { label: t('amenities.covered'), sub: t('amenities.coveredSub') },
-              { label: t('amenities.luggage'), sub: t('amenities.luggageSub') },
               { label: t('amenities.security'), sub: t('amenities.securitySub') },
+              { label: t('amenities.luggage'), sub: t('amenities.luggageSub') },
             ].map(a => `
               <div class="card-solid rounded-2xl p-5">
                 <p class="font-heading font-semibold text-[16px]">${a.label}</p>

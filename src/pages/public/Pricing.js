@@ -3,81 +3,83 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getPricingTiers, getAddOns, getCommuterRate } from '../../services/pricingService.js';
-import { checkIcon } from '../../components/widgets/icons.js';
+import { getTokenPacks } from '../../services/tokenService.js';
 
 export default async function Pricing(container) {
   const locale = getLocale();
+
   updateMeta({
-    title: locale === 'ro' ? 'Tarife — Mango Parking' : 'Pricing — Mango Parking',
+    title: locale === 'ro' ? 'Tarife Tokens — Mango Parking' : 'Token Pricing — Mango Parking',
     description: locale === 'ro'
-      ? 'Tarife parcare Otopeni. De la 25 lei/zi pentru sejururi lungi. Abonament navetiști 500 lei/lună.'
-      : 'Otopeni parking pricing. From 25 lei/day for long stays. Commuter subscription 500 lei/month.',
+      ? 'Cumpără tokens de parcare la Aeroportul Otopeni. Prețuri simple și transparente.'
+      : 'Buy parking tokens at Otopeni Airport. Simple, transparent pricing.',
     lang: locale,
   });
 
-  const tiers = await getPricingTiers();
-  const addons = await getAddOns();
-  const commuterRate = getCommuterRate();
+  const packs = await getTokenPacks().catch(() => []);
+  const bestPack = packs.reduce((best, p) => (!best || p.quantity > best.quantity) ? p : best, null);
+
+  const packCards = packs.map(p => {
+    const isBest = p.id === bestPack?.id;
+    const name = locale === 'ro' && p.nameRo ? p.nameRo : p.name;
+    return `
+      <div class="relative card-solid rounded-2xl p-8 text-center ${isBest ? 'ring-2 ring-mango shadow-lg' : ''}">
+        ${isBest ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-bold bg-mango text-white px-4 py-1 rounded-full">${t('token.bestValue')}</span>` : ''}
+        <p class="font-heading font-bold text-4xl tracking-tight mb-1">${p.quantity}</p>
+        <p class="text-dim text-[14px] mb-4">${t('token.tokens')}</p>
+        <p class="font-mono text-2xl font-bold text-mango mb-4">${p.price} lei</p>
+        <a href="${localePath('/booking')}" class="inline-block w-full bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('token.buyTokens')}</a>
+      </div>
+    `;
+  }).join('');
 
   const page = html`<div>
     <div data-navbar></div>
 
-    <section class="pt-24 md:pt-32 pb-20">
-      <div class="max-w-4xl mx-auto px-6">
-        <div class="text-center mb-16">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('pricing.label')}</p>
-          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] mb-4">${t('pricing.pageTitle')}</h1>
-          <p class="text-dim text-[17px] max-w-lg mx-auto">${t('pricing.pageSubtitle')}</p>
+    <section class="pt-32 pb-20">
+      <div class="max-w-5xl mx-auto px-6">
+        <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] mb-3">${t('token.pricingTitle')}</h1>
+        <p class="text-dim text-[17px] mb-12 max-w-2xl">${t('token.pricingSubtitle')}</p>
+
+        <!-- Pack cards -->
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+          ${packCards}
         </div>
 
-        <!-- Traveler Tiers -->
-        <div class="mb-16">
-          <h2 class="font-heading text-2xl font-bold mb-6">${t('pricing.travelerPricing')}</h2>
-          <div class="card-solid rounded-3xl overflow-hidden">
-            <div class="grid grid-cols-3 text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-4 sm:px-8 py-4 border-b border-frost-deep">
-              <span>${t('booking.duration')}</span>
-              <span class="text-center">${t('pricing.perDay')}</span>
-              <span class="text-right"></span>
-            </div>
-            <div class="divide-y divide-frost-deep/60">
-              ${tiers.map((tier, i) => `
-                <div class="grid grid-cols-3 items-center px-4 sm:px-8 py-5 ${i === tiers.length - 1 ? 'bg-mango/[0.03]' : ''}">
-                  <span class="text-[15px] font-medium">${tier.minDays}–${tier.maxDays > 100 ? '∞' : tier.maxDays} ${t('pricing.days')}</span>
-                  <span class="text-center font-mono font-semibold text-lg">${tier.pricePerDay} <span class="text-dim text-[13px] font-normal">lei${t('pricing.perDay')}</span></span>
-                  <span class="text-right">${i === tiers.length - 1 ? `<span class="text-[11px] font-bold bg-mango/10 text-mango px-3 py-1 rounded-full uppercase">${t('pricing.bestValue')}</span>` : ''}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-
-        <!-- Add-ons -->
-        <div class="mb-16">
-          <h2 class="font-heading text-2xl font-bold mb-2">${t('pricing.addOns')}</h2>
-          <p class="text-dim text-[15px] mb-6">${t('pricing.addOnsNote')}</p>
-          <div class="grid sm:grid-cols-3 gap-4">
-            ${addons.map(a => `
-              <div class="card-solid rounded-2xl p-6 text-center">
-                <p class="font-heading font-semibold text-[16px] mb-1">${locale === 'ro' && a.nameRo ? a.nameRo : a.name}</p>
-                <p class="font-mono font-bold text-xl text-mango">${a.price} lei</p>
-                <p class="text-dim text-[13px] mt-1">${a.type === 'per_day' ? t('pricing.perDayAddon') : t('pricing.oneTime')}</p>
+        <!-- How tokens work -->
+        <div class="card-solid rounded-2xl p-8 mb-16">
+          <h2 class="font-heading font-bold text-2xl mb-6">${t('token.howItWorks')}</h2>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg bg-mango/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-mango" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </div>
-            `).join('')}
+              <p class="text-[15px]">${t('token.rule1')}</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg bg-mango/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-mango" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <p class="text-[15px]">${t('token.rule2')}</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg bg-leaf/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-leaf" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/></svg>
+              </div>
+              <p class="text-[15px]">${t('token.rule3')}</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg bg-leaf/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-leaf" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0H21"/></svg>
+              </div>
+              <p class="text-[15px]">${t('token.rule4')}</p>
+            </div>
           </div>
         </div>
 
-        <!-- Commuter -->
-        <div class="bg-charcoal rounded-3xl p-6 sm:p-10 text-center relative overflow-hidden">
-          <div class="absolute -top-3 right-8 bg-mango text-white text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
-          <h2 class="font-heading text-2xl font-bold text-white mb-2">${t('pricing.commuterPricing')}</h2>
-          <div class="flex items-baseline justify-center gap-2 mb-4">
-            <span class="font-heading font-bold text-6xl text-white">${commuterRate}</span>
-            <span class="text-white/40 text-lg">${t('pricing.leiMonth')}</span>
-          </div>
-          <p class="text-white/30 text-[15px] mb-6">${t('pricing.commuterTerms')}</p>
-          <p class="text-white/20 text-[14px] mb-8">${t('pricing.commuterSavings', { amount: '600+' })}</p>
-          <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-colors shadow-md">${t('pricing.subscribeNow')}</a>
+        <!-- CTA -->
+        <div class="text-center">
+          <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-colors shadow-md">${t('token.buyTokens')}</a>
         </div>
       </div>
     </section>
@@ -87,5 +89,6 @@ export default async function Pricing(container) {
 
   page.querySelector('[data-navbar]').replaceWith(Navbar());
   page.querySelector('[data-footer]').replaceWith(Footer());
+
   container.appendChild(page);
 }
