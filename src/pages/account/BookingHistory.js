@@ -4,48 +4,32 @@ import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getUserProfile } from '../../firebase/auth.js';
-import { getMyBookings } from '../../services/bookingService.js';
+import { getTransactions } from '../../services/tokenService.js';
 import { formatDate } from '../../utils/date.js';
 import { accountLayout, initAccountNav } from '../../components/account/AccountLayout.js';
 
-/* ── Map Firestore bookings to display shape ── */
-function mapBooking(b) {
-  const dropOff = b.dates?.dropOff || b.checkIn || '';
-  const pickUp  = b.dates?.pickUp  || b.checkOut || '';
-  return {
-    id:       b.code || b.id,
-    vehicle:  b.vehicle?.licensePlate || '—',
-    spot:     b.spotId || '—',
-    checkIn:  dropOff,
-    checkOut: pickUp,
-    status:   b.status || 'completed',
-    total:    b.estimatedPrice ? `${b.estimatedPrice} lei` : '—',
-  };
-}
-
-const STATUS_STYLES = {
-  upcoming:  'bg-blue-50 text-blue-600',
-  active:    'bg-leaf/10 text-leaf',
-  completed: 'bg-gray-100 text-gray-500',
-  cancelled: 'bg-red-50 text-danger',
+const TYPE_STYLES = {
+  purchase: 'bg-leaf/10 text-leaf',
+  use: 'bg-blue-100 text-blue-600',
+  refund: 'bg-mango/10 text-mango',
 };
 
-function renderBookingCard(b, locale) {
-  const statusCls = STATUS_STYLES[b.status] || STATUS_STYLES.completed;
+function renderTransaction(tx, locale) {
+  const typeCls = TYPE_STYLES[tx.type] || 'bg-gray-100 text-gray-600';
+  const qty = tx.type === 'use' ? tx.quantity : `+${tx.quantity}`;
   return `
     <div class="card-solid rounded-2xl p-5 mb-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="flex items-center gap-4">
-          <div class="w-10 h-10 rounded-xl bg-frost flex items-center justify-center text-[13px] font-bold font-mono text-dim">${b.spot}</div>
+          <div class="w-10 h-10 rounded-xl bg-frost flex items-center justify-center">
+            <span class="font-mono font-bold text-[14px] text-dim">${qty}</span>
+          </div>
           <div>
-            <p class="font-semibold text-[15px]">${b.id}</p>
-            <p class="text-dim text-[13px]">${b.vehicle} &middot; ${formatDate(b.checkIn, locale)} → ${formatDate(b.checkOut, locale)}</p>
+            <p class="font-semibold text-[15px]">${t('token.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</p>
+            <p class="text-dim text-[13px]">${formatDate(tx.timestamp, locale)}${tx.licensePlate ? ` · ${tx.licensePlate}` : ''}</p>
           </div>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="font-heading font-semibold text-[15px]">${b.total}</span>
-          <span class="text-[12px] font-bold ${statusCls} px-3 py-1 rounded-full capitalize">${t('account.status_' + b.status)}</span>
-        </div>
+        <span class="text-[12px] font-bold ${typeCls} px-3 py-1 rounded-full capitalize">${tx.type}</span>
       </div>
     </div>
   `;
@@ -53,6 +37,7 @@ function renderBookingCard(b, locale) {
 
 export default async function BookingHistory(container) {
   const locale = getLocale();
+  const profile = getUserProfile();
 
   updateMeta({
     title: `${t('account.bookings')} — Mango Parking`,
@@ -60,11 +45,11 @@ export default async function BookingHistory(container) {
     lang: locale,
   });
 
-  /* Fetch real bookings */
-  const rawBookings = await getMyBookings().catch(() => []);
-  const bookings = rawBookings.map(mapBooking);
+  const transactions = profile
+    ? await getTransactions(profile.id, 100).catch(() => [])
+    : [];
 
-  const bookingRows = bookings.map(b => renderBookingCard(b, locale)).join('');
+  const txRows = transactions.map(tx => renderTransaction(tx, locale)).join('');
 
   const content = `
     <div class="flex items-center justify-between mb-8">
@@ -72,27 +57,28 @@ export default async function BookingHistory(container) {
         <h1 class="font-heading text-3xl font-bold tracking-tight mb-1">${t('account.bookings')}</h1>
         <p class="text-dim text-[16px]">${t('account.bookingsSubtitle')}</p>
       </div>
-      <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('account.newBooking')}</a>
+      <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
     </div>
 
     <!-- Filter tabs -->
     <div class="flex gap-2 mb-6 flex-wrap">
-      ${['all', 'upcoming', 'active', 'completed', 'cancelled'].map((f, i) => {
+      ${['all', 'purchase', 'use', 'refund'].map((f, i) => {
+        const label = f === 'all' ? t('token.filterAll') : t('token.filter' + f.charAt(0).toUpperCase() + f.slice(1));
         const cls = i === 0
           ? 'px-4 py-3 rounded-xl bg-charcoal text-white text-[14px] font-semibold'
           : 'px-4 py-3 rounded-xl bg-frost text-dim text-[14px] hover:bg-frost-deep transition-colors';
-        return `<button class="${cls}" data-filter="${f}">${t('account.filter_' + f)}</button>`;
+        return `<button class="${cls}" data-filter="${f}">${label}</button>`;
       }).join('')}
     </div>
 
-    <!-- Booking list -->
-    <div data-booking-list>
-      ${bookingRows}
+    <!-- Transaction list -->
+    <div data-tx-list>
+      ${txRows || `<p class="text-dim text-center py-8">${t('token.noTransactions')}</p>`}
     </div>
 
     <!-- Mobile CTA -->
     <div class="sm:hidden mt-6">
-      <a href="${localePath('/booking')}" class="block text-center bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('account.newBooking')}</a>
+      <a href="${localePath('/booking')}" class="block text-center bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
     </div>
   `;
 
@@ -114,16 +100,14 @@ export default async function BookingHistory(container) {
   // Filter logic
   delegate(page, 'click', '[data-filter]', (e, btn) => {
     const filter = btn.dataset.filter;
-    // Update active button style
     page.querySelectorAll('[data-filter]').forEach(b => {
       b.className = b.dataset.filter === filter
         ? 'px-4 py-3 rounded-xl bg-charcoal text-white text-[14px] font-semibold'
         : 'px-4 py-3 rounded-xl bg-frost text-dim text-[14px] hover:bg-frost-deep transition-colors';
     });
-    // Filter cards
-    const list = page.querySelector('[data-booking-list]');
-    const filtered = filter === 'all' ? bookings : bookings.filter(b => b.status === filter);
-    list.innerHTML = filtered.map(b => renderBookingCard(b, locale)).join('') || `<p class="text-dim text-center py-8">${t('account.noBookings')}</p>`;
+    const list = page.querySelector('[data-tx-list]');
+    const filtered = filter === 'all' ? transactions : transactions.filter(tx => tx.type === filter);
+    list.innerHTML = filtered.map(tx => renderTransaction(tx, locale)).join('') || `<p class="text-dim text-center py-8">${t('token.noTransactions')}</p>`;
   });
 
   container.appendChild(page);

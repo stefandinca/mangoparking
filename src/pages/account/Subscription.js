@@ -6,6 +6,7 @@ import { updateMeta } from '../../utils/seo.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { checkIcon } from '../../components/widgets/icons.js';
 import { accountLayout, initAccountNav, NAV_ICONS } from '../../components/account/AccountLayout.js';
+import { alertModal, confirmModal } from '../../components/core/Modal.js';
 
 /* ── Mock subscription (set to null to test "no subscription" state) ── */
 const MOCK_SUBSCRIPTION = {
@@ -127,16 +128,17 @@ export default function Subscription(container) {
 
   initAccountNav(page);
 
-  // Action button handlers (mock — show toast in future)
-  delegate(page, 'click', '[data-action]', (e, btn) => {
+  // Action button handlers (mock)
+  delegate(page, 'click', '[data-action]', async (e, btn) => {
     const action = btn.dataset.action;
     if (action === 'renew') {
-      alert(t('account.renewConfirm'));
+      await alertModal(t('account.renewConfirm'), { type: 'success' });
     } else if (action === 'pause') {
-      alert(t('account.pauseConfirm'));
+      await alertModal(t('account.pauseConfirm'), { type: 'warning' });
     } else if (action === 'cancel') {
-      if (confirm(t('account.cancelConfirm'))) {
-        alert(t('account.cancelDone'));
+      const confirmed = await confirmModal(t('account.cancelConfirm'), { danger: true, confirmText: t('account.cancelSub') });
+      if (confirmed) {
+        await alertModal(t('account.cancelDone'), { type: 'info' });
       }
     }
   });

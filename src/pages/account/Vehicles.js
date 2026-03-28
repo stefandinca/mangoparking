@@ -3,14 +3,11 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getUserProfile } from '../../firebase/auth.js';
+import { getCurrentUser } from '../../firebase/auth.js';
+import { getDocument, updateDocument } from '../../firebase/db.js';
 import { accountLayout, initAccountNav, NAV_ICONS } from '../../components/account/AccountLayout.js';
-
-/* ── Mock vehicles (fallback if profile not loaded) ── */
-const MOCK_VEHICLES = [
-  { plate: 'B 123 ABC', make: 'Volkswagen', model: 'Passat', color: 'Gri', year: 2021 },
-  { plate: 'IF 99 XYZ', make: 'Dacia', model: 'Duster', color: 'Alb', year: 2023 },
-];
+import { confirmModal } from '../../components/core/Modal.js';
+import { showToast } from '../../components/core/Toast.js';
 
 function renderVehicleCard(v, index) {
   return `
@@ -22,7 +19,7 @@ function renderVehicleCard(v, index) {
           </div>
           <div>
             <p class="font-heading font-bold text-[16px] tracking-tight font-mono">${v.plate}</p>
-            <p class="text-dim text-[14px]">${v.make} ${v.model} &middot; ${v.color} &middot; ${v.year}</p>
+            <p class="text-dim text-[14px]">${v.make} ${v.model}</p>
           </div>
         </div>
         <button class="text-danger/60 hover:text-danger text-[14px] font-semibold transition-colors" data-remove="${index}">${t('account.remove')}</button>
@@ -31,13 +28,11 @@ function renderVehicleCard(v, index) {
   `;
 }
 
-export default function Vehicles(container) {
+export default async function Vehicles(container) {
   const locale = getLocale();
-  const profile = getUserProfile();
-  // Use profile vehicles if available, else mock
-  const vehicles = (profile?.vehicles && profile.vehicles.length > 0)
-    ? profile.vehicles
-    : MOCK_VEHICLES;
+  const uid = getCurrentUser()?.uid;
+  const profile = uid ? await getDocument('users', uid).catch(() => null) : null;
+  const vehicles = profile?.vehicles || [];
 
   updateMeta({
     title: `${t('account.vehicles')} — Mango Parking`,
@@ -55,7 +50,7 @@ export default function Vehicles(container) {
 
     <!-- Vehicle list -->
     <div class="space-y-3 mb-8" data-vehicle-list>
-      ${vehicles.map((v, i) => renderVehicleCard(v, i)).join('')}
+      ${vehicles.length > 0 ? vehicles.map((v, i) => renderVehicleCard(v, i)).join('') : `<p class="text-dim text-center py-8">${t('account.noVehicles')}</p>`}
     </div>
 
     <!-- Add vehicle form -->
@@ -65,17 +60,17 @@ export default function Vehicles(container) {
         <div>
           <label class="text-[13px] text-dim font-medium mb-1 block">${t('account.licensePlate')}</label>
           <input type="text" name="plate" placeholder="B 000 AAA" required
-            class="w-full bg-frost border border-frost-deep rounded-xl px-4 py-3 text-[15px] placeholder:text-dim/40 focus:outline-none focus:border-mango/40 focus:ring-2 focus:ring-mango/10 transition-all">
+            class="w-full bg-frost border border-frost-deep rounded-xl px-4 py-3 text-[15px] placeholder:text-dim/40 focus:outline-none focus:border-mango/40 uppercase">
         </div>
         <div>
           <label class="text-[13px] text-dim font-medium mb-1 block">${t('account.make')}</label>
           <input type="text" name="make" placeholder="Volkswagen" required
-            class="w-full bg-frost border border-frost-deep rounded-xl px-4 py-3 text-[15px] placeholder:text-dim/40 focus:outline-none focus:border-mango/40 focus:ring-2 focus:ring-mango/10 transition-all">
+            class="w-full bg-frost border border-frost-deep rounded-xl px-4 py-3 text-[15px] placeholder:text-dim/40 focus:outline-none focus:border-mango/40">
         </div>
         <div>
           <label class="text-[13px] text-dim font-medium mb-1 block">${t('account.model')}</label>
           <input type="text" name="model" placeholder="Passat" required
-            class="w-full bg-frost border border-frost-deep rounded-xl px-4 py-3 text-[15px] placeholder:text-dim/40 focus:outline-none focus:border-mango/40 focus:ring-2 focus:ring-mango/10 transition-all">
+            class="w-full bg-frost border border-frost-deep rounded-xl px-4 py-3 text-[15px] placeholder:text-dim/40 focus:outline-none focus:border-mango/40">
         </div>
         <div class="flex items-end">
           <button type="submit"
@@ -102,31 +97,17 @@ export default function Vehicles(container) {
 
   initAccountNav(page);
 
-  // Local mutable copy for UI interactions
   const localVehicles = [...vehicles];
 
-  // Remove vehicle
-  delegate(page, 'click', '[data-remove]', (e, btn) => {
-    const idx = parseInt(btn.dataset.remove, 10);
-    if (confirm(t('account.removeConfirm', { plate: localVehicles[idx]?.plate }))) {
-      localVehicles.splice(idx, 1);
-      rerenderList();
+  async function saveVehicles() {
+    if (!uid) return;
+    try {
+      await updateDocument('users', uid, { vehicles: localVehicles });
+    } catch (err) {
+      console.error(err);
+      showToast(t('common.error'), 'error');
     }
-  });
-
-  // Add vehicle
-  const form = page.querySelector('[data-add-vehicle]');
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const fd = new FormData(form);
-    const plate = fd.get('plate').trim().toUpperCase();
-    const make = fd.get('make').trim();
-    const model = fd.get('model').trim();
-    if (!plate || !make || !model) return;
-    localVehicles.push({ plate, make, model, color: '—', year: new Date().getFullYear() });
-    form.reset();
-    rerenderList();
-  });
+  }
 
   function rerenderList() {
     const list = page.querySelector('[data-vehicle-list]');
@@ -136,6 +117,35 @@ export default function Vehicles(container) {
       list.innerHTML = localVehicles.map((v, i) => renderVehicleCard(v, i)).join('');
     }
   }
+
+  // Remove vehicle
+  delegate(page, 'click', '[data-remove]', async (e, btn) => {
+    const idx = parseInt(btn.dataset.remove, 10);
+    const plate = localVehicles[idx]?.plate || '';
+    const confirmed = await confirmModal(t('account.removeConfirm', { plate }), { danger: true, confirmText: t('account.remove') });
+    if (confirmed) {
+      localVehicles.splice(idx, 1);
+      rerenderList();
+      await saveVehicles();
+      showToast(locale === 'ro' ? 'Vehicul șters!' : 'Vehicle removed!', 'success');
+    }
+  });
+
+  // Add vehicle
+  const form = page.querySelector('[data-add-vehicle]');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const plate = fd.get('plate').trim().toUpperCase();
+    const make = fd.get('make').trim();
+    const model = fd.get('model').trim();
+    if (!plate || !make || !model) return;
+    localVehicles.push({ plate, make, model });
+    form.reset();
+    rerenderList();
+    await saveVehicles();
+    showToast(locale === 'ro' ? 'Vehicul adăugat!' : 'Vehicle added!', 'success');
+  });
 
   container.appendChild(page);
 }

@@ -3,33 +3,38 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getUserProfile } from '../../firebase/auth.js';
-import { navigate } from '../../router/index.js';
-import { getMyBookings } from '../../services/bookingService.js';
+import { getUserProfile, getCurrentUser } from '../../firebase/auth.js';
+import { updateDocument, getDocument } from '../../firebase/db.js';
+import { getBalance, getTransactions } from '../../services/tokenService.js';
+import { showToast } from '../../components/core/Toast.js';
 import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
 import { accountLayout, initAccountNav, NAV_ICONS } from '../../components/account/AccountLayout.js';
+import { formatDate } from '../../utils/date.js';
+
+const TYPE_STYLES = {
+  purchase: 'bg-leaf/10 text-leaf',
+  use: 'bg-blue-100 text-blue-600',
+  refund: 'bg-mango/10 text-mango',
+};
 
 export default async function Dashboard(container) {
   const locale = getLocale();
-  const profile = getUserProfile();
+  const uid = getCurrentUser()?.uid;
+  // Fetch fresh profile from Firestore (not cache) so edits show on refresh
+  const profile = uid ? await getDocument('users', uid).catch(() => getUserProfile()) : getUserProfile();
   const displayName = profile?.displayName || 'User';
-  const points = profile?.loyaltyPoints ?? 0;
-  const tier = profile?.loyaltyTier ?? 'bronze';
 
-  // Fetch real data
-  const [myBookings, shuttleSchedule] = await Promise.all([
-    getMyBookings().catch(() => []),
+  const [balanceDoc, transactions, shuttleSchedule] = await Promise.all([
+    uid ? getBalance(uid).catch(() => null) : Promise.resolve(null),
+    uid ? getTransactions(uid, 5).catch(() => []) : Promise.resolve([]),
     getShuttleSchedule().catch(() => []),
   ]);
 
-  const activeBookings = myBookings.filter(b => b.status === 'active');
-  const completedBookings = myBookings.filter(b => b.status === 'completed');
-  const activeBooking = activeBookings[0] || null;
-  const recentBooking = completedBookings[0] || null;
+  const balance = balanceDoc?.balance ?? 0;
+  const totalPurchased = balanceDoc?.totalPurchased ?? 0;
   const upcoming = getUpcomingDepartures(shuttleSchedule, 1);
   const nextShuttle = upcoming[0] || null;
 
-  // Calculate minutes away for next shuttle
   let minutesAway = 0;
   if (nextShuttle) {
     const now = new Date();
@@ -45,9 +50,6 @@ export default async function Dashboard(container) {
     lang: locale,
   });
 
-  const tierColors = { bronze: 'text-amber-700 bg-amber-100', silver: 'text-gray-600 bg-gray-200', gold: 'text-yellow-600 bg-yellow-100' };
-  const tierCls = tierColors[tier] || tierColors.bronze;
-
   const content = `
     <!-- Welcome -->
     <div class="mb-8">
@@ -55,58 +57,66 @@ export default async function Dashboard(container) {
       <p class="text-dim text-[16px]">${t('account.dashboardSubtitle')}</p>
     </div>
 
+    <!-- Profile -->
+    <div class="card-solid rounded-2xl p-6 mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-heading font-bold text-lg">${locale === 'ro' ? 'Profilul Meu' : 'My Profile'}</h3>
+        <button data-edit-profile class="text-mango text-[13px] font-semibold hover:text-mango-hover transition-colors">${t('common.edit')}</button>
+      </div>
+      <div data-profile-view>
+        <div class="flex flex-wrap gap-x-8 gap-y-2 text-[15px]">
+          <div><span class="text-dim text-[13px]">${t('booking.name')}</span><p class="font-medium">${profile?.displayName || '—'}</p></div>
+          <div><span class="text-dim text-[13px]">${t('booking.email')}</span><p class="font-medium">${profile?.email || '—'}</p></div>
+          <div><span class="text-dim text-[13px]">${t('booking.phone')}</span><p class="font-medium">${profile?.phone || '—'}</p></div>
+        </div>
+      </div>
+      <form data-profile-form class="hidden">
+        <div class="grid sm:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label class="block text-[13px] text-dim mb-1">${t('booking.name')}</label>
+            <input type="text" name="displayName" value="${profile?.displayName || ''}" class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40">
+          </div>
+          <div>
+            <label class="block text-[13px] text-dim mb-1">${t('booking.email')}</label>
+            <input type="email" name="email" value="${profile?.email || ''}" class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40">
+          </div>
+          <div>
+            <label class="block text-[13px] text-dim mb-1">${t('booking.phone')}</label>
+            <input type="tel" name="phone" value="${profile?.phone || ''}" class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40">
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button type="submit" class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('common.save')}</button>
+          <button type="button" data-cancel-profile class="text-dim text-[14px] px-4 py-2.5 hover:text-charcoal transition-colors">${t('common.cancel')}</button>
+        </div>
+      </form>
+    </div>
+
     <!-- Stats row -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
       <div class="card-solid rounded-2xl p-5">
-        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('account.activeBooking')}</p>
-        <p class="font-heading font-bold text-2xl tracking-tight">${activeBookings.length}</p>
+        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('token.balance')}</p>
+        <p class="font-heading font-bold text-3xl tracking-tight text-mango">${balance}</p>
       </div>
       <div class="card-solid rounded-2xl p-5">
-        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('account.totalBookings')}</p>
-        <p class="font-heading font-bold text-2xl tracking-tight">${myBookings.length}</p>
+        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('token.totalPurchased')}</p>
+        <p class="font-heading font-bold text-2xl tracking-tight">${totalPurchased}</p>
       </div>
       <div class="card-solid rounded-2xl p-5">
-        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('account.loyaltyPts')}</p>
-        <p class="font-heading font-bold text-2xl tracking-tight">${points}</p>
-      </div>
-      <div class="card-solid rounded-2xl p-5">
-        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('account.tier')}</p>
-        <span class="inline-block text-[13px] font-bold ${tierCls} px-3 py-1 rounded-full capitalize">${tier}</span>
+        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('account.vehicles')}</p>
+        <p class="font-heading font-bold text-2xl tracking-tight">${(balanceDoc?.plates || []).length}</p>
       </div>
     </div>
 
-    <!-- Active booking card -->
-    ${activeBooking ? `
-    <div class="card-solid rounded-2xl p-6 mb-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="font-heading font-bold text-lg">${t('account.currentBooking')}</h2>
-        <span class="text-[12px] font-bold bg-leaf/10 text-leaf px-3 py-1 rounded-full">${t('account.statusActive')}</span>
-      </div>
-      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-[15px]">
-        <div>
-          <p class="text-dim text-[13px] mb-1">${t('account.bookingId')}</p>
-          <p class="font-semibold font-mono">${activeBooking.code || activeBooking.id}</p>
-        </div>
-        <div>
-          <p class="text-dim text-[13px] mb-1">${t('account.spotLabel')}</p>
-          <p class="font-semibold">${activeBooking.spotId || '—'}</p>
-        </div>
-        <div>
-          <p class="text-dim text-[13px] mb-1">${t('account.vehicleLabel')}</p>
-          <p class="font-semibold">${activeBooking.vehicle?.licensePlate || '—'}</p>
-        </div>
-        <div>
-          <p class="text-dim text-[13px] mb-1">${t('account.checkOut')}</p>
-          <p class="font-semibold">${activeBooking.dates?.pickUp ? new Date(activeBooking.dates.pickUp).toLocaleDateString(locale === 'ro' ? 'ro-RO' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</p>
-        </div>
-      </div>
-    </div>` : `
-    <div class="card-solid rounded-2xl p-6 mb-6 text-center text-dim">
-      <p class="text-[15px]">${t('account.noActiveBooking') || 'No active booking'}</p>
-    </div>`}
-
-    <!-- Next shuttle + Quick rebook -->
+    <!-- Buy more + Next shuttle -->
     <div class="grid md:grid-cols-2 gap-6 mb-6">
+      <!-- Buy more tokens -->
+      <div class="card-solid rounded-2xl p-6">
+        <h3 class="font-heading font-bold text-lg mb-3">${t('token.buyMore')}</h3>
+        <p class="text-dim text-[14px] mb-4">${t('token.rule2')} — ${t('token.rule1')}</p>
+        <a href="${localePath('/booking')}" class="inline-block bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyTokens')}</a>
+      </div>
+
       <!-- Next shuttle -->
       <div class="card-solid rounded-2xl p-6">
         <h3 class="font-heading font-bold text-lg mb-4">${t('account.nextShuttle')}</h3>
@@ -121,31 +131,31 @@ export default async function Dashboard(container) {
           </div>
         </div>
       </div>
-
-      <!-- Quick re-book -->
-      <div class="card-solid rounded-2xl p-6">
-        <h3 class="font-heading font-bold text-lg mb-3">${t('account.quickRebook')}</h3>
-        <p class="text-dim text-[14px] mb-4">${t('account.recentTrip')}: <span class="font-semibold text-charcoal">${recentBooking?.spotId || '—'}</span> — ${recentBooking?.vehicle?.licensePlate || '—'}</p>
-        <a href="${localePath('/booking')}" class="inline-block bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('account.rebookNow')}</a>
-      </div>
     </div>
 
-    <!-- Loyalty summary -->
+    <!-- Recent transactions -->
     <div class="card-solid rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="font-heading font-bold text-lg">${t('account.loyaltySummary')}</h3>
-        <a href="${localePath('/account/loyalty')}" class="text-mango text-[14px] font-semibold hover:text-mango-hover transition-colors">${t('account.viewDetails')} →</a>
+        <h3 class="font-heading font-bold text-lg">${t('token.recentTransactions')}</h3>
+        <a href="${localePath('/account/bookings')}" class="text-mango text-[14px] font-semibold hover:text-mango-hover transition-colors">${t('account.viewDetails')} →</a>
       </div>
-      <div class="flex items-center gap-6">
-        <div class="w-20 h-20 rounded-2xl bg-frost flex flex-col items-center justify-center">
-          <span class="font-heading font-bold text-2xl tracking-tight">${points}</span>
-          <span class="text-[11px] text-dim uppercase tracking-wider">${t('account.points')}</span>
+      ${transactions.length > 0 ? `
+        <div class="space-y-3">
+          ${transactions.map(tx => {
+            const typeCls = TYPE_STYLES[tx.type] || 'bg-gray-100 text-gray-600';
+            const qty = tx.type === 'use' ? tx.quantity : `+${tx.quantity}`;
+            return `
+              <div class="flex items-center justify-between py-2">
+                <div class="flex items-center gap-3">
+                  <span class="text-[12px] font-bold uppercase px-2.5 py-0.5 rounded-full ${typeCls}">${t('token.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</span>
+                  <span class="text-dim text-[13px]">${formatDate(tx.timestamp, locale)}</span>
+                </div>
+                <span class="font-mono font-semibold text-[15px]">${qty}</span>
+              </div>
+            `;
+          }).join('')}
         </div>
-        <div>
-          <span class="inline-block text-[13px] font-bold ${tierCls} px-3 py-1 rounded-full capitalize mb-1">${tier}</span>
-          <p class="text-dim text-[14px]">${t('account.pointsToNext', { pts: 500 - points })}</p>
-        </div>
-      </div>
+      ` : `<p class="text-dim text-center py-4">${t('token.noTransactions')}</p>`}
     </div>
   `;
 
@@ -163,6 +173,47 @@ export default async function Dashboard(container) {
   page.querySelector('[data-footer]').replaceWith(Footer());
 
   initAccountNav(page);
+
+  // Profile edit toggle
+  const profileView = page.querySelector('[data-profile-view]');
+  const profileForm = page.querySelector('[data-profile-form]');
+
+  delegate(page, 'click', '[data-edit-profile]', () => {
+    profileView.classList.add('hidden');
+    profileForm.classList.remove('hidden');
+  });
+
+  delegate(page, 'click', '[data-cancel-profile]', () => {
+    profileForm.classList.add('hidden');
+    profileView.classList.remove('hidden');
+  });
+
+  if (profileForm) {
+    profileForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(profileForm);
+      const uid = getCurrentUser()?.uid;
+      if (!uid) return;
+      try {
+        await updateDocument('users', uid, {
+          displayName: fd.get('displayName') || '',
+          email: fd.get('email') || '',
+          phone: fd.get('phone') || '',
+        });
+        // Update view
+        const vals = profileView.querySelectorAll('p.font-medium');
+        if (vals[0]) vals[0].textContent = fd.get('displayName') || '—';
+        if (vals[1]) vals[1].textContent = fd.get('email') || '—';
+        if (vals[2]) vals[2].textContent = fd.get('phone') || '—';
+        profileForm.classList.add('hidden');
+        profileView.classList.remove('hidden');
+        showToast(locale === 'ro' ? 'Profil actualizat!' : 'Profile updated!', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast(t('common.error'), 'error');
+      }
+    });
+  }
 
   container.appendChild(page);
 }
