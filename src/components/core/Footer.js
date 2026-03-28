@@ -24,7 +24,7 @@ export function Footer() {
               <a href="${localePath('/')}" class="block hover:text-charcoal transition-colors">${t('nav.howItWorks')}</a>
               <a href="${localePath('/pricing')}" class="block hover:text-charcoal transition-colors">${t('nav.pricing')}</a>
               <a href="${localePath('/shuttle')}" class="block hover:text-charcoal transition-colors">${t('shuttle.viewFull').replace(' →', '')}</a>
-              <a href="${localePath('/commuter')}" class="block hover:text-charcoal transition-colors">${t('pricing.commuter')}</a>
+              <a href="${localePath('/about')}" class="block hover:text-charcoal transition-colors">${t('nav.faq')}</a>
             </div>
           </div>
           <div>

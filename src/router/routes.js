@@ -20,11 +20,12 @@ export const routes = [
     component: () => import('../pages/public/Shuttle.js'),
     guards: [],
   },
-  {
-    path: '/commuter',
-    component: () => import('../pages/public/Commuter.js'),
-    guards: [],
-  },
+  // MVP: hidden
+  // {
+  //   path: '/commuter',
+  //   component: () => import('../pages/public/Commuter.js'),
+  //   guards: [],
+  // },
   {
     path: '/about',
     component: () => import('../pages/public/About.js'),
@@ -59,21 +60,23 @@ export const routes = [
     component: () => import('../pages/account/BookingHistory.js'),
     guards: ['auth'],
   },
-  {
-    path: '/account/subscription',
-    component: () => import('../pages/account/Subscription.js'),
-    guards: ['auth'],
-  },
+  // MVP: hidden
+  // {
+  //   path: '/account/subscription',
+  //   component: () => import('../pages/account/Subscription.js'),
+  //   guards: ['auth'],
+  // },
   {
     path: '/account/vehicles',
     component: () => import('../pages/account/Vehicles.js'),
     guards: ['auth'],
   },
-  {
-    path: '/account/loyalty',
-    component: () => import('../pages/account/Loyalty.js'),
-    guards: ['auth'],
-  },
+  // MVP: hidden
+  // {
+  //   path: '/account/loyalty',
+  //   component: () => import('../pages/account/Loyalty.js'),
+  //   guards: ['auth'],
+  // },
 
   // Admin panel
   {
@@ -101,14 +104,15 @@ export const routes = [
     component: () => import('../pages/admin/AdminShuttle.js'),
     guards: ['auth', 'admin'],
   },
-  {
-    path: '/admin/reports',
-    component: () => import('../pages/admin/AdminReports.js'),
-    guards: ['auth', 'admin'],
-  },
-  {
-    path: '/admin/audit',
-    component: () => import('../pages/admin/AdminAudit.js'),
-    guards: ['auth', 'admin'],
-  },
+  // MVP: hidden
+  // {
+  //   path: '/admin/reports',
+  //   component: () => import('../pages/admin/AdminReports.js'),
+  //   guards: ['auth', 'admin'],
+  // },
+  // {
+  //   path: '/admin/audit',
+  //   component: () => import('../pages/admin/AdminAudit.js'),
+  //   guards: ['auth', 'admin'],
+  // },
 ];

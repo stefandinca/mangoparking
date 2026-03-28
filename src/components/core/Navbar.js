@@ -54,7 +54,6 @@ export function Navbar() {
           <a href="${localePath('/')}" class="block py-3 px-2">${t('nav.howItWorks')}</a>
           <a href="${localePath('/pricing')}" class="block py-3 px-2">${t('nav.pricing')}</a>
           <a href="${localePath('/shuttle')}" class="block py-3 px-2">${t('nav.shuttle')}</a>
-          <a href="${localePath('/commuter')}" class="block py-3 px-2">Commuter</a>
           <a href="${localePath('/about')}" class="block py-3 px-2">${t('nav.faq')}</a>
           <a href="${localePath('/contact')}" class="block py-3 px-2">${t('footer.contact')}</a>
           <hr class="border-frost-deep">

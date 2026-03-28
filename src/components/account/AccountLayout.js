@@ -3,9 +3,7 @@ import { t, localePath } from '../../i18n/index.js';
 const ACCOUNT_NAV = [
   { path: '/account',              icon: 'dashboard', labelKey: 'account.dashboard' },
   { path: '/account/bookings',     icon: 'bookings',  labelKey: 'account.bookings' },
-  { path: '/account/subscription', icon: 'sub',       labelKey: 'account.subscription' },
   { path: '/account/vehicles',     icon: 'vehicles',  labelKey: 'account.vehicles' },
-  { path: '/account/loyalty',      icon: 'loyalty',   labelKey: 'account.loyalty' },
 ];
 
 export const NAV_ICONS = {
