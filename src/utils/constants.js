@@ -15,3 +15,6 @@ export const LOYALTY_TIERS = {
 export const BOOKING_STATUSES = ['upcoming', 'active', 'completed', 'cancelled'];
 export const SPOT_STATUSES = ['available', 'occupied', 'reserved', 'maintenance'];
 export const ZONES = ['A', 'B', 'C', 'D'];
+
+export const TOKEN_HOURS = { start: 6, end: 20 }; // 6AM–8PM
+export const TOKEN_DAYS = [1, 2, 3, 4, 5]; // Mon–Fri
