@@ -5,10 +5,12 @@ export const SITE_URL = 'https://mangoparking.ro';
 export const LOGO_MASCOT = '/images/logo.png';
 export const LOGO_FULL = '/images/logo-full.jpeg';
 
-// ── Contact (public, operating location — Otopeni parking) ──
+// ── Contact (public, operating location — the parking lot itself) ──
+// Corbeanca is adjacent to Otopeni (~5 km from Henri Coandă Airport); site copy
+// still references "Aeroportul Otopeni" as the destination served via shuttle.
 export const CONTACT_PHONE = '+40 721 000 000'; // TODO(launch): publish real support line
 export const CONTACT_EMAIL = 'contact@mangoparking.ro'; // TODO(launch): confirm MX + mailbox is live
-export const CONTACT_ADDRESS = 'Str. Exemplu 42, Otopeni, Ilfov'; // TODO(launch): real street/number of the parking lot
+export const CONTACT_ADDRESS = 'Strada Radarului nr. 1, Corbeanca, jud. Ilfov';
 
 // ── Legal identifiers (displayed by Netopia/ANPC requirement) ──
 // Operator of record — source of truth for Terms/Privacy/GDPR/Delivery/Cancellation and Footer.
@@ -20,7 +22,8 @@ export const COMPANY_ADDRESS = 'Str. Castanilor, Nr.1, Sc.B, Ap.13, Bacău, Jud.
 export const DPO_EMAIL = 'gdpr@mangoparking.ro'; // TODO(launch): dedicated DPO mailbox
 export const ANPC_SAL_URL = 'https://anpc.ro/ce-este-sal/';
 export const ANPC_SOL_URL = 'https://ec.europa.eu/consumers/odr/';
-export const GOOGLE_MAPS_EMBED = 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2843.8!2d26.085!3d44.572!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zNDTCsDM0JzE5LjIiTiAyNsKwMDUnMDYuMCJF!5e0!3m2!1sen!2sro!4v1';
+// Address-based embed — works without an API key and auto-tracks the address string.
+export const GOOGLE_MAPS_EMBED = 'https://maps.google.com/maps?q=' + encodeURIComponent('Strada Radarului 1, Corbeanca, Ilfov') + '&output=embed';
 
 export const LOYALTY_TIERS = {
   bronze: { min: 0, max: 499, discount: 0, label: 'Bronze' },

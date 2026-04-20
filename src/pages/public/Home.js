@@ -40,12 +40,12 @@ export default function Home(container) {
     email: CONTACT_EMAIL,
     address: {
       '@type': 'PostalAddress',
-      streetAddress: 'Str. Exemplu 42',
-      addressLocality: 'Otopeni',
+      streetAddress: 'Strada Radarului nr. 1',
+      addressLocality: 'Corbeanca',
       addressRegion: 'Ilfov',
       addressCountry: 'RO',
     },
-    geo: { '@type': 'GeoCoordinates', latitude: 44.572, longitude: 26.085 },
+    geo: { '@type': 'GeoCoordinates', latitude: 44.618, longitude: 26.084 },
     openingHoursSpecification: { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'], opens: '00:00', closes: '23:59' },
     priceRange: '29-49 RON/day',
     amenityFeature: [

@@ -87,7 +87,7 @@ export default function Contact(container) {
             <div class="card-solid rounded-3xl overflow-hidden">
               <iframe src="${GOOGLE_MAPS_EMBED}" width="100%" height="250" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
               <div class="p-4 text-center">
-                <a href="https://www.google.com/maps/dir/?api=1&destination=44.572,26.085" target="_blank" rel="noopener" class="text-mango hover:text-mango-hover text-[14px] font-semibold transition-colors">${t('contact.getDirections')} →</a>
+                <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(CONTACT_ADDRESS)}" target="_blank" rel="noopener" class="text-mango hover:text-mango-hover text-[14px] font-semibold transition-colors">${t('contact.getDirections')} →</a>
               </div>
             </div>
 
