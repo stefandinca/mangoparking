@@ -8,8 +8,8 @@ All files required for Netopia/ANPC compliance are now in place.
 |------------------|--------------------------------------------------------------------------|
 | `logo.png`       | Mascot — navbar, footer, auth pages, favicon, hero                       |
 | `logo-full.jpeg` | Wordmark+mascot — reserved for hero / press use                          |
-| `sal.svg`        | Footer ANPC alternative dispute resolution banner (links to anpc.ro)     |
-| `sol.svg`        | Footer ANPC online dispute resolution banner (links to ec.europa.eu/odr) |
+| `sal.png`        | Footer ANPC alternative dispute resolution banner (links to anpc.ro)     |
+| `sol.png`        | Footer ANPC online dispute resolution banner (links to ec.europa.eu/odr) |
 
 The Netopia logo is **not** a static file — it's loaded via Netopia's
 own hosted iframe (`https://mny.ro/npId.html?...&secret=163420`), so no

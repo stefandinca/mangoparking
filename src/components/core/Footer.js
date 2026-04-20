@@ -88,10 +88,10 @@ export function Footer() {
             <p class="text-[11px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-2">${t('footer.anpc')}</p>
             <div class="flex items-center gap-3 flex-wrap">
               <a href="${ANPC_SAL_URL}" target="_blank" rel="noopener noreferrer" title="${t('footer.anpcSal')}" class="inline-block hover:opacity-80 transition-opacity">
-                <img src="/images/sal.svg" alt="${t('footer.anpcSal')}" class="h-14 w-auto" />
+                <img src="/images/sal.png" alt="${t('footer.anpcSal')}" class="h-14 w-auto" />
               </a>
               <a href="${ANPC_SOL_URL}" target="_blank" rel="noopener noreferrer" title="${t('footer.anpcSol')}" class="inline-block hover:opacity-80 transition-opacity">
-                <img src="/images/sol.svg" alt="${t('footer.anpcSol')}" class="h-14 w-auto" />
+                <img src="/images/sol.png" alt="${t('footer.anpcSol')}" class="h-14 w-auto" />
               </a>
             </div>
           </div>
