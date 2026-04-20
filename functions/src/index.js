@@ -1,24 +1,49 @@
-// Mango Parking Cloud Functions — Netopia payment bridge.
-// Flow:
-//   1. Client → POST createPayment  → returns Netopia hosted-page redirect URL
-//   2. User pays on Netopia → Netopia → POST netopiaCallback (server-to-server)
-//      → verify signature → credit tokens via creditTokens()
-//   3. Client redirected back to /booking?status=success
+// Mango Parking Cloud Functions — Netopia Mobilpay v2 payment bridge.
 //
-// Both endpoints are stubbed until Netopia merchant credentials land.
-// Replace the `// TODO(netopia)` blocks with real API calls per Netopia docs.
+// Flow:
+//   1. Client → POST createPayment
+//      → returns { action, env_key, data, cipher, iv, orderId }
+//      → client auto-submits a POST form to `action` (Netopia hosted page)
+//   2. User pays on Netopia.
+//   3. Netopia → POST netopiaCallback (server-to-server)
+//      → decrypt envelope with merchant private key
+//      → parse XML, check action==='confirmed' (or 'paid')
+//      → credit tokens / create booking
+//      → respond with <crc>success</crc>
+//   4. Netopia → redirects browser to the merchant `return_url`
+//      → client-side success page reads ?orderId=... and polls status.
+//
+// Integration reference: https://github.com/mobilpay/Node.js (official PoC)
+//
+// Secrets (bind via `firebase functions:secrets:set`):
+//   NETOPIA_SIGNATURE    — merchant POS signature string (goes in XML <signature>)
+//   NETOPIA_PUBLIC_KEY   — PEM, used to encrypt outgoing requests
+//   NETOPIA_PRIVATE_KEY  — PEM, used to decrypt IPN callbacks
+//   NETOPIA_ENV          — 'sandbox' or 'live' (defaults to sandbox)
+//   NETOPIA_API_KEY      — currently unused; reserved for the v3 REST API
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { defineSecret } from 'firebase-functions/params';
+import {
+  NETOPIA_ENDPOINTS,
+  encryptRequest,
+  decryptIpn,
+  buildRequestXml,
+  crcSuccess,
+  crcError,
+} from './netopia.js';
 
 initializeApp();
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
-const NETOPIA_SIGNATURE = defineSecret('NETOPIA_SIGNATURE');
-const NETOPIA_API_KEY = defineSecret('NETOPIA_API_KEY');
+const NETOPIA_SIGNATURE   = defineSecret('NETOPIA_SIGNATURE');
+const NETOPIA_PUBLIC_KEY  = defineSecret('NETOPIA_PUBLIC_KEY');
+const NETOPIA_PRIVATE_KEY = defineSecret('NETOPIA_PRIVATE_KEY');
+const NETOPIA_ENV         = defineSecret('NETOPIA_ENV');       // 'sandbox' | 'live'
+const NETOPIA_API_KEY     = defineSecret('NETOPIA_API_KEY');   // reserved
 
 const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
 
@@ -71,22 +96,51 @@ async function creditTokens({ packId, quantity, customerData }) {
   return docId;
 }
 
+async function createBookingFromOrder(orderId, order) {
+  const db = getFirestore();
+  const bookingRef = await db.collection('bookings').add({
+    type: 'longTerm',
+    customerId: order.customerData.customerId || null,
+    licensePlate: normalizePlate(order.customerData.licensePlate),
+    startDate: order.startDate,
+    endDate: order.endDate,
+    days: order.days,
+    basePrice: order.totalPrice,
+    latePrice: 0,
+    totalPrice: order.totalPrice,
+    status: 'upcoming',
+    contact: {
+      name: order.customerData.name || '',
+      email: order.customerData.email || '',
+      phone: order.customerData.phone || '',
+    },
+    paymentId: orderId,
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+    source: 'web',
+  });
+  return bookingRef.id;
+}
+
 // ── POST /createPayment ──────────────────────────────────────────────────
-// Body (credits funnel):   { orderType: 'credits', packId, quantity, customerData }
-// Body (long-term funnel): { orderType: 'longTerm', startDate, endDate, days,
-//                             totalPrice, customerData }
+// Body (credits):   { orderType:'credits',  packId, quantity, customerData }
+// Body (longTerm):  { orderType:'longTerm', startDate, endDate, days, totalPrice, customerData }
 // customerData: { customerId?, licensePlate, name, email, phone }
-// Returns: { redirectUrl, orderId }
+//
+// Returns: { action, env_key, data, cipher, iv, orderId }
+//   → client builds a POST form with those three/four fields and submits to `action`.
 export const createPayment = onRequest(
-  { cors: true, secrets: [NETOPIA_API_KEY] },
+  {
+    cors: true,
+    secrets: [NETOPIA_SIGNATURE, NETOPIA_PUBLIC_KEY, NETOPIA_ENV],
+  },
   async (req, res) => {
     if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
     const body = req.body || {};
     const orderType = body.orderType || 'credits';
-    if (!body.customerData?.licensePlate) {
-      return res.status(400).json({ error: 'Missing licensePlate' });
-    }
+    const cd = body.customerData || {};
+    if (!cd.licensePlate) return res.status(400).json({ error: 'Missing licensePlate' });
     if (orderType === 'credits' && (!body.packId || !body.quantity)) {
       return res.status(400).json({ error: 'credits order requires packId + quantity' });
     }
@@ -96,84 +150,151 @@ export const createPayment = onRequest(
 
     const orderId = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // Persist pending order so the callback can look it up by orderId
+    // Compute amount (RON) per funnel.
+    let amount;
+    let details;
+    if (orderType === 'longTerm') {
+      amount = body.totalPrice;
+      details = `Mango Parking — parcare pe termen lung (${body.days} zile)`;
+    } else {
+      amount = Number(body.packPrice || body.totalPrice || 0);
+      details = `Mango Parking — pachet ${body.quantity} credite`;
+    }
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Missing or invalid amount' });
+    }
+
+    // Persist pending order so the IPN callback can replay it by orderId.
     await getFirestore().collection('pendingOrders').doc(orderId).set({
       orderType,
       ...body,
+      amount,
       status: 'pending',
       createdAt: new Date().toISOString(),
     });
 
-    // TODO(netopia): Call Netopia Mobilpay API to create payment session.
-    // Docs: https://doc.mobilpay.ro/
-    // const netopia = await fetch('https://secure.mobilpay.ro/...', { ... });
-    // const { paymentUrl } = await netopia.json();
+    const [firstName, ...rest] = (cd.name || 'Customer').trim().split(/\s+/);
+    const lastName = rest.join(' ') || firstName;
 
-    const redirectUrl = `${SITE_URL}/booking?status=success&orderId=${orderId}`; // stub
-    return res.json({ redirectUrl, orderId });
+    const xml = buildRequestXml({
+      orderId,
+      amount,
+      currency: 'RON',
+      signature: NETOPIA_SIGNATURE.value(),
+      returnUrl: `${SITE_URL}/booking/return?orderId=${orderId}`,
+      confirmUrl: `${req.protocol}://${req.get('host')}/netopiaCallback`,
+      details,
+      billing: {
+        first_name: firstName,
+        last_name: lastName,
+        email: cd.email || '',
+        mobile_phone: cd.phone || '',
+        address: 'N/A',
+      },
+    });
+
+    const encrypted = encryptRequest(NETOPIA_PUBLIC_KEY.value(), xml);
+
+    const env = (NETOPIA_ENV.value?.() || 'sandbox').toLowerCase();
+    const action = NETOPIA_ENDPOINTS[env] || NETOPIA_ENDPOINTS.sandbox;
+
+    return res.json({
+      action,
+      env_key: encrypted.env_key,
+      data: encrypted.data,
+      cipher: encrypted.cipher,
+      iv: encrypted.iv,
+      orderId,
+    });
   }
 );
 
 // ── POST /netopiaCallback ────────────────────────────────────────────────
-// Server-to-server callback from Netopia after payment. Must verify signature.
-// Body: Netopia-signed payload (IPN). On success → credit tokens + mark order paid.
+// Server-to-server IPN from Netopia. Expects form-urlencoded fields:
+//   env_key, data, cipher, iv
+// Responds with <crc>success</crc> or <crc error_type=... error_code=...>msg</crc>.
 export const netopiaCallback = onRequest(
-  { cors: false, secrets: [NETOPIA_SIGNATURE, NETOPIA_API_KEY] },
+  {
+    cors: false,
+    secrets: [NETOPIA_PRIVATE_KEY],
+  },
   async (req, res) => {
-    if (req.method !== 'POST') return res.status(405).send('Method not allowed');
+    if (req.method !== 'POST') {
+      res.set('Content-Type', 'application/xml');
+      return res.status(405).send(crcError('0x01', 'method not allowed'));
+    }
 
-    // TODO(netopia): Verify HMAC signature using NETOPIA_SIGNATURE.value() before trusting body.
-    // const valid = verifyNetopiaSignature(req.rawBody, req.headers['x-netopia-signature'], NETOPIA_SIGNATURE.value());
-    // if (!valid) return res.status(401).send('Invalid signature');
+    const { env_key, data, cipher, iv } = req.body || {};
+    if (!env_key || !data) {
+      res.set('Content-Type', 'application/xml');
+      return res.status(400).send(crcError('0x02', 'missing env_key or data'));
+    }
 
-    const { orderId, status } = req.body || {};
-    if (!orderId) return res.status(400).send('Missing orderId');
+    let decoded;
+    try {
+      decoded = await decryptIpn(NETOPIA_PRIVATE_KEY.value(), { env_key, data, cipher, iv });
+    } catch (err) {
+      console.error('Netopia IPN decrypt failed:', err);
+      res.set('Content-Type', 'application/xml');
+      return res.status(400).send(crcError('0x03', 'decrypt failed'));
+    }
+
+    // Netopia's decoded XML shape:
+    //   { order: { $: {id, timestamp, type}, mobilpay: { action, customer, error, ... } } }
+    const order = decoded?.order;
+    const mobilpay = order?.mobilpay || {};
+    const action = String(mobilpay.action || '').toLowerCase();
+    const orderId = order?.$?.id;
+    const errorCode = mobilpay.error?.$?.code || '0';
+
+    res.set('Content-Type', 'application/xml');
+    if (!orderId) return res.status(400).send(crcError('0x04', 'missing orderId'));
 
     const db = getFirestore();
     const orderRef = db.collection('pendingOrders').doc(orderId);
-    const order = (await orderRef.get()).data();
-    if (!order) return res.status(404).send('Order not found');
-    if (order.status === 'paid') return res.status(200).send('Already processed');
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return res.status(404).send(crcError('0x05', 'unknown order'));
 
-    if (status === 'confirmed' || status === 'paid') {
-      if (order.orderType === 'longTerm') {
-        // Create a bookings/{id} doc mirroring the client's createLongTermBooking
-        const bookingRef = await db.collection('bookings').add({
-          type: 'longTerm',
-          customerId: order.customerData.customerId || null,
-          licensePlate: String(order.customerData.licensePlate || '').toUpperCase().replace(/[\s-]/g, ''),
-          startDate: order.startDate,
-          endDate: order.endDate,
-          days: order.days,
-          basePrice: order.totalPrice,
-          latePrice: 0,
-          totalPrice: order.totalPrice,
-          status: 'upcoming',
-          contact: {
-            name: order.customerData.name || '',
-            email: order.customerData.email || '',
-            phone: order.customerData.phone || '',
-          },
-          paymentId: orderId,
-          createdAt: new Date().toISOString(),
-          completedAt: null,
-          source: 'web',
-        });
-        await orderRef.update({ status: 'paid', bookingId: bookingRef.id, paidAt: new Date().toISOString() });
-        return res.status(200).send('OK');
+    const pending = orderSnap.data();
+    if (pending.status === 'paid') return res.status(200).send(crcSuccess()); // idempotent
+
+    // action = 'confirmed' or 'confirmed_pending' on success, 'canceled' / 'credit' on others.
+    if ((action === 'confirmed' || action === 'paid') && errorCode === '0') {
+      try {
+        if (pending.orderType === 'longTerm') {
+          const bookingId = await createBookingFromOrder(orderId, pending);
+          await orderRef.update({
+            status: 'paid',
+            bookingId,
+            netopiaAction: action,
+            paidAt: new Date().toISOString(),
+          });
+        } else {
+          const balanceDocId = await creditTokens({
+            packId: pending.packId,
+            quantity: pending.quantity,
+            customerData: pending.customerData,
+          });
+          await orderRef.update({
+            status: 'paid',
+            balanceDocId,
+            netopiaAction: action,
+            paidAt: new Date().toISOString(),
+          });
+        }
+        return res.status(200).send(crcSuccess());
+      } catch (err) {
+        console.error('Fulfilment failed:', err);
+        return res.status(500).send(crcError('0x06', 'fulfilment failed'));
       }
-
-      // default: credits funnel
-      const balanceDocId = await creditTokens({
-        packId: order.packId,
-        quantity: order.quantity,
-        customerData: order.customerData,
-      });
-      await orderRef.update({ status: 'paid', balanceDocId, paidAt: new Date().toISOString() });
-      return res.status(200).send('OK');
     }
 
-    await orderRef.update({ status: status || 'failed', processedAt: new Date().toISOString() });
-    return res.status(200).send('OK');
+    // Non-success outcomes — record but still ack to stop retries.
+    await orderRef.update({
+      status: action || 'failed',
+      netopiaErrorCode: errorCode,
+      processedAt: new Date().toISOString(),
+    });
+    return res.status(200).send(crcSuccess());
   }
 );
