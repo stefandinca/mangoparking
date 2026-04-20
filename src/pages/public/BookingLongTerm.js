@@ -64,6 +64,14 @@ export default function BookingLongTerm(container) {
             <p class="text-[12px] text-dim mt-3">${t('longTerm.tierNote')}</p>
           </div>
 
+          <!-- Price tiers -->
+          <div class="card-solid rounded-3xl p-6 md:col-span-2">
+            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('rates.longTermRates')}</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" data-tiers>
+              <!-- populated after getLongTermRates() resolves -->
+            </div>
+          </div>
+
           <!-- Vehicle -->
           <div class="card-solid rounded-3xl p-6">
             <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.vehicleInfo')}</h3>
@@ -128,6 +136,33 @@ export default function BookingLongTerm(container) {
   const totalEl = page.querySelector('[data-quote-total]');
   const daysEl = page.querySelector('[data-quote-days]');
   const perdayEl = page.querySelector('[data-quote-perday]');
+  const tiersEl = page.querySelector('[data-tiers]');
+
+  function renderTiers() {
+    if (!rates?.tiers?.length) return;
+    const label = locale === 'ro' ? 'zile' : 'days';
+    tiersEl.innerHTML = rates.tiers.map(tier => {
+      const rangeLabel = tier.maxDays
+        ? `${tier.minDays}–${tier.maxDays} ${label}`
+        : `${tier.minDays}+ ${label}`;
+      return `
+        <div data-tier-min="${tier.minDays}" class="rounded-2xl border-2 border-frost-deep bg-white px-4 py-3 transition-colors">
+          <p class="text-[12px] font-mono uppercase text-dim tracking-wider">${rangeLabel}</p>
+          <p class="font-heading font-bold text-2xl text-blueberry-deep mt-1">${tier.perDay} <span class="text-[12px] font-normal text-dim">${t('longTerm.perDay')}</span></p>
+        </div>`;
+    }).join('');
+  }
+
+  function highlightActiveTier() {
+    if (!quote.tier) return;
+    tiersEl.querySelectorAll('[data-tier-min]').forEach(el => {
+      const isActive = Number(el.dataset.tierMin) === quote.tier.minDays;
+      el.classList.toggle('border-mango', isActive);
+      el.classList.toggle('bg-mango/10', isActive);
+      el.classList.toggle('border-frost-deep', !isActive);
+      el.classList.toggle('bg-white', !isActive);
+    });
+  }
 
   function recompute() {
     if (!rates) return;
@@ -138,10 +173,15 @@ export default function BookingLongTerm(container) {
     totalEl.textContent = quote.total;
     daysEl.textContent = quote.days;
     perdayEl.textContent = quote.perDay;
+    highlightActiveTier();
   }
 
-  // Load rates, then compute initial quote
-  getLongTermRates().then(r => { rates = r; recompute(); });
+  // Load rates, then render tiers + compute initial quote
+  getLongTermRates().then(r => {
+    rates = r;
+    renderTiers();
+    recompute();
+  });
 
   ['startDate', 'endDate'].forEach(name => {
     form[name].addEventListener('change', recompute);
