@@ -7,14 +7,16 @@ Daily Travel Token parking for Henri Coandă Airport (Otopeni). Customers buy to
 - **Frontend**: Vanilla JS SPA, Vite 7, TailwindCSS 4 (PostCSS), no framework
 - **Backend**: Firebase (Auth: Google + Email, Firestore, Storage, Hosting)
 - **Payments**: Netopia (currently stubbed — awaiting merchant creds)
-- **Deployment**: Plesk (mangoparking.ro) — upload `dist/`
+- **Deployment**: Firebase Hosting (planned) — currently Plesk upload of `dist/`; see [Brief.md §9](Brief.md)
 - **Fonts / Colors**: Space Grotesk + DM Sans + JetBrains Mono / #F28C28 #2D4A47 #34D399 #F0F2F5
 
 ## Essential Commands
-- `npm run dev` — Vite dev server (port 3000, auto-opens)
-- `npm run build` — production build to `dist/`
+- `npm run dev` — Vite dev server (port 3000)
+- `npm run build` — Vite build + Puppeteer prerender of public routes (`dist/*/index.html`)
+- `npm run build:vite` / `npm run prerender` — each step on its own
 - `npm run preview` — preview built output
-- `firebase deploy --only firestore:rules,firestore:indexes --project mango-parking`
+- `firebase deploy --only firestore:rules,firestore:indexes,hosting`
+- `cd functions && npm install && firebase deploy --only functions` — Blaze plan required
 
 ## Directory Map
 ```
@@ -28,6 +30,8 @@ src/pages/{public,auth,account,admin}/    — default export fn(container)
 src/services/                         — tokenService (core), capacity, shuttle, audit, contact
                                         (hidden/preserved: booking, subscription, pricing, loyalty)
 src/utils/{dom,date,validators,seo,constants}.js
+scripts/prerender.mjs                 — Puppeteer SEO prerender for public routes
+functions/src/index.js                — Cloud Functions: createPayment + netopiaCallback
 firestore.rules / firestore.indexes.json / firebase.json
 ```
 
@@ -43,6 +47,4 @@ firestore.rules / firestore.indexes.json / firebase.json
 When given a task, read [.claude/orchestrator.md](.claude/orchestrator.md) first — it routes work to the right specialist agent(s) in [.claude/agents/](.claude/agents/) without the user naming anyone. After each change: test, fix regressions, verify, then create a clean commit.
 
 ## Reference Docs
-- [Brief.md](Brief.md) — MVP scope, routes, Firestore collections, flows
-- [implementation.md](implementation.md) — historical implementation notes
-- [firestore.rules](firestore.rules) — security model source of truth
+[Brief.md](Brief.md) — MVP scope, Firestore, flows, hosting migration · [functions/README.md](functions/README.md) — Functions setup · [firestore.rules](firestore.rules) — security · [implementation.md](implementation.md) — history

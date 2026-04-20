@@ -23,12 +23,13 @@ Mango Parking is a parking facility near Henri Coandă International Airport (Ot
 ## 2. Tech Stack
 
 - **Frontend**: Vanilla JS SPA, Vite 7, TailwindCSS 4 (PostCSS)
-- **Backend**: Firebase (Auth, Firestore, Storage, Hosting)
+- **SEO**: Puppeteer build-time prerender for public routes (`scripts/prerender.mjs`)
+- **Backend**: Firebase (Auth, Firestore, Storage, Hosting, Functions Gen 2 / Node 20 / europe-west1)
 - **Fonts**: Space Grotesk (headings), DM Sans (body), JetBrains Mono (mono)
 - **Colors**: Mango #F28C28, Charcoal #2D4A47, Leaf #34D399, Frost #F0F2F5
 - **i18n**: Romanian (default) + English, locale prefix routing (/en/...)
-- **Deployment**: Plesk (mangoparking.ro), Firestore rules/indexes via Firebase CLI
-- **Payments**: Netopia (integration pending — currently stubbed)
+- **Deployment**: Firebase Hosting + Functions (target); Plesk legacy — see §9 migration plan
+- **Payments**: Netopia via Cloud Functions bridge (skeleton in `functions/`, stubbed — awaiting merchant creds)
 
 ---
 
@@ -51,6 +52,10 @@ src/
 │   └── admin/       — Dashboard, Token Management, Token Packs, Capacity, Shuttle
 ├── services/        — tokenService, capacityService, shuttleService, auditService, contactService
 └── utils/           — dom.js (html tagged template), date, validators, seo, constants
+scripts/
+└── prerender.mjs    — Puppeteer crawler → static HTML for public routes (SEO)
+functions/           — Cloud Functions (Gen 2) bridging Netopia → Firestore
+└── src/index.js     — createPayment + netopiaCallback
 ```
 
 **Key Patterns**
@@ -159,25 +164,84 @@ src/
 
 ---
 
-## 8. Netopia Payment Integration (Pending)
+## 8. Netopia Payment Integration (Skeleton ready, stubbed)
 
-Payment is currently **stubbed** — the booking page simulates a 1.5s payment delay then credits tokens directly.
+**Skeleton lives in `functions/src/index.js`** (Gen 2, europe-west1). The booking page still uses the local 1.5s stub until secrets land and client is wired to the Function.
 
-**Planned real flow:**
-1. Client calls Cloud Function: `POST /api/createPayment { packId, qty, customerData }`
-2. Cloud Function creates Netopia payment session → returns redirect URL
-3. Client redirects to Netopia hosted payment page
-4. Netopia POSTs callback to Cloud Function: `POST /api/netopiaCallback`
-5. Cloud Function verifies payment signature → calls `purchaseTokens()` → responds to Netopia
-6. Client is redirected back to `/booking?status=success`
+**Architecture**
+1. Client → `POST createPayment { packId, quantity, customerData }`
+2. `createPayment` writes `pendingOrders/{orderId}` + returns Netopia hosted-page redirect URL
+3. User pays on Netopia
+4. Netopia → server-to-server `POST netopiaCallback` (IPN)
+5. `netopiaCallback` verifies HMAC signature, runs `creditTokens()` in a Firestore transaction (mirrors `tokenService.purchaseTokens`), marks order `paid`
+6. Client returns to `/booking?status=success&orderId=...`
 
-**Waiting on**: Netopia merchant credentials from client.
+**Secrets** (stored via `firebase functions:secrets:set`, never in source):
+- `NETOPIA_API_KEY` — merchant API key
+- `NETOPIA_SIGNATURE` — HMAC secret for IPN verification
+
+**TODO markers**: `// TODO(netopia)` blocks in `functions/src/index.js` call out the two real API integration points.
+
+**Waiting on**: Netopia merchant credentials + sandbox access from client. See `functions/README.md` for setup/deploy.
 
 ---
 
 ## 9. Deployment
 
-- **Frontend**: `npx vite build` → upload `dist/` contents to Plesk (mangoparking.ro)
-- **Firestore**: `firebase deploy --only firestore:rules,firestore:indexes --project mango-parking`
-- **Base URL**: `/` (vite.config.js `base: '/'`)
-- **SPA routing**: handled by Plesk/server config (all routes serve index.html)
+### Current commands
+- **Frontend**: `npm run build` → Vite bundle + Puppeteer prerender of 10 public routes into `dist/`
+- **Firestore rules/indexes**: `firebase deploy --only firestore:rules,firestore:indexes`
+- **SPA routing**: `firebase.json` rewrites `**` → `/index.html`; prerendered routes are served as-is when they exist at `dist/{route}/index.html`
+
+### Migration: Plesk → Firebase Hosting (step-by-step)
+The long-term plan is to move web hosting off Plesk onto Firebase Hosting (email stays on Plesk). `firebase.json` already has the `hosting` block pointing at `dist/`, and `.firebaserc` binds to project `mango-parking`. Remaining steps (user-executed):
+
+**1. Install & authenticate**
+```bash
+npm install -g firebase-tools      # or use `npx firebase-tools` ad-hoc
+firebase login
+firebase projects:list             # confirm mango-parking is visible
+```
+
+**2. Dry-run to a preview channel** (no DNS change yet)
+```bash
+npm run build
+firebase hosting:channel:deploy preview --expires 7d
+```
+Firebase returns a temporary `https://mango-parking--preview-xxxx.web.app` URL. Open it, click around RO + EN public pages, verify prerender (view-source should show rendered HTML), verify SPA navigation still works.
+
+**3. Wire Cloud Functions (optional, do once)**
+```bash
+cd functions && npm install && cd ..
+firebase functions:secrets:set NETOPIA_API_KEY
+firebase functions:secrets:set NETOPIA_SIGNATURE
+firebase deploy --only functions        # requires Blaze plan
+```
+
+**4. Deploy to the default channel**
+```bash
+firebase deploy --only hosting
+```
+Site is now live at `mango-parking.web.app` + `mango-parking.firebaseapp.com`. Still not on mangoparking.ro.
+
+**5. Add custom domain in Firebase Console**
+Console → Hosting → **Add custom domain** → `mangoparking.ro`. Firebase gives two records:
+- 1× TXT record (ownership)
+- 2× A records (e.g. `151.101.1.195`, `151.101.65.195`)
+
+**6. Update DNS at the registrar** (NOT Plesk DNS — the registrar that controls `mangoparking.ro`)
+- Add the TXT record → wait for Firebase to verify ownership (minutes to hours)
+- Replace the existing A records (the ones pointing to Plesk) with Firebase's two A records
+- **Leave all MX records untouched** — email keeps flowing through Plesk
+- Leave any `mail.mangoparking.ro` / webmail subdomains alone
+
+**7. Wait for SSL provisioning** (up to 24h, usually <1h). Firebase auto-issues a Let's Encrypt cert once DNS resolves.
+
+**8. Verify + decommission**
+- Test `https://mangoparking.ro` on mobile + desktop, RO + EN
+- Test `/pricing`, `/en/about`, etc. — prerendered HTML should load instantly
+- Confirm email still works (send/receive a test)
+- Leave Plesk webspace alone for ~1 week as fallback, then decommission web (not mail)
+
+### CI/CD (follow-up, not MVP)
+Add `.github/workflows/deploy.yml` that runs `npm ci && npm run build && firebase deploy --only hosting` on push to `main`, authenticated via `FIREBASE_TOKEN` secret from `firebase login:ci`.
