@@ -78,9 +78,9 @@ export function Footer() {
           <!-- Netopia (payments) — official hosted iframe. color param
                matches our frost surface (#FFF8E8), merchant ID in secret. -->
           <div>
-            <p class="text-[11px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-3">${t('footer.payments')}</p>
-            <iframe src="https://mny.ro/npId.html?color=%23FFF8E8&version=orizontal&secret=163420" title="NETOPIA Payments" loading="lazy" class="block w-[180px] h-[144px] border-0"></iframe>
-            <p class="text-[12px] text-dim mt-2">${t('footer.netopia')}</p>
+            <p class="text-[11px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-2">${t('footer.payments')}</p>
+            <iframe src="https://mny.ro/npId.html?color=%23FFF8E8&version=orizontal&secret=163420" title="NETOPIA Payments" loading="lazy" class="block w-[180px] h-[72px] border-0"></iframe>
+            <p class="text-[12px] text-dim mt-1">${t('footer.netopia')}</p>
           </div>
 
           <!-- ANPC (mandatory consumer protection notices) -->
