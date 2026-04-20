@@ -72,6 +72,16 @@ export default function BookingLongTerm(container) {
             </div>
           </div>
 
+          <!-- Summary (live total) -->
+          <div class="rounded-3xl p-6 md:col-span-2 bg-blueberry-deep text-white shadow-lg">
+            <p class="text-[12px] text-white/70 uppercase tracking-wider font-mono mb-2">${t('longTerm.totalLabel')}</p>
+            <div class="flex items-baseline gap-2 mb-2">
+              <span class="font-heading font-bold text-5xl" data-quote-total>—</span>
+              <span class="text-white/70 text-lg">lei</span>
+            </div>
+            <p class="text-[14px] text-white/70"><span data-quote-days>—</span> ${t('longTerm.days')} × <span data-quote-perday>—</span> ${t('longTerm.perDay')}</p>
+          </div>
+
           <!-- Vehicle -->
           <div class="card-solid rounded-3xl p-6">
             <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.vehicleInfo')}</h3>
@@ -98,19 +108,9 @@ export default function BookingLongTerm(container) {
             </div>
           </div>
 
-          <!-- Summary + pay -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2 bg-blueberry-deep text-white">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <p class="text-[13px] text-white/70 uppercase tracking-wider font-mono mb-1">${t('longTerm.totalLabel')}</p>
-                <div class="flex items-baseline gap-2">
-                  <span class="font-heading font-bold text-4xl" data-quote-total>0</span>
-                  <span class="text-white/70 text-[14px]">lei</span>
-                </div>
-                <p class="text-[13px] text-white/60 mt-1"><span data-quote-days>0</span> ${t('longTerm.days')} × <span data-quote-perday>0</span> ${t('longTerm.perDay')}</p>
-              </div>
-              <button type="submit" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
-            </div>
+          <!-- Pay -->
+          <div class="md:col-span-2 flex justify-end">
+            <button type="submit" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
           </div>
         </form>
 
@@ -176,15 +176,27 @@ export default function BookingLongTerm(container) {
     highlightActiveTier();
   }
 
-  // Load rates, then render tiers + compute initial quote
-  getLongTermRates().then(r => {
-    rates = r;
-    renderTiers();
-    recompute();
-  });
+  // Load rates, then render tiers + compute initial quote. Fall back to
+  // sane defaults if the fetch rejects (offline / rules), so the page never
+  // stays stuck at "—".
+  const FALLBACK_RATES = {
+    tiers: [
+      { minDays: 1, maxDays: 6, perDay: 49 },
+      { minDays: 7, maxDays: 13, perDay: 39 },
+      { minDays: 14, maxDays: null, perDay: 29 },
+    ],
+  };
+  getLongTermRates()
+    .catch(() => FALLBACK_RATES)
+    .then(r => {
+      rates = r && r.tiers?.length ? r : FALLBACK_RATES;
+      renderTiers();
+      recompute();
+    });
 
   ['startDate', 'endDate'].forEach(name => {
     form[name].addEventListener('change', recompute);
+    form[name].addEventListener('input', recompute);
   });
 
   form.addEventListener('submit', async (e) => {
