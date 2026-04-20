@@ -7,6 +7,8 @@ import { updateMeta, setStructuredData } from '../../utils/seo.js';
 import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS } from '../../utils/constants.js';
 import { subscribeCapacity } from '../../services/capacityService.js';
 import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
+import { getLongTermRates } from '../../services/longTermService.js';
+import { getTokenPacks } from '../../services/tokenService.js';
 
 const MOCK_REVIEWS = [
   { initials: 'AP', name: 'Andrei P.', type: 'traveler', rating: 5 },
@@ -192,56 +194,57 @@ export default function Home(container) {
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-white">${t('pricing.title')}</h2>
         </div>
         <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          <!-- Traveler -->
-          <div class="bg-blueberry rounded-3xl p-8 transition-colors duration-300">
-            <div class="flex items-center gap-3 mb-8">
+          <!-- Long-term (left) -->
+          <div class="bg-blueberry rounded-3xl p-8 flex flex-col">
+            <div class="flex items-center gap-3 mb-6">
               <div class="w-10 h-10 rounded-xl bg-blueberry-deep flex items-center justify-center">
-                ${planeIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-white/80"')}
+                ${planeIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-white"')}
               </div>
               <div>
-                <h3 class="text-white font-heading font-bold text-lg">${t('pricing.traveler')}</h3>
-                <p class="text-white/70 text-[14px]">${t('pricing.travelerSub')}</p>
+                <h3 class="text-white font-heading font-bold text-lg">${t('funnel.longTerm.title')}</h3>
+                <p class="text-white/70 text-[14px]">${t('funnel.longTerm.tagline')}</p>
               </div>
             </div>
-            <div class="flex items-baseline gap-1.5 mb-2">
-              <span class="font-heading font-bold text-5xl text-white tracking-tight">29</span>
-              <span class="text-white/70 text-sm">${t('pricing.leiDay')}</span>
+            <p class="text-white/70 text-[12px] font-mono uppercase tracking-wider mb-1">${locale === 'ro' ? 'De la' : 'From'}</p>
+            <div class="flex items-baseline gap-1.5 mb-6">
+              <span class="font-heading font-bold text-5xl text-white tracking-tight" data-long-from>—</span>
+              <span class="text-white/70 text-sm">${t('longTerm.perDay')}</span>
             </div>
-            <p class="text-white/70 text-[14px] mb-8">${t('pricing.travelerNote')}</p>
-            <ul class="space-y-3 mb-8">
-              ${t('pricing.travelerFeatures').map(f => `
+            <ul class="space-y-3 mb-8 flex-1">
+              ${t('funnel.longTerm.features').map(f => `
                 <li class="flex items-center gap-2.5 text-white/90 text-[15px]">
                   <span class="text-leaf">${checkIcon}</span> ${f}
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200">${t('pricing.bookNow')}</a>
+            <a href="${localePath('/booking/long-term')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors">${t('funnel.longTerm.cta')}</a>
           </div>
-          <!-- Credit Packs -->
-          <div class="bg-blueberry border-2 border-mango rounded-3xl p-8 transition-colors duration-300 relative">
+
+          <!-- Commuter / Credits (right) -->
+          <div class="bg-blueberry border-2 border-mango rounded-3xl p-8 flex flex-col relative">
             <div class="absolute -top-3 right-8 bg-mango text-charcoal text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
-            <div class="flex items-center gap-3 mb-8">
-              <div class="w-10 h-10 rounded-xl bg-mango/10 flex items-center justify-center">
-                ${clockIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-mango"')}
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-10 h-10 rounded-xl bg-mango flex items-center justify-center">
+                ${clockIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-charcoal"')}
               </div>
               <div>
-                <h3 class="text-white font-heading font-bold text-lg">${locale === 'ro' ? 'Pachete Credite' : 'Credit Packs'}</h3>
-                <p class="text-white/30 text-[14px]">${locale === 'ro' ? 'Luni–Vineri, 6:00 – 20:00' : 'Mon–Fri, 6 AM – 8 PM'}</p>
+                <h3 class="text-white font-heading font-bold text-lg">${t('funnel.commuter.title')}</h3>
+                <p class="text-white/70 text-[14px]">${t('funnel.commuter.tagline')}</p>
               </div>
             </div>
-            <div class="flex items-baseline gap-1.5 mb-2">
-              <span class="font-heading font-bold text-5xl text-white tracking-tight">1</span>
-              <span class="text-white/30 text-sm">${locale === 'ro' ? 'credit = 1 zi' : 'credit = 1 day'}</span>
+            <p class="text-white/70 text-[12px] font-mono uppercase tracking-wider mb-1">${locale === 'ro' ? 'De la' : 'From'}</p>
+            <div class="flex items-baseline gap-1.5 mb-6">
+              <span class="font-heading font-bold text-5xl text-white tracking-tight" data-credits-from>—</span>
+              <span class="text-white/70 text-sm">${t('longTerm.perDay')}</span>
             </div>
-            <p class="text-white/20 text-[14px] mb-8">${locale === 'ro' ? 'Cumperi pachete de credite. Folosești oricând, Luni–Vineri.' : 'Buy credit packs. Use anytime, Monday–Friday.'}</p>
-            <ul class="space-y-3 mb-8">
-              ${[t('credit.rule1'), t('credit.rule2'), t('credit.rule3'), t('credit.rule4')].map(f => `
-                <li class="flex items-center gap-2.5 text-white/50 text-[15px]">
+            <ul class="space-y-3 mb-8 flex-1">
+              ${t('funnel.commuter.features').map(f => `
+                <li class="flex items-center gap-2.5 text-white/90 text-[15px]">
                   <span class="text-mango">${checkIcon}</span> ${f}
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200 shadow-md">${t('credit.buyTokens')}</a>
+            <a href="${localePath('/booking/credits')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md">${t('funnel.commuter.cta')}</a>
           </div>
         </div>
         <p class="text-center mt-8"><a href="${localePath('/pricing')}" class="text-white/25 hover:text-white/50 text-[14px] transition-colors">${t('pricing.viewAll')}</a></p>
@@ -403,6 +406,18 @@ export default function Home(container) {
   });
 
   container.appendChild(page);
+
+  // "Starting from" price badges in the pricing preview section
+  Promise.all([getLongTermRates(), getTokenPacks()]).then(([rates, packs]) => {
+    const longFrom = rates?.tiers?.length ? Math.min(...rates.tiers.map(t => t.perDay)) : null;
+    const creditsFrom = packs?.length
+      ? Math.min(...packs.map(p => p.price / Math.max(p.quantity, 1)))
+      : null;
+    const longEl = page.querySelector('[data-long-from]');
+    const creditsEl = page.querySelector('[data-credits-from]');
+    if (longEl && longFrom != null) longEl.textContent = longFrom;
+    if (creditsEl && creditsFrom != null) creditsEl.textContent = Math.round(creditsFrom);
+  }).catch(() => {});
 
   // Real-time capacity subscription
   const unsubCapacity = subscribeCapacity((cap) => {
