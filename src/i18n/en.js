@@ -9,7 +9,7 @@ export default {
     pricing: 'Pricing',
     shuttle: 'Shuttle',
     faq: 'FAQ',
-    bookNow: 'Buy Credits',
+    bookNow: 'Book a spot',
     login: 'Login',
     account: 'My Account',
     admin: 'Admin',

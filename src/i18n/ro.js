@@ -9,7 +9,7 @@ export default {
     pricing: 'Tarife',
     shuttle: 'Shuttle',
     faq: 'Întrebări',
-    bookNow: 'Cumpără Credite',
+    bookNow: 'Rezervă un loc',
     login: 'Autentificare',
     account: 'Contul meu',
     admin: 'Admin',
