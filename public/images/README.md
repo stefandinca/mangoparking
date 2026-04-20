@@ -8,9 +8,12 @@ site is **not Netopia- or ANPC-compliant** until they are present.
 
 | File                   | Purpose                                                     | Source                                                                                      |
 |------------------------|-------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `netopia-logo.svg`     | Footer "Secure payments" — required by Netopia merchant T&Cs| Netopia merchant portal → brand assets                                                      |
 | `anpc-sal.png`         | Footer ANPC alternative dispute resolution banner           | https://anpc.ro/ro/solutionarea-alternativa-a-litigiilor-sal/ (download official banner)    |
 | `anpc-sol.png`         | Footer ANPC online dispute resolution banner                | https://anpc.ro/ro/solutionarea-online-a-litigiilor-sol/ (download official banner)         |
+
+The Netopia logo is **not** a static file — it's rendered by Netopia's
+own merchant script (`https://mny.ro/npId.js?p=163420`), injected into
+the footer at runtime. No local asset needed.
 
 ## Already present
 

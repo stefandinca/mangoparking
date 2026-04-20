@@ -6,10 +6,24 @@ import {
   ANPC_SAL_URL, ANPC_SOL_URL,
 } from '../../utils/constants.js';
 
+// Injects Netopia's merchant-logo script into the footer. Re-created on each
+// mount because the router re-renders the footer per navigation; Netopia's
+// script is idempotent and cached by the browser after the first hit.
+function mountNetopiaLogo(footerEl) {
+  const slot = footerEl.querySelector('[data-netopia-logo]');
+  if (!slot) return;
+  const s = document.createElement('script');
+  s.src = 'https://mny.ro/npId.js?p=163420';
+  s.type = 'text/javascript';
+  s.setAttribute('data-version', 'orizontal');
+  s.setAttribute('data-contrast-color', '#fef8e9');
+  slot.appendChild(s);
+}
+
 export function Footer() {
   const year = new Date().getFullYear();
 
-  return html`
+  const el = html`
     <footer class="pt-16 pb-8">
       <div class="max-w-7xl mx-auto px-6">
         <!-- Columns -->
@@ -75,13 +89,10 @@ export function Footer() {
             </div>
           </div>
 
-          <!-- Netopia (payments) -->
+          <!-- Netopia (payments) — logo rendered by Netopia's own merchant script -->
           <div>
             <p class="text-[11px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-3">${t('footer.payments')}</p>
-            <a href="https://netopia-payments.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <img src="/images/netopia-logo.svg" alt="Netopia Payments" class="h-8 w-auto" onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden')" />
-              <span class="hidden font-heading font-bold text-blueberry-deep text-[15px]">NETOPIA Payments</span>
-            </a>
+            <div class="inline-block" data-netopia-logo></div>
             <p class="text-[12px] text-dim mt-2">${t('footer.netopia')}</p>
           </div>
 
@@ -108,4 +119,7 @@ export function Footer() {
       </div>
     </footer>
   `;
+
+  mountNetopiaLogo(el);
+  return el;
 }
