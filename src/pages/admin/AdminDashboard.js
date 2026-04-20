@@ -84,11 +84,11 @@ export default async function AdminDashboard(container) {
             <p class="font-heading font-bold text-3xl tracking-tight font-mono text-leaf">${STATS.available}</p>
           </div>
           <div class="card-solid rounded-2xl p-6">
-            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${locale === 'ro' ? 'Tokens Folosite Azi' : 'Tokens Used Today'}</p>
+            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${locale === 'ro' ? 'Credite Folosite Azi' : 'Credits Used Today'}</p>
             <p class="font-heading font-bold text-3xl tracking-tight font-mono">${STATS.tokensUsedToday}</p>
           </div>
           <div class="card-solid rounded-2xl p-6">
-            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${locale === 'ro' ? 'Tokens Cumpărate Azi' : 'Tokens Purchased Today'}</p>
+            <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-2">${locale === 'ro' ? 'Credite Cumpărate Azi' : 'Credits Purchased Today'}</p>
             <p class="font-heading font-bold text-3xl tracking-tight font-mono text-mango">${STATS.tokensPurchasedToday}</p>
           </div>
         </div>

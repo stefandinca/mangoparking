@@ -27,7 +27,7 @@ export default async function AdminPricing(container) {
         </td>
         <td class="px-4 py-3"><input type="number" data-field="sortOrder" value="${p.sortOrder ?? idx}" min="0" class="w-16 px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] font-mono text-center focus:outline-none focus:border-mango/40"></td>
         <td class="px-4 py-3">
-          <button data-delete-pack="${p.id || `new-${idx}`}" class="text-red-400 hover:text-red-600 text-[13px] font-semibold transition-colors">${t('token.deletePack')}</button>
+          <button data-delete-pack="${p.id || `new-${idx}`}" class="text-red-400 hover:text-red-600 text-[13px] font-semibold transition-colors">${t('credit.deletePack')}</button>
         </td>
       </tr>
     `;
@@ -36,8 +36,8 @@ export default async function AdminPricing(container) {
   const page = AdminLayout('/admin/pricing', `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('token.packManagement')}</h1>
-            <p class="text-dim text-[15px] mt-1">${t('token.packManagementSubtitle')}</p>
+            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('credit.packManagement')}</h1>
+            <p class="text-dim text-[15px] mt-1">${t('credit.packManagementSubtitle')}</p>
           </div>
           <button data-save-packs class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors shadow-sm">${t('admin.saveChanges')}</button>
         </div>
@@ -47,12 +47,12 @@ export default async function AdminPricing(container) {
             <table class="w-full text-left">
               <thead>
                 <tr class="border-b border-frost-deep bg-frost text-[12px] font-mono uppercase tracking-wider text-dim">
-                  <th class="px-4 py-3">${t('token.packName')}</th>
-                  <th class="px-4 py-3">${t('token.packNameRo')}</th>
-                  <th class="px-4 py-3">${t('token.packQty')}</th>
-                  <th class="px-4 py-3">${t('token.packPrice')}</th>
-                  <th class="px-4 py-3 text-center">${t('token.packActive')}</th>
-                  <th class="px-4 py-3">${t('token.packOrder')}</th>
+                  <th class="px-4 py-3">${t('credit.packName')}</th>
+                  <th class="px-4 py-3">${t('credit.packNameRo')}</th>
+                  <th class="px-4 py-3">${t('credit.packQty')}</th>
+                  <th class="px-4 py-3">${t('credit.packPrice')}</th>
+                  <th class="px-4 py-3 text-center">${t('credit.packActive')}</th>
+                  <th class="px-4 py-3">${t('credit.packOrder')}</th>
                   <th class="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -63,7 +63,7 @@ export default async function AdminPricing(container) {
           </div>
         </div>
 
-        <button data-add-pack class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.addPack')}</button>
+        <button data-add-pack class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('credit.addPack')}</button>
   `);
 
   let newPackIdx = packs.length;
@@ -91,7 +91,7 @@ export default async function AdminPricing(container) {
   // Delete pack
   delegate(page, 'click', '[data-delete-pack]', async (e, btn) => {
     const rowId = btn.dataset.deletePack;
-    const confirmed = await confirmModal(t('token.confirmDelete'), { danger: true, confirmText: t('common.delete') });
+    const confirmed = await confirmModal(t('credit.confirmDelete'), { danger: true, confirmText: t('common.delete') });
     if (!confirmed) return;
     if (!rowId.startsWith('new-')) deletedIds.add(rowId);
     const row = page.querySelector(`[data-row-id="${rowId}"]`);
@@ -126,7 +126,7 @@ export default async function AdminPricing(container) {
         }
       }
 
-      showToast(t('token.packSaved'), 'success');
+      showToast(t('credit.packSaved'), 'success');
     } catch (err) {
       console.error(err);
       showToast(t('common.error'), 'error');

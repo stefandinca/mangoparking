@@ -95,11 +95,11 @@ export default async function Dashboard(container) {
     <!-- Stats row -->
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
       <div class="card-solid rounded-2xl p-5">
-        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('token.balance')}</p>
+        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('credit.balance')}</p>
         <p class="font-heading font-bold text-3xl tracking-tight text-mango">${balance}</p>
       </div>
       <div class="card-solid rounded-2xl p-5">
-        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('token.totalPurchased')}</p>
+        <p class="text-[11px] sm:text-[12px] leading-tight font-mono uppercase text-dim tracking-[0.12em] mb-2">${t('credit.totalPurchased')}</p>
         <p class="font-heading font-bold text-2xl tracking-tight">${totalPurchased}</p>
       </div>
       <div class="card-solid rounded-2xl p-5">
@@ -112,9 +112,9 @@ export default async function Dashboard(container) {
     <div class="grid md:grid-cols-2 gap-6 mb-6">
       <!-- Buy more tokens -->
       <div class="card-solid rounded-2xl p-6">
-        <h3 class="font-heading font-bold text-lg mb-3">${t('token.buyMore')}</h3>
-        <p class="text-dim text-[14px] mb-4">${t('token.rule2')} — ${t('token.rule1')}</p>
-        <a href="${localePath('/booking')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyTokens')}</a>
+        <h3 class="font-heading font-bold text-lg mb-3">${t('credit.buyMore')}</h3>
+        <p class="text-dim text-[14px] mb-4">${t('credit.rule2')} — ${t('credit.rule1')}</p>
+        <a href="${localePath('/booking')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('credit.buyTokens')}</a>
       </div>
 
       <!-- Next shuttle -->
@@ -136,7 +136,7 @@ export default async function Dashboard(container) {
     <!-- Recent transactions -->
     <div class="card-solid rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="font-heading font-bold text-lg">${t('token.recentTransactions')}</h3>
+        <h3 class="font-heading font-bold text-lg">${t('credit.recentTransactions')}</h3>
         <a href="${localePath('/account/bookings')}" class="text-mango text-[14px] font-semibold hover:text-mango-hover transition-colors">${t('account.viewDetails')} →</a>
       </div>
       ${transactions.length > 0 ? `
@@ -147,7 +147,7 @@ export default async function Dashboard(container) {
             return `
               <div class="flex items-center justify-between py-2">
                 <div class="flex items-center gap-3">
-                  <span class="text-[12px] font-bold uppercase px-2.5 py-0.5 rounded-full ${typeCls}">${t('token.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</span>
+                  <span class="text-[12px] font-bold uppercase px-2.5 py-0.5 rounded-full ${typeCls}">${t('credit.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</span>
                   <span class="text-dim text-[13px]">${formatDate(tx.timestamp, locale)}</span>
                 </div>
                 <span class="font-mono font-semibold text-[15px]">${qty}</span>
@@ -155,7 +155,7 @@ export default async function Dashboard(container) {
             `;
           }).join('')}
         </div>
-      ` : `<p class="text-dim text-center py-4">${t('token.noTransactions')}</p>`}
+      ` : `<p class="text-dim text-center py-4">${t('credit.noTransactions')}</p>`}
     </div>
   `;
 

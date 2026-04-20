@@ -21,7 +21,7 @@ function renderTransaction(tx, locale) {
   return `
     <div class="flex items-center gap-4 px-6 py-4">
       <span class="font-mono text-[13px] text-dim w-28 shrink-0">${time}</span>
-      <span class="text-[12px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${typeCls}">${t('token.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</span>
+      <span class="text-[12px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${typeCls}">${t('credit.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</span>
       <span class="font-mono font-semibold text-[15px] w-12 text-center">${qty}</span>
       <span class="text-[14px] text-dim truncate">${tx.licensePlate || '—'}</span>
     </div>`;
@@ -36,15 +36,15 @@ export default async function AdminBookings(container) {
   const page = AdminLayout('/admin/bookings', `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('token.management')}</h1>
-            <p class="text-dim text-[15px] mt-1">${t('token.managementSubtitle')}</p>
+            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('credit.management')}</h1>
+            <p class="text-dim text-[15px] mt-1">${t('credit.managementSubtitle')}</p>
           </div>
         </div>
 
         <!-- Plate Search -->
         <div class="card-solid rounded-2xl p-6 mb-6">
           <div class="flex gap-3">
-            <input type="text" data-plate-input placeholder="${t('token.searchPlate')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 uppercase font-mono">
+            <input type="text" data-plate-input placeholder="${t('credit.searchPlate')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 uppercase font-mono">
             <button data-search-plate class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors">${t('account.searchBtn')}</button>
           </div>
         </div>
@@ -54,10 +54,10 @@ export default async function AdminBookings(container) {
 
         <!-- Recent Transactions -->
         <div>
-          <h2 class="font-heading font-bold text-lg mb-4 text-charcoal">${t('token.recentAll')}</h2>
+          <h2 class="font-heading font-bold text-lg mb-4 text-charcoal">${t('credit.recentAll')}</h2>
           <div class="card-solid rounded-2xl overflow-hidden">
             <div class="divide-y divide-frost-deep/60" data-tx-list>
-              ${recentTx.length > 0 ? recentTx.map(tx => renderTransaction(tx, locale)).join('') : `<div class="px-6 py-8 text-center text-dim">${t('token.noTransactions')}</div>`}
+              ${recentTx.length > 0 ? recentTx.map(tx => renderTransaction(tx, locale)).join('') : `<div class="px-6 py-8 text-center text-dim">${t('credit.noTransactions')}</div>`}
             </div>
           </div>
         </div>
@@ -69,7 +69,7 @@ export default async function AdminBookings(container) {
   async function renderCustomerResult(customer) {
     const el = page.querySelector('[data-customer-result]');
     if (!customer) {
-      el.innerHTML = `<div class="card-solid rounded-2xl p-6 text-center text-dim">${t('token.noCustomerFound')}</div>`;
+      el.innerHTML = `<div class="card-solid rounded-2xl p-6 text-center text-dim">${t('credit.noCustomerFound')}</div>`;
       el.classList.remove('hidden');
       return;
     }
@@ -86,7 +86,7 @@ export default async function AdminBookings(container) {
     el.innerHTML = `
       <div class="card-solid rounded-2xl p-6">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-heading font-bold text-lg">${t('token.customerInfo')}</h3>
+          <h3 class="font-heading font-bold text-lg">${t('credit.customerInfo')}</h3>
           ${checkedInBadge}
         </div>
         <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -99,20 +99,20 @@ export default async function AdminBookings(container) {
             <p class="font-semibold text-[14px]">${customer.email || '—'}</p>
           </div>
           <div>
-            <p class="text-dim text-[13px] mb-1">${t('token.plateLabel')}</p>
+            <p class="text-dim text-[13px] mb-1">${t('credit.plateLabel')}</p>
             <p class="font-mono font-semibold">${(customer.plates || []).join(', ') || '—'}</p>
           </div>
           <div>
-            <p class="text-dim text-[13px] mb-1">${t('token.balance')}</p>
+            <p class="text-dim text-[13px] mb-1">${t('credit.balance')}</p>
             <p class="font-heading font-bold text-3xl text-mango">${customer.balance ?? 0}</p>
           </div>
         </div>
         <div class="flex flex-wrap gap-3">
-          <button data-use-token class="bg-leaf text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors ${currentCheckedIn ? 'opacity-40 cursor-not-allowed' : 'hover:bg-leaf/85'}" ${currentCheckedIn ? 'disabled' : ''}>${t('token.useOneToken')}</button>
+          <button data-use-credit class="bg-leaf text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors ${currentCheckedIn ? 'opacity-40 cursor-not-allowed' : 'hover:bg-leaf/85'}" ${currentCheckedIn ? 'disabled' : ''}>${t('credit.useOneToken')}</button>
           <button data-checkout class="bg-blue-500 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors ${!currentCheckedIn ? 'opacity-40 cursor-not-allowed' : 'hover:bg-blue-600'}" ${!currentCheckedIn ? 'disabled' : ''}>Check Out</button>
           <div class="flex gap-2 items-center">
             <input type="number" data-refund-qty min="1" value="1" class="w-20 px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] font-mono text-center focus:outline-none focus:border-mango/40">
-            <button data-refund-token class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.refundTokens')}</button>
+            <button data-refund-credit class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('credit.refundTokens')}</button>
           </div>
         </div>
       </div>
@@ -159,20 +159,20 @@ export default async function AdminBookings(container) {
     }
   }
 
-  // Use token (check-in)
-  delegate(page, 'click', '[data-use-token]', async () => {
+  // Use credit (check-in)
+  delegate(page, 'click', '[data-use-credit]', async () => {
     if (actionBusy) return;
     if (!currentCustomer || currentCustomer.balance < 1) {
-      showToast(t('token.insufficientBalance'), 'error');
+      showToast(t('credit.insufficientBalance'), 'error');
       return;
     }
     actionBusy = true;
-    setBtnLoading(page.querySelector('[data-use-token]'), true);
+    setBtnLoading(page.querySelector('[data-use-credit]'), true);
     try {
       await useToken(currentCustomer.id, (currentCustomer.plates || [])[0] || '');
       currentCustomer.balance -= 1;
       await renderCustomerResult(currentCustomer);
-      showToast(t('token.tokenUsed'), 'success');
+      showToast(t('credit.tokenUsed'), 'success');
     } catch (err) {
       if (err.message === 'ALREADY_CHECKED_IN') {
         showToast(locale === 'ro' ? 'Vehiculul este deja parcat!' : 'Vehicle is already checked in!', 'error');
@@ -205,7 +205,7 @@ export default async function AdminBookings(container) {
   });
 
   // Refund
-  delegate(page, 'click', '[data-refund-token]', async () => {
+  delegate(page, 'click', '[data-refund-credit]', async () => {
     if (!currentCustomer) return;
     const qty = parseInt(page.querySelector('[data-refund-qty]')?.value || '0');
     if (qty < 1) return;
@@ -213,7 +213,7 @@ export default async function AdminBookings(container) {
       await refundToken(currentCustomer.id, qty);
       currentCustomer.balance += qty;
       renderCustomerResult(currentCustomer);
-      showToast(t('token.tokenRefunded'), 'success');
+      showToast(t('credit.tokenRefunded'), 'success');
     } catch (err) {
       console.error(err);
       showToast(t('common.error'), 'error');

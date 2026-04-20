@@ -12,10 +12,10 @@ import { showToast } from '../../components/core/Toast.js';
 export default async function Booking(container) {
   const locale = getLocale();
   updateMeta({
-    title: locale === 'ro' ? 'Cumpără Tokens — Mango Parking' : 'Buy Tokens — Mango Parking',
+    title: locale === 'ro' ? 'Cumpără Credite — Mango Parking' : 'Buy Credits — Mango Parking',
     description: locale === 'ro'
-      ? 'Cumpără tokens de parcare la Aeroportul Otopeni. Plată online, shuttle gratuită.'
-      : 'Buy parking tokens at Otopeni Airport. Pay online, free shuttle included.',
+      ? 'Cumpără credite de parcare la Aeroportul Otopeni. Plată online, shuttle gratuită.'
+      : 'Buy parking credits at Otopeni Airport. Pay online, free shuttle included.',
     lang: locale,
   });
 
@@ -40,7 +40,7 @@ export default async function Booking(container) {
   function getSelectedPrice() {
     if (selectedPack) return selectedPack.price;
     if (customQty > 0 && packs.length > 0) {
-      // Use cheapest per-token rate from packs
+      // Use cheapest per-credit rate from packs
       const rates = packs.map(p => p.price / p.quantity);
       return Math.round(customQty * Math.min(...rates));
     }
@@ -52,7 +52,7 @@ export default async function Booking(container) {
       <div data-navbar></div>
       <section class="pt-32 pb-20">
         <div class="max-w-3xl mx-auto px-6">
-          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-4">${t('token.pageTitle')}</h1>
+          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-4">${t('credit.pageTitle')}</h1>
           ${confirmed ? renderConfirmation() : renderForm()}
         </div>
       </section>
@@ -70,16 +70,16 @@ export default async function Booking(container) {
         <div class="w-16 h-16 rounded-full bg-leaf/10 flex items-center justify-center mx-auto mb-6">
           <svg class="w-8 h-8 text-leaf" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
         </div>
-        <h2 class="font-heading text-2xl font-bold mb-2">${t('token.confirmed')}</h2>
-        <p class="text-dim text-[15px] mb-6">${t('token.confirmMessage')}</p>
+        <h2 class="font-heading text-2xl font-bold mb-2">${t('credit.confirmed')}</h2>
+        <p class="text-dim text-[15px] mb-6">${t('credit.confirmMessage')}</p>
         <div class="bg-frost rounded-2xl px-8 py-5 inline-block mb-6">
-          <p class="text-dim text-[13px] mb-1">${t('token.balanceAfter')}</p>
+          <p class="text-dim text-[13px] mb-1">${t('credit.balanceAfter')}</p>
           <span class="font-mono font-bold text-3xl tracking-wider">${resultBalance}</span>
-          <span class="text-dim text-[15px] ml-1">${t('token.tokens')}</span>
+          <span class="text-dim text-[15px] ml-1">${t('credit.plural')}</span>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 justify-center">
           <a href="${localePath('/')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
-          <button data-new-purchase class="glass font-semibold text-[15px] px-6 py-3 rounded-xl hover:bg-white transition-colors">${t('token.newPurchase')}</button>
+          <button data-new-purchase class="glass font-semibold text-[15px] px-6 py-3 rounded-xl hover:bg-white transition-colors">${t('credit.newPurchase')}</button>
         </div>
       </div>
     `;
@@ -93,8 +93,8 @@ export default async function Booking(container) {
       return `
         <button data-pack-id="${p.id}" class="relative card-solid rounded-2xl p-6 text-left transition-all duration-200 border-[3px] ${isSelected ? 'border-mango shadow-lg ring-2 ring-mango/20' : 'border-transparent hover:border-mango/30'}">
           ${isSelected ? `<div class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>` : ''}
-          ${isBest && !isSelected ? `<span class="absolute -top-3 right-4 text-[11px] font-bold bg-mango text-charcoal px-3 py-1 rounded-full">${t('token.bestValue')}</span>` : ''}
-          <p class="font-heading font-bold text-2xl mb-1">${p.quantity} <span class="text-[16px] font-normal text-dim">${t('token.tokens')}</span></p>
+          ${isBest && !isSelected ? `<span class="absolute -top-3 right-4 text-[11px] font-bold bg-mango text-charcoal px-3 py-1 rounded-full">${t('credit.bestValue')}</span>` : ''}
+          <p class="font-heading font-bold text-2xl mb-1">${p.quantity} <span class="text-[16px] font-normal text-dim">${t('credit.plural')}</span></p>
           <p data-price class="font-mono text-lg font-semibold ${isSelected ? 'text-mango' : 'text-charcoal/70'}">${p.price} lei</p>
         </button>
       `;
@@ -103,7 +103,7 @@ export default async function Booking(container) {
     return `
       <!-- Pack selection -->
       <div class="mb-8">
-        <h3 class="font-heading font-semibold text-lg mb-4">${t('token.selectPack')}</h3>
+        <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.selectPack')}</h3>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           ${packCards}
         </div>
@@ -112,7 +112,7 @@ export default async function Booking(container) {
       <form data-purchase-form class="space-y-6">
         <!-- Vehicle -->
         <div class="card-solid rounded-2xl p-6">
-          <h3 class="font-heading font-semibold text-lg mb-4">${t('token.vehicleInfo')}</h3>
+          <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.vehicleInfo')}</h3>
           ${user && profileVehicles.length > 0 ? `
           <div class="space-y-2 mb-4" data-vehicle-options>
             ${profileVehicles.map((v, i) => `
@@ -180,17 +180,17 @@ export default async function Booking(container) {
 
         <!-- Summary -->
         <div class="card-solid rounded-2xl p-6" data-summary>
-          <h3 class="font-heading font-semibold text-lg mb-4">${t('token.summary')}</h3>
+          <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.summary')}</h3>
           <div data-price-summary>
             ${selectedPack
-              ? `<div class="flex justify-between mb-2"><span>${selectedPack.quantity} ${t('token.tokens')}</span><span class="font-mono font-semibold">${selectedPack.price} lei</span></div>`
-              : `<p class="text-dim/60">${t('token.selectPack')}</p>`
+              ? `<div class="flex justify-between mb-2"><span>${selectedPack.quantity} ${t('credit.plural')}</span><span class="font-mono font-semibold">${selectedPack.price} lei</span></div>`
+              : `<p class="text-dim/60">${t('credit.selectPack')}</p>`
             }
           </div>
         </div>
 
         <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
-          ${processing ? t('token.processing') : t('token.payNow')}
+          ${processing ? t('credit.processing') : t('credit.payNow')}
         </button>
       </form>
     `;
@@ -203,10 +203,10 @@ export default async function Booking(container) {
     const price = getSelectedPrice();
     if (qty > 0) {
       summary.innerHTML = `
-        <div class="flex justify-between mb-2"><span>${qty} ${t('token.tokens')}</span><span class="font-mono font-semibold">${price} lei</span></div>
+        <div class="flex justify-between mb-2"><span>${qty} ${t('credit.plural')}</span><span class="font-mono font-semibold">${price} lei</span></div>
       `;
     } else {
-      summary.innerHTML = `<p class="text-dim/60">${t('token.selectPack')}</p>`;
+      summary.innerHTML = `<p class="text-dim/60">${t('credit.selectPack')}</p>`;
     }
     const btn = pageEl.querySelector('[type="submit"]');
     if (btn) btn.disabled = qty <= 0;
@@ -308,11 +308,11 @@ export default async function Booking(container) {
 
       const qty = getSelectedQty();
       const packId = selectedPack?.id || null;
-      if (qty <= 0) { showToast(t('token.selectPack'), 'error'); return; }
+      if (qty <= 0) { showToast(t('credit.selectPack'), 'error'); return; }
 
       processing = true;
       const btn = form.querySelector('[type="submit"]');
-      if (btn) { btn.disabled = true; btn.textContent = t('token.processing'); }
+      if (btn) { btn.disabled = true; btn.textContent = t('credit.processing'); }
 
       try {
         // TODO: Netopia Integration
@@ -357,7 +357,7 @@ export default async function Booking(container) {
         console.error(err);
         showToast(t('common.error'), 'error');
         processing = false;
-        if (btn) { btn.disabled = false; btn.textContent = t('token.payNow'); }
+        if (btn) { btn.disabled = false; btn.textContent = t('credit.payNow'); }
       }
     });
   }

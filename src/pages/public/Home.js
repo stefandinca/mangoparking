@@ -20,11 +20,11 @@ export default function Home(container) {
   // SEO
   updateMeta({
     title: locale === 'ro'
-      ? 'Mango Parking — Parcare Aeroport Otopeni | Tokens Parcare Zilnică & Shuttle'
-      : 'Mango Parking — Otopeni Airport Parking | Daily Parking Tokens & Shuttle',
+      ? 'Mango Parking — Parcare Aeroport Otopeni | Credite Parcare Zilnică & Shuttle'
+      : 'Mango Parking — Otopeni Airport Parking | Daily Parking Credits & Shuttle',
     description: locale === 'ro'
-      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără tokens, parchează flexibil. Shuttle gratuită, securitate 24/7.'
-      : 'Secure parking near Henri Coandă Otopeni Airport. Buy tokens, park flexibly. Free shuttle, 24/7 security.',
+      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără credite, parchează flexibil. Shuttle gratuită, securitate 24/7.'
+      : 'Secure parking near Henri Coandă Otopeni Airport. Buy credits, park flexibly. Free shuttle, 24/7 security.',
     lang: locale,
     hreflang: { ro: SITE_URL + '/', en: SITE_URL + '/en' },
   });
@@ -34,7 +34,7 @@ export default function Home(container) {
     '@context': 'https://schema.org',
     '@type': ['ParkingFacility', 'LocalBusiness'],
     name: 'Mango Parking',
-    description: 'Secure daily parking near Otopeni Airport with free shuttle service. Flexible token system.',
+    description: 'Secure daily parking near Otopeni Airport with free shuttle service. Flexible credit system.',
     url: SITE_URL,
     telephone: CONTACT_PHONE,
     email: CONTACT_EMAIL,
@@ -58,12 +58,12 @@ export default function Home(container) {
   const reviewTexts = locale === 'ro'
     ? [
         '"Am lăsat mașina 10 zile. Naveta a fost mereu la timp. Mașina era impecabilă la întoarcere. Cea mai bună parcare de la Otopeni."',
-        '"Sistemul cu tokens e genial. Cumpăr un pachet, parchez oricând. Naveta la aeroport e mereu la timp."',
+        '"Sistemul cu credite e genial. Cumpăr un pachet, parchez oricând. Naveta la aeroport e mereu la timp."',
         '"Super profesioniști. Am rezervat la miezul nopții, naveta era acolo la 5 dimineața. Voi folosi la fiecare călătorie."',
       ]
     : [
         '"Left my car for 10 days. Shuttle was on time every single time. Car was spotless. The best airport parking experience."',
-        '"The token system is brilliant. Buy a pack, park anytime. Shuttle to the airport is always on time."',
+        '"The credit system is brilliant. Buy a pack, park anytime. Shuttle to the airport is always on time."',
         '"Super professional. Booked at midnight, shuttle was there at 5 AM. Will use again for every trip."',
       ];
 
@@ -223,7 +223,7 @@ export default function Home(container) {
             </ul>
             <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200">${t('pricing.bookNow')}</a>
           </div>
-          <!-- Token Packs -->
+          <!-- Credit Packs -->
           <div class="bg-blueberry border-2 border-mango rounded-3xl p-8 transition-colors duration-300 relative">
             <div class="absolute -top-3 right-8 bg-mango text-charcoal text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
             <div class="flex items-center gap-3 mb-8">
@@ -231,23 +231,23 @@ export default function Home(container) {
                 ${clockIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-mango"')}
               </div>
               <div>
-                <h3 class="text-white font-heading font-bold text-lg">${locale === 'ro' ? 'Pachete Tokens' : 'Token Packs'}</h3>
+                <h3 class="text-white font-heading font-bold text-lg">${locale === 'ro' ? 'Pachete Credite' : 'Credit Packs'}</h3>
                 <p class="text-white/30 text-[14px]">${locale === 'ro' ? 'Luni–Vineri, 6:00 – 20:00' : 'Mon–Fri, 6 AM – 8 PM'}</p>
               </div>
             </div>
             <div class="flex items-baseline gap-1.5 mb-2">
               <span class="font-heading font-bold text-5xl text-white tracking-tight">1</span>
-              <span class="text-white/30 text-sm">${locale === 'ro' ? 'token = 1 zi' : 'token = 1 day'}</span>
+              <span class="text-white/30 text-sm">${locale === 'ro' ? 'credit = 1 zi' : 'credit = 1 day'}</span>
             </div>
-            <p class="text-white/20 text-[14px] mb-8">${locale === 'ro' ? 'Cumperi pachete de tokens. Folosești oricând, Luni–Vineri.' : 'Buy token packs. Use anytime, Monday–Friday.'}</p>
+            <p class="text-white/20 text-[14px] mb-8">${locale === 'ro' ? 'Cumperi pachete de credite. Folosești oricând, Luni–Vineri.' : 'Buy credit packs. Use anytime, Monday–Friday.'}</p>
             <ul class="space-y-3 mb-8">
-              ${[t('token.rule1'), t('token.rule2'), t('token.rule3'), t('token.rule4')].map(f => `
+              ${[t('credit.rule1'), t('credit.rule2'), t('credit.rule3'), t('credit.rule4')].map(f => `
                 <li class="flex items-center gap-2.5 text-white/50 text-[15px]">
                   <span class="text-mango">${checkIcon}</span> ${f}
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200 shadow-md">${t('token.buyTokens')}</a>
+            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200 shadow-md">${t('credit.buyTokens')}</a>
           </div>
         </div>
         <p class="text-center mt-8"><a href="${localePath('/pricing')}" class="text-white/25 hover:text-white/50 text-[14px] transition-colors">${t('pricing.viewAll')}</a></p>

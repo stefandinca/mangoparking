@@ -96,7 +96,7 @@ export async function useToken(balanceDocId, licensePlate) {
   if (alreadyIn) throw new Error('ALREADY_CHECKED_IN');
 
   const doc = await getDocument('tokenBalances', balanceDocId);
-  if (!doc || doc.balance < 1) throw new Error('Insufficient token balance');
+  if (!doc || doc.balance < 1) throw new Error('Insufficient credit balance');
 
   // Find first available spot
   const spots = await getAllSpots().catch(() => []);
@@ -189,7 +189,7 @@ export async function getAllRecentTransactions(limitCount = 100) {
   return getCollection('tokenTransactions', orderBy('timestamp', 'desc'), limit(limitCount));
 }
 
-// ── Admin CRUD for token packs ──
+// ── Admin CRUD for credit packs ──
 
 export async function getAllTokenPacks() {
   const all = await getCollection('tokenPacks');

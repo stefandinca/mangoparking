@@ -7,8 +7,8 @@ export default function Delivery(container) {
   updateMeta({
     title: `${t('legal.deliveryTitle')} — Mango Parking`,
     description: locale === 'ro'
-      ? 'Politica de livrare digitală a tokens-urilor Mango Parking.'
-      : 'Mango Parking digital token delivery policy.',
+      ? 'Politica de livrare digitală a creditelor Mango Parking.'
+      : 'Mango Parking digital credit delivery policy.',
     lang: locale,
   });
 

@@ -25,7 +25,7 @@ function renderTransaction(tx, locale) {
             <span class="font-mono font-bold text-[14px] text-dim">${qty}</span>
           </div>
           <div>
-            <p class="font-semibold text-[15px]">${t('token.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</p>
+            <p class="font-semibold text-[15px]">${t('credit.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</p>
             <p class="text-dim text-[13px]">${formatDate(tx.timestamp, locale)}${tx.licensePlate ? ` · ${tx.licensePlate}` : ''}</p>
           </div>
         </div>
@@ -57,13 +57,13 @@ export default async function BookingHistory(container) {
         <h1 class="font-heading text-3xl font-bold tracking-tight mb-1">${t('account.bookings')}</h1>
         <p class="text-dim text-[16px]">${t('account.bookingsSubtitle')}</p>
       </div>
-      <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
+      <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('credit.buyMore')}</a>
     </div>
 
     <!-- Filter tabs -->
     <div class="flex gap-2 mb-6 flex-wrap">
       ${['all', 'purchase', 'use', 'refund'].map((f, i) => {
-        const label = f === 'all' ? t('token.filterAll') : t('token.filter' + f.charAt(0).toUpperCase() + f.slice(1));
+        const label = f === 'all' ? t('credit.filterAll') : t('credit.filter' + f.charAt(0).toUpperCase() + f.slice(1));
         const cls = i === 0
           ? 'px-4 py-3 rounded-xl bg-blueberry text-white text-[14px] font-semibold'
           : 'px-4 py-3 rounded-xl bg-frost text-dim text-[14px] hover:bg-frost-deep transition-colors';
@@ -73,12 +73,12 @@ export default async function BookingHistory(container) {
 
     <!-- Transaction list -->
     <div data-tx-list>
-      ${txRows || `<p class="text-dim text-center py-8">${t('token.noTransactions')}</p>`}
+      ${txRows || `<p class="text-dim text-center py-8">${t('credit.noTransactions')}</p>`}
     </div>
 
     <!-- Mobile CTA -->
     <div class="sm:hidden mt-6">
-      <a href="${localePath('/booking')}" class="block text-center bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
+      <a href="${localePath('/booking')}" class="block text-center bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('credit.buyMore')}</a>
     </div>
   `;
 
@@ -107,7 +107,7 @@ export default async function BookingHistory(container) {
     });
     const list = page.querySelector('[data-tx-list]');
     const filtered = filter === 'all' ? transactions : transactions.filter(tx => tx.type === filter);
-    list.innerHTML = filtered.map(tx => renderTransaction(tx, locale)).join('') || `<p class="text-dim text-center py-8">${t('token.noTransactions')}</p>`;
+    list.innerHTML = filtered.map(tx => renderTransaction(tx, locale)).join('') || `<p class="text-dim text-center py-8">${t('credit.noTransactions')}</p>`;
   });
 
   container.appendChild(page);
