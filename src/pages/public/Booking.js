@@ -52,7 +52,7 @@ export default async function Booking(container) {
       <div data-navbar></div>
       <section class="pt-32 pb-20">
         <div class="max-w-3xl mx-auto px-6">
-          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] mb-4">${t('token.pageTitle')}</h1>
+          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-4">${t('token.pageTitle')}</h1>
           ${confirmed ? renderConfirmation() : renderForm()}
         </div>
       </section>
@@ -78,7 +78,7 @@ export default async function Booking(container) {
           <span class="text-dim text-[15px] ml-1">${t('token.tokens')}</span>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 justify-center">
-          <a href="${localePath('/')}" class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
+          <a href="${localePath('/')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
           <button data-new-purchase class="glass font-semibold text-[15px] px-6 py-3 rounded-xl hover:bg-white transition-colors">${t('token.newPurchase')}</button>
         </div>
       </div>

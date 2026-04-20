@@ -26,7 +26,7 @@ export default function About(container) {
         <!-- Hero -->
         <div class="text-center mb-20">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('about.pageTitle')}</p>
-          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] mb-6">${t('about.heroTitle')}</h1>
+          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-6">${t('about.heroTitle')}</h1>
           <p class="text-dim text-[18px] max-w-xl mx-auto">${t('about.heroSubtitle')}</p>
         </div>
 

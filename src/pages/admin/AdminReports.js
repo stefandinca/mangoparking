@@ -58,10 +58,10 @@ export default async function AdminReports(container) {
   const page = AdminLayout('/admin/reports', `
         <div class="flex items-center justify-between mb-8">
           <div>
-            <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('admin.reports')}</h1>
+            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('admin.reports')}</h1>
             <p class="text-dim text-[15px] mt-1">${t('admin.reportsSubtitle')}</p>
           </div>
-          <button class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2" data-export-csv>
+          <button class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2" data-export-csv>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
             ${t('admin.exportCsv')}
           </button>

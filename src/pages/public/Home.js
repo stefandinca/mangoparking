@@ -87,7 +87,7 @@ export default function Home(container) {
               <span class="text-charcoal/60 text-[14px] font-medium" data-capacity-badge>${t('hero.badge', { count: MOCK_CAPACITY })}</span>
             </div>
 
-            <h1 class="font-heading text-[clamp(3rem,6vw,5.5rem)] font-bold leading-[1.02] tracking-[-0.03em] mb-6">
+            <h1 class="font-heading text-[clamp(3rem,6vw,5.5rem)] font-bold leading-[1.02] tracking-[-0.03em] mb-6 text-blueberry-deep">
               ${t('hero.title1')}<br>
               <span class="text-mango">${t('hero.title2')}</span>
             </h1>
@@ -95,7 +95,7 @@ export default function Home(container) {
             <p class="text-[17px] text-dim leading-relaxed max-w-md mb-10">${t('hero.subtitle')}</p>
 
             <div class="flex flex-col sm:flex-row gap-3 mb-14">
-              <a href="${localePath('/booking')}" class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('hero.cta1')}</a>
+              <a href="${localePath('/booking')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('hero.cta1')}</a>
               <a href="${localePath('/pricing')}" class="glass font-semibold text-[16px] px-8 py-4 rounded-2xl text-center hover:bg-white transition-all duration-200 shadow-sm">${t('hero.cta2')}</a>
             </div>
 
@@ -165,7 +165,7 @@ export default function Home(container) {
       <div class="max-w-7xl mx-auto px-6">
         <div class="text-center mb-20">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('howItWorks.label')}</p>
-          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">${t('howItWorks.title')}</h2>
+          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('howItWorks.title')}</h2>
         </div>
         <div class="grid md:grid-cols-3 gap-6">
           ${[
@@ -191,8 +191,7 @@ export default function Home(container) {
     </section>
 
     <!-- PRICING PREVIEW -->
-    <section class="py-28 bg-charcoal rounded-[40px] mx-4 relative overflow-hidden">
-      <div class="absolute top-0 right-0 w-96 h-96 rounded-full bg-mango/5 filter blur-[100px]"></div>
+    <section class="py-28 bg-blueberry-deep rounded-[40px] mx-4 relative overflow-hidden">
       <div class="max-w-7xl mx-auto px-6 relative z-10">
         <div class="text-center mb-20">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('pricing.label')}</p>
@@ -200,32 +199,32 @@ export default function Home(container) {
         </div>
         <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
           <!-- Traveler -->
-          <div class="bg-white/[0.05] border border-white/[0.08] rounded-3xl p-8 hover:border-white/15 transition-colors duration-300">
+          <div class="bg-blueberry rounded-3xl p-8 transition-colors duration-300">
             <div class="flex items-center gap-3 mb-8">
-              <div class="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center">
-                ${planeIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-white/40"')}
+              <div class="w-10 h-10 rounded-xl bg-blueberry-deep flex items-center justify-center">
+                ${planeIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-white/80"')}
               </div>
               <div>
                 <h3 class="text-white font-heading font-bold text-lg">${t('pricing.traveler')}</h3>
-                <p class="text-white/30 text-[14px]">${t('pricing.travelerSub')}</p>
+                <p class="text-white/70 text-[14px]">${t('pricing.travelerSub')}</p>
               </div>
             </div>
             <div class="flex items-baseline gap-1.5 mb-2">
               <span class="font-heading font-bold text-5xl text-white tracking-tight">29</span>
-              <span class="text-white/30 text-sm">${t('pricing.leiDay')}</span>
+              <span class="text-white/70 text-sm">${t('pricing.leiDay')}</span>
             </div>
-            <p class="text-white/20 text-[14px] mb-8">${t('pricing.travelerNote')}</p>
+            <p class="text-white/70 text-[14px] mb-8">${t('pricing.travelerNote')}</p>
             <ul class="space-y-3 mb-8">
               ${t('pricing.travelerFeatures').map(f => `
-                <li class="flex items-center gap-2.5 text-white/50 text-[15px]">
+                <li class="flex items-center gap-2.5 text-white/90 text-[15px]">
                   <span class="text-leaf">${checkIcon}</span> ${f}
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking')}" class="block text-center bg-charcoal-hover hover:bg-charcoal-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200">${t('pricing.bookNow')}</a>
+            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200">${t('pricing.bookNow')}</a>
           </div>
           <!-- Token Packs -->
-          <div class="bg-white/[0.05] border border-mango/25 rounded-3xl p-8 hover:border-mango/40 transition-colors duration-300 relative">
+          <div class="bg-blueberry border-2 border-mango rounded-3xl p-8 transition-colors duration-300 relative">
             <div class="absolute -top-3 right-8 bg-mango text-charcoal text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
             <div class="flex items-center gap-3 mb-8">
               <div class="w-10 h-10 rounded-xl bg-mango/10 flex items-center justify-center">
@@ -260,7 +259,7 @@ export default function Home(container) {
       <div class="max-w-7xl mx-auto px-6">
         <div class="text-center mb-20">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('amenities.label')}</p>
-          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">${t('amenities.title')}</h2>
+          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('amenities.title')}</h2>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-5 max-w-4xl mx-auto">
           ${[
@@ -283,7 +282,7 @@ export default function Home(container) {
       <div class="max-w-3xl mx-auto px-6">
         <div class="text-center mb-14">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('shuttle.label')}</p>
-          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">${t('shuttle.title')}</h2>
+          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('shuttle.title')}</h2>
         </div>
         <div class="card-solid rounded-3xl overflow-hidden">
           <div class="grid grid-cols-3 text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-4 sm:px-8 py-4 border-b border-frost-deep">
@@ -304,7 +303,7 @@ export default function Home(container) {
       <div class="max-w-7xl mx-auto px-6">
         <div class="text-center mb-20">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('reviews.label')}</p>
-          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">${t('reviews.title')}</h2>
+          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('reviews.title')}</h2>
         </div>
         <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           ${MOCK_REVIEWS.map((r, i) => `
@@ -331,7 +330,7 @@ export default function Home(container) {
       <div class="max-w-2xl mx-auto px-6">
         <div class="text-center mb-14">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('faq.label')}</p>
-          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em]">${t('faq.title')}</h2>
+          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('faq.title')}</h2>
         </div>
         <div class="space-y-3" data-faq-container>
           ${[1, 2, 3, 4, 5].map(n => `
@@ -351,7 +350,7 @@ export default function Home(container) {
     <section class="py-20 overflow-hidden">
       <div class="max-w-7xl mx-auto px-6 mb-12">
         <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3 text-center">${t('gallery.label')}</p>
-        <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-center">${t('gallery.title')}</h2>
+        <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep text-center">${t('gallery.title')}</h2>
       </div>
       <div class="flex gap-4 px-6 max-w-7xl mx-auto">
         <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80">
@@ -372,14 +371,14 @@ export default function Home(container) {
     <!-- CTA -->
     <section class="py-20">
       <div class="max-w-5xl mx-auto px-6">
-        <div class="rounded-[32px] shadow-lg relative min-h-[400px] flex items-center bg-charcoal overflow-hidden">
+        <div class="rounded-[32px] shadow-lg relative min-h-[400px] flex items-center bg-blueberry-deep overflow-hidden">
           <img src="/images/logo.png" alt="" aria-hidden="true" class="absolute -right-10 -bottom-10 w-80 h-80 object-contain rotate-[8deg] pointer-events-none select-none hidden md:block" />
           <div class="relative z-10 p-6 sm:p-10 md:p-16 max-w-lg">
             <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-[-0.02em] mb-4 text-white">${t('cta.title')}</h2>
             <p class="text-white/70 text-[16px] mb-8">${t('cta.subtitle')}</p>
             <div class="flex flex-col sm:flex-row gap-3">
               <a href="${localePath('/booking')}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">${t('cta.book')}</a>
-              <a href="${localePath('/contact')}" class="bg-charcoal-hover hover:bg-blueberry text-white font-medium text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
+              <a href="${localePath('/contact')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-medium text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
             </div>
           </div>
         </div>

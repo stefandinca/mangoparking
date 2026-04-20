@@ -35,10 +35,10 @@ export default async function AdminShuttle(container) {
   const page = AdminLayout('/admin/shuttle', `
         <div class="flex items-center justify-between mb-8">
           <div>
-            <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('admin.shuttleSchedule')}</h1>
+            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('admin.shuttleSchedule')}</h1>
             <p class="text-dim text-[15px] mt-1">${t('admin.todayDepartures')}</p>
           </div>
-          <button class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-add-departure>+ ${t('admin.addDeparture')}</button>
+          <button class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-add-departure>+ ${t('admin.addDeparture')}</button>
         </div>
 
         <!-- Status Summary -->

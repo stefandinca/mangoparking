@@ -57,7 +57,7 @@ export default async function BookingHistory(container) {
         <h1 class="font-heading text-3xl font-bold tracking-tight mb-1">${t('account.bookings')}</h1>
         <p class="text-dim text-[16px]">${t('account.bookingsSubtitle')}</p>
       </div>
-      <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
+      <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
     </div>
 
     <!-- Filter tabs -->
@@ -65,7 +65,7 @@ export default async function BookingHistory(container) {
       ${['all', 'purchase', 'use', 'refund'].map((f, i) => {
         const label = f === 'all' ? t('token.filterAll') : t('token.filter' + f.charAt(0).toUpperCase() + f.slice(1));
         const cls = i === 0
-          ? 'px-4 py-3 rounded-xl bg-charcoal text-white text-[14px] font-semibold'
+          ? 'px-4 py-3 rounded-xl bg-blueberry text-white text-[14px] font-semibold'
           : 'px-4 py-3 rounded-xl bg-frost text-dim text-[14px] hover:bg-frost-deep transition-colors';
         return `<button class="${cls}" data-filter="${f}">${label}</button>`;
       }).join('')}
@@ -78,7 +78,7 @@ export default async function BookingHistory(container) {
 
     <!-- Mobile CTA -->
     <div class="sm:hidden mt-6">
-      <a href="${localePath('/booking')}" class="block text-center bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
+      <a href="${localePath('/booking')}" class="block text-center bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyMore')}</a>
     </div>
   `;
 
@@ -102,7 +102,7 @@ export default async function BookingHistory(container) {
     const filter = btn.dataset.filter;
     page.querySelectorAll('[data-filter]').forEach(b => {
       b.className = b.dataset.filter === filter
-        ? 'px-4 py-3 rounded-xl bg-charcoal text-white text-[14px] font-semibold'
+        ? 'px-4 py-3 rounded-xl bg-blueberry text-white text-[14px] font-semibold'
         : 'px-4 py-3 rounded-xl bg-frost text-dim text-[14px] hover:bg-frost-deep transition-colors';
     });
     const list = page.querySelector('[data-tx-list]');

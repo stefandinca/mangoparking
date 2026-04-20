@@ -48,7 +48,7 @@ export function confirmModal(message, { confirmText, cancelText, danger = false 
     const cancelLabel = cancelText || t('common.cancel');
     const btnColor = danger
       ? 'bg-red-500 hover:bg-red-600'
-      : 'bg-charcoal hover:bg-charcoal-hover';
+      : 'bg-blueberry hover:bg-blueberry-hover';
 
     const { close, contentEl } = openModal(`
       <div class="text-center">
@@ -95,7 +95,7 @@ export function alertModal(message, { buttonText, type = 'info' } = {}) {
           ${icon.svg}
         </div>
         <p class="text-[16px] text-charcoal leading-relaxed mb-8">${message}</p>
-        <button data-modal-ok class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-8 py-3 rounded-xl transition-colors">${label}</button>
+        <button data-modal-ok class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-8 py-3 rounded-xl transition-colors">${label}</button>
       </div>
     `, {
       onClose: () => done(),

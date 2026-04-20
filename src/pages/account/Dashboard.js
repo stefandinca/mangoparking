@@ -86,7 +86,7 @@ export default async function Dashboard(container) {
           </div>
         </div>
         <div class="flex gap-2">
-          <button type="submit" class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('common.save')}</button>
+          <button type="submit" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('common.save')}</button>
           <button type="button" data-cancel-profile class="text-dim text-[14px] px-4 py-2.5 hover:text-charcoal transition-colors">${t('common.cancel')}</button>
         </div>
       </form>
@@ -114,7 +114,7 @@ export default async function Dashboard(container) {
       <div class="card-solid rounded-2xl p-6">
         <h3 class="font-heading font-bold text-lg mb-3">${t('token.buyMore')}</h3>
         <p class="text-dim text-[14px] mb-4">${t('token.rule2')} — ${t('token.rule1')}</p>
-        <a href="${localePath('/booking')}" class="inline-block bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyTokens')}</a>
+        <a href="${localePath('/booking')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('token.buyTokens')}</a>
       </div>
 
       <!-- Next shuttle -->

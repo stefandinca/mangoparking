@@ -36,7 +36,7 @@ export default async function AdminPricing(container) {
   const page = AdminLayout('/admin/pricing', `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('token.packManagement')}</h1>
+            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('token.packManagement')}</h1>
             <p class="text-dim text-[15px] mt-1">${t('token.packManagementSubtitle')}</p>
           </div>
           <button data-save-packs class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors shadow-sm">${t('admin.saveChanges')}</button>
@@ -63,7 +63,7 @@ export default async function AdminPricing(container) {
           </div>
         </div>
 
-        <button data-add-pack class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.addPack')}</button>
+        <button data-add-pack class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.addPack')}</button>
   `);
 
   let newPackIdx = packs.length;

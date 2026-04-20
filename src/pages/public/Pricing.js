@@ -28,7 +28,7 @@ export default async function Pricing(container) {
         <p class="font-heading font-bold text-4xl tracking-tight mb-1">${p.quantity}</p>
         <p class="text-dim text-[14px] mb-4">${t('token.tokens')}</p>
         <p class="font-mono text-2xl font-bold text-mango mb-4">${p.price} lei</p>
-        <a href="${localePath('/booking')}" class="inline-block w-full bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('token.buyTokens')}</a>
+        <a href="${localePath('/booking')}" class="inline-block w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('token.buyTokens')}</a>
       </div>
     `;
   }).join('');
@@ -38,7 +38,7 @@ export default async function Pricing(container) {
 
     <section class="pt-32 pb-20">
       <div class="max-w-5xl mx-auto px-6">
-        <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] mb-3">${t('token.pricingTitle')}</h1>
+        <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${t('token.pricingTitle')}</h1>
         <p class="text-dim text-[17px] mb-12 max-w-2xl">${t('token.pricingSubtitle')}</p>
 
         <!-- Pack cards -->

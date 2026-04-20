@@ -35,7 +35,7 @@ export function Navbar() {
                 </div>`
               : `<a href="${localePath('/login')}" class="text-[13px] text-charcoal/50 font-medium hover:text-charcoal transition-colors hidden sm:block">${t('nav.login')}</a>`
             }
-            <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-charcoal hover:bg-charcoal-hover text-white text-[14px] font-semibold px-5 py-2 rounded-xl transition-all duration-200 shadow-sm">${t('nav.bookNow')}</a>
+            <a href="${localePath('/booking')}" class="hidden sm:inline-block bg-blueberry hover:bg-blueberry-hover text-white text-[14px] font-semibold px-5 py-2 rounded-xl transition-all duration-200 shadow-sm">${t('nav.bookNow')}</a>
             <button data-mobile-toggle class="md:hidden text-charcoal/60 hover:text-charcoal">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5"/></svg>
             </button>

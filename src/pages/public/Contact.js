@@ -26,7 +26,7 @@ export default function Contact(container) {
       <div class="max-w-4xl mx-auto px-6">
         <div class="text-center mb-16">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('contact.pageTitle')}</p>
-          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] mb-4">${t('contact.heroTitle')}</h1>
+          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-4">${t('contact.heroTitle')}</h1>
           <p class="text-dim text-[17px] max-w-lg mx-auto">${t('contact.heroSubtitle')}</p>
         </div>
 

@@ -11,7 +11,7 @@ function getContainer() {
 
 export function showToast(message, type = 'info', duration = 3000) {
   const colors = {
-    info: 'bg-charcoal text-white',
+    info: 'bg-blueberry-deep text-white',
     success: 'bg-leaf text-white',
     error: 'bg-danger text-white',
     warning: 'bg-mango text-charcoal',

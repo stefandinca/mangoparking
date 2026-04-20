@@ -98,7 +98,7 @@ export default function Commuter(container) {
     <!-- CTA -->
     <section class="py-16">
       <div class="max-w-3xl mx-auto px-6 text-center">
-        <div class="bg-charcoal rounded-3xl p-12">
+        <div class="bg-blueberry-deep rounded-3xl p-12">
           <h2 class="font-heading text-3xl font-bold text-white mb-4">${t('cta.title')}</h2>
           <p class="text-white/50 mb-8">${t('cta.subtitle')}</p>
           <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl transition-colors shadow-md">${t('commuterPage.cta')}</a>

@@ -13,7 +13,7 @@ const ADMIN_LINKS = [
 function sidebarLinks(activePath) {
   return ADMIN_LINKS.map(link => {
     const isActive = link.path === activePath;
-    return `<a href="${localePath(link.path)}" data-link class="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-colors duration-150 ${isActive ? 'bg-blueberry text-white' : 'text-white/50 hover:text-white/80 hover:bg-charcoal-hover'}">
+    return `<a href="${localePath(link.path)}" data-link class="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-colors duration-150 ${isActive ? 'bg-mango text-charcoal' : 'text-white/50 hover:text-white/80 hover:bg-blueberry'}">
       ${link.icon}
       <span>${t(link.labelKey)}</span>
     </a>`;
@@ -29,7 +29,7 @@ export function AdminLayout(activePath, contentHtml) {
 
   return html`<div class="flex min-h-screen bg-frost">
     <!-- Sidebar -->
-    <aside class="hidden md:flex w-64 bg-charcoal flex-col shrink-0 sticky top-0 h-screen">
+    <aside class="hidden md:flex w-64 bg-blueberry-deep flex-col shrink-0 sticky top-0 h-screen">
       <div class="p-6 border-b border-white/10">
         <a href="${localePath('/')}" data-link class="flex items-center gap-2.5">
           <img src="/images/logo.png" alt="Mango Parking" class="w-9 h-9 object-contain" />
@@ -50,7 +50,7 @@ export function AdminLayout(activePath, contentHtml) {
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto">
       <!-- Mobile admin nav -->
-      <div class="md:hidden bg-charcoal">
+      <div class="md:hidden bg-blueberry-deep">
         <div class="flex items-center justify-between px-4 py-3">
           <div class="flex items-center gap-2">
             <a href="${localePath('/')}" data-link class="shrink-0">
@@ -58,7 +58,7 @@ export function AdminLayout(activePath, contentHtml) {
             </a>
             <span class="text-white font-heading font-bold text-[15px]">${t('admin.mangoAdmin')}</span>
           </div>
-          <button data-admin-nav-toggle class="flex items-center gap-1.5 bg-charcoal-hover px-3 py-2 rounded-lg text-white text-[13px] font-medium transition-colors hover:bg-blueberry">
+          <button data-admin-nav-toggle class="flex items-center gap-1.5 bg-blueberry px-3 py-2 rounded-lg text-white text-[13px] font-medium transition-colors hover:bg-blueberry-hover">
             <span>${t(activeLabel)}</span>
             <svg data-chevron class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
           </button>
@@ -66,7 +66,7 @@ export function AdminLayout(activePath, contentHtml) {
         <div class="hidden border-t border-white/10 px-3 py-2 space-y-0.5" data-admin-nav-dropdown>
           ${ADMIN_LINKS.map(link => {
             const isActive = link.path === activePath;
-            return `<a href="${localePath(link.path)}" data-link class="block px-4 py-3 rounded-lg text-[14px] font-medium transition-colors ${isActive ? 'bg-blueberry text-white' : 'text-white/50 hover:text-white/80 hover:bg-charcoal-hover'}">${t(link.labelKey)}</a>`;
+            return `<a href="${localePath(link.path)}" data-link class="block px-4 py-3 rounded-lg text-[14px] font-medium transition-colors ${isActive ? 'bg-mango text-charcoal' : 'text-white/50 hover:text-white/80 hover:bg-blueberry'}">${t(link.labelKey)}</a>`;
           }).join('')}
         </div>
       </div>

@@ -35,7 +35,7 @@ export default async function AdminAudit(container) {
 
   const page = AdminLayout('/admin/audit', `
         <div class="mb-8">
-          <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('admin.auditLog')}</h1>
+          <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('admin.auditLog')}</h1>
           <p class="text-dim text-[15px] mt-1">${t('admin.auditSubtitle')}</p>
         </div>
 

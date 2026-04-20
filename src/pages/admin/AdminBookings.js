@@ -36,7 +36,7 @@ export default async function AdminBookings(container) {
   const page = AdminLayout('/admin/bookings', `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('token.management')}</h1>
+            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('token.management')}</h1>
             <p class="text-dim text-[15px] mt-1">${t('token.managementSubtitle')}</p>
           </div>
         </div>
@@ -45,7 +45,7 @@ export default async function AdminBookings(container) {
         <div class="card-solid rounded-2xl p-6 mb-6">
           <div class="flex gap-3">
             <input type="text" data-plate-input placeholder="${t('token.searchPlate')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 uppercase font-mono">
-            <button data-search-plate class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors">${t('account.searchBtn')}</button>
+            <button data-search-plate class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors">${t('account.searchBtn')}</button>
           </div>
         </div>
 

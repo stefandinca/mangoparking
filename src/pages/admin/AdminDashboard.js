@@ -52,7 +52,7 @@ export default async function AdminDashboard(container) {
 
   const page = AdminLayout('/admin', `
         <div class="mb-8">
-          <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('admin.dashboard')}</h1>
+          <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('admin.dashboard')}</h1>
           <p class="text-dim text-[15px] mt-1">${t('admin.dashboardSubtitle')}</p>
         </div>
 
@@ -97,7 +97,7 @@ export default async function AdminDashboard(container) {
         <div class="mb-8">
           <h2 class="font-heading font-bold text-lg mb-4 text-charcoal">${t('admin.quickActions')}</h2>
           <div class="flex flex-wrap gap-3">
-            <button class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="bookings">${t('admin.newBookingBtn')}</button>
+            <button class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="bookings">${t('admin.newBookingBtn')}</button>
             <button class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="bookings">${t('admin.checkInVehicle')}</button>
             <button class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="pricing">${t('admin.exportReport')}</button>
             <button class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-quick="shuttle">${t('admin.dispatchShuttle')}</button>

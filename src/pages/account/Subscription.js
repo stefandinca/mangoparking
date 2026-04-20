@@ -75,7 +75,7 @@ function renderActiveSub(sub, locale) {
 
     <!-- Actions -->
     <div class="flex flex-col sm:flex-row gap-3">
-      <button class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm" data-action="renew">${t('account.renewNow')}</button>
+      <button class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm" data-action="renew">${t('account.renewNow')}</button>
       <button class="bg-frost hover:bg-frost-deep text-dim font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors duration-200" data-action="pause">${t('account.pauseSub')}</button>
       <button class="text-danger hover:text-danger/80 font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors duration-200" data-action="cancel">${t('account.cancelSub')}</button>
     </div>
