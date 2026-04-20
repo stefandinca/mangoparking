@@ -4,19 +4,23 @@ import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getTokenPacks } from '../../services/tokenService.js';
+import { getLongTermRates } from '../../services/longTermService.js';
 
 export default async function Pricing(container) {
   const locale = getLocale();
 
   updateMeta({
-    title: locale === 'ro' ? 'Tarife Credite — Mango Parking' : 'Credits Pricing — Mango Parking',
+    title: locale === 'ro' ? 'Tarife — Mango Parking' : 'Pricing — Mango Parking',
     description: locale === 'ro'
-      ? 'Cumpără credite de parcare la Aeroportul Otopeni. Prețuri simple și transparente.'
-      : 'Buy parking credits at Otopeni Airport. Simple, transparent pricing.',
+      ? 'Tarife long-term pe tranșe și credite săptămânale la Aeroportul Otopeni.'
+      : 'Long-term tiered rates and weekday credits at Otopeni Airport.',
     lang: locale,
   });
 
-  const packs = await getTokenPacks().catch(() => []);
+  const [packs, rates] = await Promise.all([
+    getTokenPacks().catch(() => []),
+    getLongTermRates().catch(() => ({ tiers: [] })),
+  ]);
   const bestPack = packs.reduce((best, p) => (!best || p.quantity > best.quantity) ? p : best, null);
 
   const packCards = packs.map(p => {
@@ -28,7 +32,7 @@ export default async function Pricing(container) {
         <p class="font-heading font-bold text-4xl tracking-tight mb-1">${p.quantity}</p>
         <p class="text-dim text-[14px] mb-4">${t('credit.plural')}</p>
         <p class="font-mono text-2xl font-bold text-mango mb-4">${p.price} lei</p>
-        <a href="${localePath('/booking')}" class="inline-block w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('credit.buyTokens')}</a>
+        <a href="${localePath('/booking/credits')}" class="inline-block w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('credit.buyTokens')}</a>
       </div>
     `;
   }).join('');
@@ -38,10 +42,26 @@ export default async function Pricing(container) {
 
     <section class="pt-32 pb-20">
       <div class="max-w-5xl mx-auto px-6">
-        <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${t('credit.pricingTitle')}</h1>
-        <p class="text-dim text-[17px] mb-12 max-w-2xl">${t('credit.pricingSubtitle')}</p>
+        <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${locale === 'ro' ? 'Tarife' : 'Pricing'}</h1>
+        <p class="text-dim text-[17px] mb-12 max-w-2xl">${locale === 'ro' ? 'Două planuri. Alegi ce ți se potrivește.' : 'Two plans. Pick what fits.'}</p>
 
-        <!-- Pack cards -->
+        <!-- Long-term tiers -->
+        <h2 class="font-heading font-bold text-2xl text-blueberry-deep mb-2">${t('funnel.longTerm.title')}</h2>
+        <p class="text-dim text-[15px] mb-6">${t('longTerm.tierNote')}</p>
+        <div class="grid sm:grid-cols-3 gap-4 mb-12">
+          ${rates.tiers.map((tier, i) => `
+            <div class="card-solid rounded-2xl p-6 text-center">
+              <p class="text-[12px] font-mono uppercase text-dim tracking-wider mb-2">${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}</p>
+              <p class="font-heading font-bold text-4xl text-blueberry-deep">${tier.perDay}</p>
+              <p class="text-dim text-[13px] mt-1">${t('longTerm.perDay')}</p>
+              ${i === 0 ? `<a href="${localePath('/booking/long-term')}" class="inline-block w-full mt-5 bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-2.5 rounded-xl transition-colors">${t('funnel.longTerm.cta')} →</a>` : ''}
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Credit packs -->
+        <h2 class="font-heading font-bold text-2xl text-blueberry-deep mb-2">${t('funnel.commuter.title')}</h2>
+        <p class="text-dim text-[15px] mb-6">${t('credit.pricingSubtitle')}</p>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
           ${packCards}
         </div>
@@ -79,7 +99,7 @@ export default async function Pricing(container) {
 
         <!-- CTA -->
         <div class="text-center">
-          <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-8 py-4 rounded-2xl transition-colors shadow-md">${t('credit.buyTokens')}</a>
+          <a href="${localePath('/booking/credits')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-8 py-4 rounded-2xl transition-colors shadow-md">${t('credit.buyTokens')}</a>
         </div>
       </div>
     </section>

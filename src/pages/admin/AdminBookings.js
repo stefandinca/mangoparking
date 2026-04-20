@@ -2,6 +2,7 @@ import { html, delegate } from '../../utils/dom.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { lookupByPlate, useToken, checkOut, refundToken, getAllRecentTransactions } from '../../services/tokenService.js';
+import { getRecentBookings } from '../../services/longTermService.js';
 import { getDocument } from '../../firebase/db.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { showToast } from '../../components/core/Toast.js';
@@ -31,7 +32,27 @@ export default async function AdminBookings(container) {
   const locale = getLocale();
   updateMeta({ title: `${t('admin.bookings')} — Admin — Mango Parking`, description: t('admin.bookingsSubtitle') });
 
-  const recentTx = await getAllRecentTransactions(50).catch(() => []);
+  const [recentTx, recentBookings] = await Promise.all([
+    getAllRecentTransactions(50).catch(() => []),
+    getRecentBookings(20).catch(() => []),
+  ]);
+  const longTermBookings = recentBookings.filter(b => b.type === 'longTerm');
+
+  function renderBookingRow(b) {
+    const dateStr = b.startDate?.slice(0, 10) + ' → ' + b.endDate?.slice(0, 10);
+    const statusCls = b.status === 'active' ? 'bg-leaf/10 text-leaf'
+      : b.status === 'upcoming' ? 'bg-blue-100 text-blue-600'
+      : b.status === 'completed' ? 'bg-gray-100 text-gray-600'
+      : 'bg-danger/10 text-danger';
+    return `
+      <div class="flex items-center gap-4 px-6 py-4 text-[14px]">
+        <span class="font-mono text-[13px] text-dim w-44 shrink-0 truncate">${dateStr}</span>
+        <span class="font-mono font-semibold w-28 truncate">${b.licensePlate}</span>
+        <span class="text-dim w-20 text-right font-mono">${b.days}${t('common.day')}</span>
+        <span class="text-dim w-28 text-right font-mono">${b.totalPrice} lei</span>
+        <span class="text-[12px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${statusCls}">${b.status}</span>
+      </div>`;
+  }
 
   const page = AdminLayout('/admin/bookings', `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -52,7 +73,17 @@ export default async function AdminBookings(container) {
         <!-- Customer Result -->
         <div data-customer-result class="hidden mb-6"></div>
 
-        <!-- Recent Transactions -->
+        <!-- Long-term bookings -->
+        <div class="mb-8">
+          <h2 class="font-heading font-bold text-lg mb-4 text-charcoal">${t('bookingsAdmin.tabLongTerm')}</h2>
+          <div class="card-solid rounded-2xl overflow-hidden">
+            <div class="divide-y divide-frost-deep/60">
+              ${longTermBookings.length > 0 ? longTermBookings.map(renderBookingRow).join('') : `<div class="px-6 py-8 text-center text-dim">${t('bookingsAdmin.noBookings')}</div>`}
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent credit transactions -->
         <div>
           <h2 class="font-heading font-bold text-lg mb-4 text-charcoal">${t('credit.recentAll')}</h2>
           <div class="card-solid rounded-2xl overflow-hidden">

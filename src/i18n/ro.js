@@ -760,5 +760,79 @@ export default {
     edit: 'Editează',
     min: 'min',
     lei: 'lei',
+    day: 'zi',
+    days: 'zile',
+  },
+
+  // Funnel picker (shown at /booking)
+  funnel: {
+    pageTitle: 'Alege tipul de parcare',
+    pageSubtitle: 'Două planuri. Plătești pentru ce ai nevoie.',
+    longTerm: {
+      title: 'Parcare Long-term',
+      tagline: 'Călătorești și lași mașina la noi',
+      description: 'Pentru vacanțe și călătorii de lungă durată. Plătești un tarif fix pe zi. Acces 24/7.',
+      features: ['Acces 24/7', 'Tarif descrescător cu numărul de zile', 'Shuttle gratuit la aeroport', 'Rezervare pe dată specifică'],
+      cta: 'Rezervă Long-term',
+    },
+    commuter: {
+      title: 'Credite Săptămânale',
+      tagline: 'Parchezi zilnic, pleci în aceeași zi',
+      description: 'Pentru navetiști. Cumperi un pachet de credite — 1 credit = 1 zi de parcare (Luni–Vineri, 06:00–20:00).',
+      features: ['Luni–Vineri, 06:00–20:00', 'Credite flexibile — folosești oricând', 'Nu expiră', 'Shuttle gratuit'],
+      cta: 'Cumpără Credite',
+    },
+  },
+
+  // Long-term booking page
+  longTerm: {
+    pageTitle: 'Rezervare Long-term',
+    pageSubtitle: 'Alege perioada, plătești pe loc. Acces 24/7.',
+    startDate: 'Data sosire',
+    endDate: 'Data plecare',
+    days: 'zile',
+    oneDay: '1 zi',
+    perDay: 'lei / zi',
+    totalLabel: 'Total de plată',
+    vehicleInfo: 'Informații vehicul',
+    contactInfo: 'Informații contact',
+    payNow: 'Plătește cu Netopia',
+    processing: 'Se procesează plata...',
+    confirmed: 'Rezervare Confirmată!',
+    confirmMessage: 'Am trimis detaliile pe email. Ne vedem la sosire.',
+    invalidDates: 'Alege o perioadă validă (dată plecare după dată sosire).',
+    tierNote: 'Tarif automat, cu descont pentru șederi mai lungi.',
+    viewBooking: 'Vezi detalii',
+  },
+
+  // Admin: rates + booking records
+  rates: {
+    pageTitle: 'Tarife & Politici',
+    pageSubtitle: 'Tarife long-term pe tranșe și penalități commuter.',
+    longTermRates: 'Tarife Long-term',
+    longTermRatesHelp: 'Fiecare tranșă se aplică în funcție de numărul de zile al rezervării.',
+    minDays: 'De la (zile)',
+    maxDays: 'Până la (zile)',
+    maxDaysUnlimited: '∞',
+    perDay: 'Lei / zi',
+    addTier: '+ Adaugă tranșă',
+    removeTier: 'Șterge',
+    commuterPolicy: 'Politică Commuter',
+    latePickupRate: 'Tarif întârziere (lei / zi suplimentară)',
+    latePickupHelp: 'Se aplică atunci când un client commuter nu își ridică mașina în intervalul 06:00–20:00 Luni–Vineri acoperit de un credit.',
+    saved: 'Setările au fost salvate.',
+    saveChanges: 'Salvează',
+  },
+
+  // Admin: bookings (unified, replaces old token-only view)
+  bookingsAdmin: {
+    pageTitle: 'Rezervări & Verificări',
+    pageSubtitle: 'Caută clienți, folosește credite, vezi rezervări long-term.',
+    tabAll: 'Toate',
+    tabLongTerm: 'Long-term',
+    tabCredit: 'Credite',
+    noBookings: 'Nicio rezervare activă.',
+    viewDetails: 'Vezi detalii',
+    lateFee: 'Penalitate',
   },
 };

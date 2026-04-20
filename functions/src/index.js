@@ -72,23 +72,34 @@ async function creditTokens({ packId, quantity, customerData }) {
 }
 
 // ── POST /createPayment ──────────────────────────────────────────────────
-// Body: { packId, quantity, customerData: { customerId?, licensePlate, name, email, phone } }
+// Body (credits funnel):   { orderType: 'credits', packId, quantity, customerData }
+// Body (long-term funnel): { orderType: 'longTerm', startDate, endDate, days,
+//                             totalPrice, customerData }
+// customerData: { customerId?, licensePlate, name, email, phone }
 // Returns: { redirectUrl, orderId }
 export const createPayment = onRequest(
   { cors: true, secrets: [NETOPIA_API_KEY] },
   async (req, res) => {
     if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
-    const { packId, quantity, customerData } = req.body || {};
-    if (!packId || !quantity || !customerData?.licensePlate) {
-      return res.status(400).json({ error: 'Missing packId, quantity, or licensePlate' });
+    const body = req.body || {};
+    const orderType = body.orderType || 'credits';
+    if (!body.customerData?.licensePlate) {
+      return res.status(400).json({ error: 'Missing licensePlate' });
+    }
+    if (orderType === 'credits' && (!body.packId || !body.quantity)) {
+      return res.status(400).json({ error: 'credits order requires packId + quantity' });
+    }
+    if (orderType === 'longTerm' && (!body.days || !body.totalPrice)) {
+      return res.status(400).json({ error: 'longTerm order requires days + totalPrice' });
     }
 
     const orderId = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // Persist pending order so the callback can look it up by orderId
     await getFirestore().collection('pendingOrders').doc(orderId).set({
-      packId, quantity, customerData,
+      orderType,
+      ...body,
       status: 'pending',
       createdAt: new Date().toISOString(),
     });
@@ -125,6 +136,34 @@ export const netopiaCallback = onRequest(
     if (order.status === 'paid') return res.status(200).send('Already processed');
 
     if (status === 'confirmed' || status === 'paid') {
+      if (order.orderType === 'longTerm') {
+        // Create a bookings/{id} doc mirroring the client's createLongTermBooking
+        const bookingRef = await db.collection('bookings').add({
+          type: 'longTerm',
+          customerId: order.customerData.customerId || null,
+          licensePlate: String(order.customerData.licensePlate || '').toUpperCase().replace(/[\s-]/g, ''),
+          startDate: order.startDate,
+          endDate: order.endDate,
+          days: order.days,
+          basePrice: order.totalPrice,
+          latePrice: 0,
+          totalPrice: order.totalPrice,
+          status: 'upcoming',
+          contact: {
+            name: order.customerData.name || '',
+            email: order.customerData.email || '',
+            phone: order.customerData.phone || '',
+          },
+          paymentId: orderId,
+          createdAt: new Date().toISOString(),
+          completedAt: null,
+          source: 'web',
+        });
+        await orderRef.update({ status: 'paid', bookingId: bookingRef.id, paidAt: new Date().toISOString() });
+        return res.status(200).send('OK');
+      }
+
+      // default: credits funnel
       const balanceDocId = await creditTokens({
         packId: order.packId,
         quantity: order.quantity,

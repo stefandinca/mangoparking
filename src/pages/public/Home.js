@@ -95,8 +95,8 @@ export default function Home(container) {
             <p class="text-[17px] text-dim leading-relaxed max-w-md mb-10">${t('hero.subtitle')}</p>
 
             <div class="flex flex-col sm:flex-row gap-3 mb-14">
-              <a href="${localePath('/booking')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('hero.cta1')}</a>
-              <a href="${localePath('/pricing')}" class="glass font-semibold text-[16px] px-8 py-4 rounded-2xl text-center hover:bg-white transition-all duration-200 shadow-sm">${t('hero.cta2')}</a>
+              <a href="${localePath('/booking/long-term')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('funnel.longTerm.cta')}</a>
+              <a href="${localePath('/booking/credits')}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('funnel.commuter.cta')}</a>
             </div>
 
             <div class="flex flex-wrap items-center gap-x-6 gap-y-3">

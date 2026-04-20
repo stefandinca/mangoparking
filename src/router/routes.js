@@ -11,6 +11,16 @@ export const routes = [
     guards: [],
   },
   {
+    path: '/booking/credits',
+    component: () => import('../pages/public/BookingCredits.js'),
+    guards: [],
+  },
+  {
+    path: '/booking/long-term',
+    component: () => import('../pages/public/BookingLongTerm.js'),
+    guards: [],
+  },
+  {
     path: '/pricing',
     component: () => import('../pages/public/Pricing.js'),
     guards: [],
@@ -124,6 +134,11 @@ export const routes = [
   {
     path: '/admin/pricing',
     component: () => import('../pages/admin/AdminPricing.js'),
+    guards: ['auth', 'admin'],
+  },
+  {
+    path: '/admin/rates',
+    component: () => import('../pages/admin/AdminRates.js'),
     guards: ['auth', 'admin'],
   },
   {

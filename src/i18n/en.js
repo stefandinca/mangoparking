@@ -759,5 +759,79 @@ export default {
     edit: 'Edit',
     min: 'min',
     lei: 'lei',
+    day: 'day',
+    days: 'days',
+  },
+
+  // Funnel picker (shown at /booking)
+  funnel: {
+    pageTitle: 'Choose your parking type',
+    pageSubtitle: 'Two plans. You only pay for what you need.',
+    longTerm: {
+      title: 'Long-term Parking',
+      tagline: 'Travelling and leaving your car with us',
+      description: 'For trips and vacations. Flat daily rate, fewer RON the longer you stay. 24/7 access.',
+      features: ['24/7 access', 'Cheaper rate for longer stays', 'Free airport shuttle', 'Reserve specific dates'],
+      cta: 'Book Long-term',
+    },
+    commuter: {
+      title: 'Weekday Credits',
+      tagline: 'You park during the day and leave same-day',
+      description: 'For commuters. Buy a credit pack — 1 credit = 1 day of parking (Mon–Fri, 6 AM – 8 PM).',
+      features: ['Mon–Fri, 6 AM – 8 PM', 'Flexible credits — use anytime', 'Never expire', 'Free shuttle'],
+      cta: 'Buy Credits',
+    },
+  },
+
+  // Long-term booking page
+  longTerm: {
+    pageTitle: 'Long-term Booking',
+    pageSubtitle: 'Pick your dates and pay upfront. 24/7 access.',
+    startDate: 'Drop-off date',
+    endDate: 'Pick-up date',
+    days: 'days',
+    oneDay: '1 day',
+    perDay: 'lei / day',
+    totalLabel: 'Total',
+    vehicleInfo: 'Vehicle info',
+    contactInfo: 'Contact info',
+    payNow: 'Pay with Netopia',
+    processing: 'Processing payment...',
+    confirmed: 'Booking Confirmed!',
+    confirmMessage: 'We\'ve emailed the details. See you on arrival.',
+    invalidDates: 'Pick a valid range (pick-up after drop-off).',
+    tierNote: 'Auto-tiered pricing — cheaper per day the longer you stay.',
+    viewBooking: 'View details',
+  },
+
+  // Admin: rates + booking records
+  rates: {
+    pageTitle: 'Rates & Policies',
+    pageSubtitle: 'Long-term tiered rates and commuter late-pickup fee.',
+    longTermRates: 'Long-term Rates',
+    longTermRatesHelp: 'Each tier applies based on the booking\'s day count.',
+    minDays: 'From (days)',
+    maxDays: 'To (days)',
+    maxDaysUnlimited: '∞',
+    perDay: 'Lei / day',
+    addTier: '+ Add tier',
+    removeTier: 'Remove',
+    commuterPolicy: 'Commuter Policy',
+    latePickupRate: 'Late-pickup rate (lei / extra day)',
+    latePickupHelp: 'Charged when a commuter does not pick up their car within the 06:00–20:00 Mon–Fri window covered by a credit.',
+    saved: 'Settings saved.',
+    saveChanges: 'Save',
+  },
+
+  // Admin: bookings (unified, replaces old token-only view)
+  bookingsAdmin: {
+    pageTitle: 'Bookings & Check-ins',
+    pageSubtitle: 'Look up customers, use credits, view long-term bookings.',
+    tabAll: 'All',
+    tabLongTerm: 'Long-term',
+    tabCredit: 'Credits',
+    noBookings: 'No active bookings.',
+    viewDetails: 'View details',
+    lateFee: 'Late fee',
   },
 };
