@@ -1,29 +1,48 @@
-The AI Expert Assembly Prompt
-Role: Act as a specialized Product Development Team. Your goal is to build a high-performance parking and shuttle service platform for daily travelers.
+# Mango Parking — Claude Code Guide
 
-The Tech Stack:
+## Project Overview
+Daily Travel Token parking for Henri Coandă Airport (Otopeni). Customers buy token packs online, staff deducts 1 token per parking day via plate lookup. RO default + EN i18n. See [Brief.md](Brief.md) for full MVP spec.
 
-Frontend: Vite, HTML5, Tailwind CSS.
+## Tech Stack
+- **Frontend**: Vanilla JS SPA, Vite 7, TailwindCSS 4 (PostCSS), no framework
+- **Backend**: Firebase (Auth: Google + Email, Firestore, Storage, Hosting)
+- **Payments**: Netopia (currently stubbed — awaiting merchant creds)
+- **Deployment**: Plesk (mangoparking.ro) — upload `dist/`
+- **Fonts / Colors**: Space Grotesk + DM Sans + JetBrains Mono / #F28C28 #2D4A47 #34D399 #F0F2F5
 
-Backend/BaaS: Firebase (Firestore, Authentication, Cloud Functions).
+## Essential Commands
+- `npm run dev` — Vite dev server (port 3000, auto-opens)
+- `npm run build` — production build to `dist/`
+- `npm run preview` — preview built output
+- `firebase deploy --only firestore:rules,firestore:indexes --project mango-parking`
 
-Payments: Netopia Integration.
+## Directory Map
+```
+src/main.js                           — entry, seed hook, router init
+src/router/{index,routes,guards}.js   — History API + locale prefix + guards
+src/i18n/{index,ro,en}.js             — t(), localePath(), 250+ keys
+src/firebase/{config,auth,db,storage}.js
+src/components/core/                  — Navbar, Footer, Toast, Modal, Loader, FormField
+src/components/{widgets,account,admin}/   — icons.js, AccountLayout, AdminLayout
+src/pages/{public,auth,account,admin}/    — default export fn(container)
+src/services/                         — tokenService (core), capacity, shuttle, audit, contact
+                                        (hidden/preserved: booking, subscription, pricing, loyalty)
+src/utils/{dom,date,validators,seo,constants}.js
+firestore.rules / firestore.indexes.json / firebase.json
+```
 
-The Team Composition:
-Please adopt the following personas and provide a brief "stand-up" introduction for each:
+## Conventions
+- Pages export `default function(container)` — receive DOM node, mount content, optionally return cleanup fn
+- Components: factory functions returning DOM via `html` tagged template (src/utils/dom.js)
+- Route guards: `['auth']` or `['auth','admin']` per route
+- Firestore: small collections, client-side filter/sort
+- Token balance IDs: `{uid}` for logged-in, `plate_{NORMALIZED_PLATE}` for guests
+- Never commit secrets; `.env.local` holds Firebase config
 
-Lead Business Strategist: Focuses on the "Daily Traveler" persona. Handles pricing logic (early bird, subscription models), shuttle scheduling efficiency, and MVP scope.
+## Agent Orchestration
+When given a task, read [.claude/orchestrator.md](.claude/orchestrator.md) first — it routes work to the right specialist agent(s) in [.claude/agents/](.claude/agents/) without the user naming anyone. After each change: test, fix regressions, verify, then create a clean commit.
 
-Senior UI/UX Designer: Expert in Tailwind CSS utility classes. Focuses on a "mobile-first" experience for travelers on the move. Responsible for the user journey from "Search Parking" to "Board Shuttle."
-
-Lead Firebase Developer: Expert in Firestore NoSQL architecture, Security Rules, and Vite optimization. Handles the integration of payment processing and real-time shuttle tracking.
-
-The Mission:
-
-Architecture: Propose a Firestore schema for bookings, shuttles, and parking_spots.
-
-UI Framework: Outline a Tailwind-based component library for the dashboard.
-
-Workflow: Define the logic for how a user checks into a parking spot and triggers a shuttle notification.
-
-Constraint: All code must be optimized for the Vite build tool. Maintain a professional, collaborative tone.
+## Reference Docs
+- [Brief.md](Brief.md) — MVP scope, routes, Firestore collections, flows
+- [implementation.md](implementation.md) — historical implementation notes
+- [firestore.rules](firestore.rules) — security model source of truth
