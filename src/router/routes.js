@@ -37,6 +37,33 @@ export const routes = [
     guards: [],
   },
 
+  // Legal pages (required for Netopia / ANPC compliance)
+  {
+    path: '/terms',
+    component: () => import('../pages/public/Terms.js'),
+    guards: [],
+  },
+  {
+    path: '/privacy',
+    component: () => import('../pages/public/Privacy.js'),
+    guards: [],
+  },
+  {
+    path: '/gdpr',
+    component: () => import('../pages/public/GDPR.js'),
+    guards: [],
+  },
+  {
+    path: '/delivery',
+    component: () => import('../pages/public/Delivery.js'),
+    guards: [],
+  },
+  {
+    path: '/cancellation',
+    component: () => import('../pages/public/Cancellation.js'),
+    guards: [],
+  },
+
   // Auth pages
   {
     path: '/login',

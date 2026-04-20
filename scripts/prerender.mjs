@@ -16,7 +16,9 @@ const HOST = `http://localhost:${PORT}`;
 
 const ROUTES = [
   '/', '/pricing', '/shuttle', '/about', '/contact',
+  '/terms', '/privacy', '/gdpr', '/delivery', '/cancellation',
   '/en', '/en/pricing', '/en/shuttle', '/en/about', '/en/contact',
+  '/en/terms', '/en/privacy', '/en/gdpr', '/en/delivery', '/en/cancellation',
 ];
 
 function waitForServer(url, timeoutMs = 15000) {
