@@ -22,10 +22,10 @@ export default function Home(container) {
   // SEO
   updateMeta({
     title: locale === 'ro'
-      ? 'Mango Parking — Parcare Aeroport Otopeni | Credite Parcare Zilnică & Shuttle'
+      ? 'Mango Parking — Parcare Aeroport Otopeni | Credite Parcare Zilnică & Microbuz'
       : 'Mango Parking — Otopeni Airport Parking | Daily Parking Credits & Shuttle',
     description: locale === 'ro'
-      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără credite, parchează flexibil. Shuttle gratuită, securitate 24/7.'
+      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără credite, parchează flexibil. Microbuz gratuit, securitate 24/7.'
       : 'Secure parking near Henri Coandă Otopeni Airport. Buy credits, park flexibly. Free shuttle, 24/7 security.',
     lang: locale,
     hreflang: { ro: SITE_URL + '/', en: SITE_URL + '/en' },
@@ -59,9 +59,9 @@ export default function Home(container) {
   // Review texts (from locale)
   const reviewTexts = locale === 'ro'
     ? [
-        '"Am lăsat mașina 10 zile. Naveta a fost mereu la timp. Mașina era impecabilă la întoarcere. Cea mai bună parcare de la Otopeni."',
-        '"Sistemul cu credite e genial. Cumpăr un pachet, parchez oricând. Naveta la aeroport e mereu la timp."',
-        '"Super profesioniști. Am rezervat la miezul nopții, naveta era acolo la 5 dimineața. Voi folosi la fiecare călătorie."',
+        '"Am lăsat mașina 10 zile. Microbuzul a fost mereu la timp. Mașina era impecabilă la întoarcere. Cea mai bună parcare de la Otopeni."',
+        '"Sistemul cu credite e genial. Cumpăr un pachet, parchez oricând. Microbuzul la aeroport e mereu la timp."',
+        '"Super profesioniști. Am rezervat la miezul nopții, microbuzul era acolo la 5 dimineața. Voi folosi la fiecare călătorie."',
       ]
     : [
         '"Left my car for 10 days. Shuttle was on time every single time. Car was spotless. The best airport parking experience."',

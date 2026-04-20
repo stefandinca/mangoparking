@@ -13,7 +13,7 @@ export default function Commuter(container) {
   updateMeta({
     title: locale === 'ro' ? 'Abonament Navetiști — Mango Parking' : 'Commuter Plan — Mango Parking',
     description: locale === 'ro'
-      ? 'Singura parcare cu abonament pentru navetiști la Otopeni. 500 lei/lună, shuttle sincronizată cu trenurile.'
+      ? 'Singura parcare cu abonament pentru navetiști la Otopeni. 500 lei/lună, microbuz sincronizat cu trenurile.'
       : 'The only commuter parking subscription at Otopeni. 500 lei/month, shuttle synced with trains.',
     lang: locale,
   });

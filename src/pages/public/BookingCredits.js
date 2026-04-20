@@ -14,7 +14,7 @@ export default async function Booking(container) {
   updateMeta({
     title: locale === 'ro' ? 'Cumpără Credite — Mango Parking' : 'Buy Credits — Mango Parking',
     description: locale === 'ro'
-      ? 'Cumpără credite de parcare la Aeroportul Otopeni. Plată online, shuttle gratuită.'
+      ? 'Cumpără credite de parcare la Aeroportul Otopeni. Plată online, microbuz gratuit.'
       : 'Buy parking credits at Otopeni Airport. Pay online, free shuttle included.',
     lang: locale,
   });
