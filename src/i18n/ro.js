@@ -198,7 +198,6 @@ export default {
 
   // Legal pages — shared
   legal: {
-    draftBanner: 'Conținut provizoriu. Versiunea finală va fi revizuită de consilier juridic înainte de publicare.',
     lastUpdated: 'Ultima actualizare',
     backHome: '← Înapoi la pagina principală',
     contactForQuestions: 'Pentru întrebări scrie-ne la',

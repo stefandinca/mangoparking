@@ -198,7 +198,6 @@ export default {
 
   // Legal pages — shared
   legal: {
-    draftBanner: 'Draft content. Final version will be reviewed by legal counsel before publication.',
     lastUpdated: 'Last updated',
     backHome: '← Back to home',
     contactForQuestions: 'For questions, write to',

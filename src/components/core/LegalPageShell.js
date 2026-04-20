@@ -37,10 +37,6 @@ export function renderLegalPage(container, { title, intro, sections, lastUpdated
       <div class="max-w-3xl mx-auto px-6">
         <a href="${localePath('/')}" class="text-dim hover:text-blueberry text-[14px] inline-block mb-6">${t('legal.backHome')}</a>
 
-        <div class="bg-mango/15 border-2 border-mango rounded-2xl p-4 mb-8 text-[14px] text-charcoal">
-          <strong>⚠ ${t('legal.draftBanner')}</strong>
-        </div>
-
         <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${title}</h1>
         <p class="text-dim text-[13px] mb-10">${t('legal.lastUpdated')}: ${lastUpdatedISO}</p>
 
