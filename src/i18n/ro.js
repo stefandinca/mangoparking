@@ -769,11 +769,11 @@ export default {
     pageTitle: 'Alege tipul de parcare',
     pageSubtitle: 'Două planuri. Plătești pentru ce ai nevoie.',
     longTerm: {
-      title: 'Parcare Long-term',
+      title: 'Parcare pe termen lung',
       tagline: 'Călătorești și lași mașina la noi',
       description: 'Pentru vacanțe și călătorii de lungă durată. Plătești un tarif fix pe zi. Acces 24/7.',
       features: ['Acces 24/7', 'Tarif descrescător cu numărul de zile', 'Shuttle gratuit la aeroport', 'Rezervare pe dată specifică'],
-      cta: 'Rezervă Long-term',
+      cta: 'Rezervă pe termen lung',
     },
     commuter: {
       title: 'Credite Săptămânale',
@@ -786,7 +786,7 @@ export default {
 
   // Long-term booking page
   longTerm: {
-    pageTitle: 'Rezervare Long-term',
+    pageTitle: 'Rezervare pe termen lung',
     pageSubtitle: 'Alege perioada, plătești pe loc. Acces 24/7.',
     startDate: 'Data sosire',
     endDate: 'Data plecare',
@@ -808,8 +808,8 @@ export default {
   // Admin: rates + booking records
   rates: {
     pageTitle: 'Tarife & Politici',
-    pageSubtitle: 'Tarife long-term pe tranșe și penalități commuter.',
-    longTermRates: 'Tarife Long-term',
+    pageSubtitle: 'Tarife pe termen lung pe tranșe și penalități commuter.',
+    longTermRates: 'Tarife pe termen lung',
     longTermRatesHelp: 'Fiecare tranșă se aplică în funcție de numărul de zile al rezervării.',
     minDays: 'De la (zile)',
     maxDays: 'Până la (zile)',
@@ -827,9 +827,9 @@ export default {
   // Admin: bookings (unified, replaces old token-only view)
   bookingsAdmin: {
     pageTitle: 'Rezervări & Verificări',
-    pageSubtitle: 'Caută clienți, folosește credite, vezi rezervări long-term.',
+    pageSubtitle: 'Caută clienți, folosește credite, vezi rezervări pe termen lung.',
     tabAll: 'Toate',
-    tabLongTerm: 'Long-term',
+    tabLongTerm: 'Pe termen lung',
     tabCredit: 'Credite',
     noBookings: 'Nicio rezervare activă.',
     viewDetails: 'Vezi detalii',
