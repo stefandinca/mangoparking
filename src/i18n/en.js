@@ -775,7 +775,7 @@ export default {
       cta: 'Book Long-term',
     },
     commuter: {
-      title: 'Weekday Credits',
+      title: 'Daily Credits',
       tagline: 'You park during the day and leave same-day',
       description: 'For commuters. Buy a credit pack — 1 credit = 1 day of parking (Mon–Fri, 6 AM – 8 PM).',
       features: ['Mon–Fri, 6 AM – 8 PM', 'Flexible credits — use anytime', 'Never expire', 'Free shuttle'],

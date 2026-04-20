@@ -776,7 +776,7 @@ export default {
       cta: 'Rezervă pe termen lung',
     },
     commuter: {
-      title: 'Credite Săptămânale',
+      title: 'Credite zilnice',
       tagline: 'Parchezi zilnic, pleci în aceeași zi',
       description: 'Pentru navetiști. Cumperi un pachet de credite — 1 credit = 1 zi de parcare (Luni–Vineri, 06:00–20:00).',
       features: ['Luni–Vineri, 06:00–20:00', 'Credite flexibile — folosești oricând', 'Nu expiră', 'Shuttle gratuit'],
