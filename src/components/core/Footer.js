@@ -83,17 +83,15 @@ export function Footer() {
             <p class="text-[12px] text-dim mt-1">${t('footer.netopia')}</p>
           </div>
 
-          <!-- ANPC (mandatory consumer protection notices) -->
+          <!-- ANPC (mandatory consumer protection notices) — official banners -->
           <div>
-            <p class="text-[11px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-3">${t('footer.anpc')}</p>
-            <div class="flex items-center gap-4 flex-wrap">
-              <a href="${ANPC_SAL_URL}" target="_blank" rel="noopener noreferrer" title="${t('footer.anpcSal')}" class="inline-flex items-center gap-2 text-[12px] text-dim hover:text-blueberry transition-colors">
-                <img src="/images/anpc-sal.png" alt="" class="h-8 w-auto" onerror="this.style.display='none'" />
-                <span>${t('footer.anpcSal')}</span>
+            <p class="text-[11px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-2">${t('footer.anpc')}</p>
+            <div class="flex items-center gap-3 flex-wrap">
+              <a href="${ANPC_SAL_URL}" target="_blank" rel="noopener noreferrer" title="${t('footer.anpcSal')}" class="inline-block hover:opacity-80 transition-opacity">
+                <img src="/images/sal.svg" alt="${t('footer.anpcSal')}" class="h-14 w-auto" />
               </a>
-              <a href="${ANPC_SOL_URL}" target="_blank" rel="noopener noreferrer" title="${t('footer.anpcSol')}" class="inline-flex items-center gap-2 text-[12px] text-dim hover:text-blueberry transition-colors">
-                <img src="/images/anpc-sol.png" alt="" class="h-8 w-auto" onerror="this.style.display='none'" />
-                <span>${t('footer.anpcSol')}</span>
+              <a href="${ANPC_SOL_URL}" target="_blank" rel="noopener noreferrer" title="${t('footer.anpcSol')}" class="inline-block hover:opacity-80 transition-opacity">
+                <img src="/images/sol.svg" alt="${t('footer.anpcSol')}" class="h-14 w-auto" />
               </a>
             </div>
           </div>

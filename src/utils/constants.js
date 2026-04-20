@@ -21,7 +21,7 @@ export const REG_COM = 'J04/79/2014';
 export const COMPANY_ADDRESS = 'Str. Castanilor, Nr.1, Sc.B, Ap.13, Bacău, Jud. Bacău';
 export const DPO_EMAIL = 'gdpr@mangoparking.ro'; // TODO(launch): dedicated DPO mailbox
 export const ANPC_SAL_URL = 'https://anpc.ro/ce-este-sal/';
-export const ANPC_SOL_URL = 'https://ec.europa.eu/consumers/odr/';
+export const ANPC_SOL_URL = 'https://ec.europa.eu/consumers/odr';
 // Address-based embed — works without an API key and auto-tracks the address string.
 export const GOOGLE_MAPS_EMBED = 'https://maps.google.com/maps?q=' + encodeURIComponent('Strada Radarului 1, Corbeanca, Ilfov') + '&output=embed';
 
