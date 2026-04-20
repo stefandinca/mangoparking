@@ -5,18 +5,19 @@ export const SITE_URL = 'https://mangoparking.ro';
 export const LOGO_MASCOT = '/images/logo.png';
 export const LOGO_FULL = '/images/logo-full.jpeg';
 
-// ── Contact (public) ──
-export const CONTACT_PHONE = '+40 721 000 000';
-export const CONTACT_EMAIL = 'contact@mangoparking.ro';
-export const CONTACT_ADDRESS = 'Str. Exemplu 42, Otopeni, Ilfov';
+// ── Contact (public, operating location — Otopeni parking) ──
+export const CONTACT_PHONE = '+40 721 000 000'; // TODO(launch): publish real support line
+export const CONTACT_EMAIL = 'contact@mangoparking.ro'; // TODO(launch): confirm MX + mailbox is live
+export const CONTACT_ADDRESS = 'Str. Exemplu 42, Otopeni, Ilfov'; // TODO(launch): real street/number of the parking lot
 
-// ── Legal identifiers (required by Netopia / ANPC — fill with real values before launch) ──
-// Source of truth for Terms/Privacy/Delivery/Cancellation pages and Footer.
-export const COMPANY_LEGAL_NAME = 'Mango Parking SRL'; // TODO(legal): confirm exact trade name
-export const CUI = 'RO00000000'; // TODO(legal): fiscal code (CIF/CUI)
-export const REG_COM = 'J23/0000/2026'; // TODO(legal): registration number
-export const COMPANY_ADDRESS = 'Str. Exemplu 42, Otopeni, jud. Ilfov, România'; // TODO(legal): confirm full registered address
-export const DPO_EMAIL = 'gdpr@mangoparking.ro'; // TODO(legal): dedicated DPO mailbox
+// ── Legal identifiers (displayed by Netopia/ANPC requirement) ──
+// Operator of record — source of truth for Terms/Privacy/GDPR/Delivery/Cancellation and Footer.
+// Registered address is in Bacău; the parking itself operates in Otopeni (see CONTACT_ADDRESS).
+export const COMPANY_LEGAL_NAME = 'TRIO SERVICES COMPACT SRL';
+export const CUI = 'RO32705476';
+export const REG_COM = 'J04/79/2014';
+export const COMPANY_ADDRESS = 'Str. Castanilor, Nr.1, Sc.B, Ap.13, Bacău, Jud. Bacău';
+export const DPO_EMAIL = 'gdpr@mangoparking.ro'; // TODO(launch): dedicated DPO mailbox
 export const ANPC_SAL_URL = 'https://anpc.ro/ce-este-sal/';
 export const ANPC_SOL_URL = 'https://ec.europa.eu/consumers/odr/';
 export const GOOGLE_MAPS_EMBED = 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2843.8!2d26.085!3d44.572!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zNDTCsDM0JzE5LjIiTiAyNsKwMDUnMDYuMCJF!5e0!3m2!1sen!2sro!4v1';

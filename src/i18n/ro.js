@@ -367,10 +367,13 @@ export default {
     info: 'Informații Contact',
     phone: 'Telefon',
     emailLabel: 'Email',
-    address: 'Adresă',
+    address: 'Adresa parcării',
     hoursLabel: 'Program',
     directions: 'Indicații',
     getDirections: 'Deschide în Google Maps',
+    operator: 'Operator',
+    operatorNote: 'Adresa de mai sus este adresa parcării (Otopeni). Adresa legală a firmei este cea înregistrată la Registrul Comerțului.',
+    registeredAddress: 'Sediu social',
   },
 
   // Auth

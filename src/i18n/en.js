@@ -366,10 +366,13 @@ export default {
     info: 'Contact Information',
     phone: 'Phone',
     emailLabel: 'Email',
-    address: 'Address',
+    address: 'Parking address',
     hoursLabel: 'Hours',
     directions: 'Directions',
     getDirections: 'Open in Google Maps',
+    operator: 'Operator',
+    operatorNote: 'The address above is the parking location (Otopeni). The company\'s legal address is the one registered with the Trade Register.',
+    registeredAddress: 'Registered office',
   },
 
   // Auth

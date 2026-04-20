@@ -6,7 +6,10 @@ import { updateMeta } from '../../utils/seo.js';
 import { submitContactMessage } from '../../services/contactService.js';
 import { isValidEmail, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
-import { CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_MAPS_EMBED } from '../../utils/constants.js';
+import {
+  CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_MAPS_EMBED,
+  COMPANY_LEGAL_NAME, CUI, REG_COM, COMPANY_ADDRESS,
+} from '../../utils/constants.js';
 
 export default function Contact(container) {
   const locale = getLocale();
@@ -85,6 +88,32 @@ export default function Contact(container) {
               <iframe src="${GOOGLE_MAPS_EMBED}" width="100%" height="250" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
               <div class="p-4 text-center">
                 <a href="https://www.google.com/maps/dir/?api=1&destination=44.572,26.085" target="_blank" rel="noopener" class="text-mango hover:text-mango-hover text-[14px] font-semibold transition-colors">${t('contact.getDirections')} →</a>
+              </div>
+            </div>
+
+            <!-- Operator / Company details (Netopia + ANPC requirement) -->
+            <div class="card-solid rounded-3xl p-8">
+              <h3 class="font-heading font-bold text-lg mb-6">${t('contact.operator')}</h3>
+              <div class="space-y-4">
+                <div>
+                  <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('footer.legalName')}</p>
+                  <p class="text-[16px] font-medium">${COMPANY_LEGAL_NAME}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('footer.cui')}</p>
+                    <p class="text-[15px] font-medium font-mono">${CUI}</p>
+                  </div>
+                  <div>
+                    <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('footer.regCom')}</p>
+                    <p class="text-[15px] font-medium font-mono">${REG_COM}</p>
+                  </div>
+                </div>
+                <div>
+                  <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('contact.registeredAddress')}</p>
+                  <p class="text-[15px]">${COMPANY_ADDRESS}</p>
+                </div>
+                <p class="text-[13px] text-dim pt-2 border-t border-frost-deep">${t('contact.operatorNote')}</p>
               </div>
             </div>
           </div>
