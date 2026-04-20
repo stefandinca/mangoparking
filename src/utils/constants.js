@@ -8,7 +8,7 @@ export const LOGO_FULL = '/images/logo-full.jpeg';
 // ── Contact (public, operating location — the parking lot itself) ──
 // Corbeanca is adjacent to Otopeni (~5 km from Henri Coandă Airport); site copy
 // still references "Aeroportul Otopeni" as the destination served via shuttle.
-export const CONTACT_PHONE = '+40 721 000 000'; // TODO(launch): publish real support line
+export const CONTACT_PHONE = '+40 740 075 380';
 export const CONTACT_EMAIL = 'stefan.florea@triorentacar.ro';
 export const CONTACT_ADDRESS = 'Strada Radarului nr. 1, Corbeanca, jud. Ilfov';
 
