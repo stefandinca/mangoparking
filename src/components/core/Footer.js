@@ -10,11 +10,12 @@ export function Footer() {
       <div class="max-w-7xl mx-auto px-6">
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 md:gap-10 mb-16">
           <div class="col-span-1">
-            <div class="flex items-center gap-2.5 mb-4">
-              <div class="w-7 h-7 rounded-lg bg-mango flex items-center justify-center">
-                <span class="text-white font-heading font-bold text-[12px]">M</span>
+            <div class="flex items-center gap-2.5 mb-3">
+              <img src="/images/logo.png" alt="Mango Parking" class="w-10 h-10 object-contain" />
+              <div>
+                <div class="font-heading font-bold text-[16px] leading-none">Mango Parking</div>
+                <div class="text-[11px] text-dim mt-1">— safe &amp; smart parking —</div>
               </div>
-              <span class="font-heading font-bold text-[15px]">Mango Parking</span>
             </div>
             <p class="text-dim text-[14px] leading-relaxed">${t('footer.description')}</p>
           </div>

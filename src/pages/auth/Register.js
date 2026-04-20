@@ -33,14 +33,13 @@ export default function Register(container) {
         <div class="glass rounded-3xl p-8 md:p-10 shadow-lg">
           <!-- Header -->
           <div class="text-center mb-8">
-            <div class="w-12 h-12 rounded-2xl bg-mango flex items-center justify-center mx-auto mb-4 shadow-sm">
-              <span class="text-white font-heading font-bold text-lg">M</span>
-            </div>
+            <img src="/images/logo.png" alt="Mango Parking" class="w-20 h-20 object-contain mx-auto mb-2" />
+            <p class="text-dim text-[12px] tracking-wide mb-4">— safe &amp; smart parking —</p>
             <h1 class="font-heading text-2xl font-bold tracking-tight">${t('auth.register')}</h1>
           </div>
 
           <!-- Google button -->
-          <button data-google-btn class="w-full flex items-center justify-center gap-3 bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3.5 rounded-2xl transition-all duration-200 shadow-sm hover:shadow-md">
+          <button data-google-btn class="w-full flex items-center justify-center gap-3 bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3.5 rounded-2xl transition-all duration-200 shadow-sm hover:shadow-md">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
               <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" opacity=".7"/>
@@ -79,7 +78,7 @@ export default function Register(container) {
             <!-- Error message -->
             <div data-error class="hidden text-danger text-[14px] text-center bg-danger/5 rounded-xl px-4 py-2.5"></div>
 
-            <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] px-6 py-3.5 rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg">
+            <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-6 py-3.5 rounded-2xl transition-all duration-200 shadow-md hover:shadow-lg">
               ${t('auth.registerBtn')}
             </button>
           </form>

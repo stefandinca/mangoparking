@@ -39,14 +39,14 @@ export default async function AdminPricing(container) {
             <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('token.packManagement')}</h1>
             <p class="text-dim text-[15px] mt-1">${t('token.packManagementSubtitle')}</p>
           </div>
-          <button data-save-packs class="bg-mango hover:bg-mango-hover text-white font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors shadow-sm">${t('admin.saveChanges')}</button>
+          <button data-save-packs class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors shadow-sm">${t('admin.saveChanges')}</button>
         </div>
 
         <div class="card-solid rounded-2xl overflow-hidden mb-6">
           <div class="overflow-x-auto">
             <table class="w-full text-left">
               <thead>
-                <tr class="border-b border-frost-deep bg-frost/50 text-[12px] font-mono uppercase tracking-wider text-dim">
+                <tr class="border-b border-frost-deep bg-frost text-[12px] font-mono uppercase tracking-wider text-dim">
                   <th class="px-4 py-3">${t('token.packName')}</th>
                   <th class="px-4 py-3">${t('token.packNameRo')}</th>
                   <th class="px-4 py-3">${t('token.packQty')}</th>
@@ -63,7 +63,7 @@ export default async function AdminPricing(container) {
           </div>
         </div>
 
-        <button data-add-pack class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.addPack')}</button>
+        <button data-add-pack class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.addPack')}</button>
   `);
 
   let newPackIdx = packs.length;

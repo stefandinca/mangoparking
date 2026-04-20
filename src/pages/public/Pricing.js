@@ -24,11 +24,11 @@ export default async function Pricing(container) {
     const name = locale === 'ro' && p.nameRo ? p.nameRo : p.name;
     return `
       <div class="relative card-solid rounded-2xl p-8 text-center ${isBest ? 'ring-2 ring-mango shadow-lg' : ''}">
-        ${isBest ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-bold bg-mango text-white px-4 py-1 rounded-full">${t('token.bestValue')}</span>` : ''}
+        ${isBest ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-bold bg-mango text-charcoal px-4 py-1 rounded-full">${t('token.bestValue')}</span>` : ''}
         <p class="font-heading font-bold text-4xl tracking-tight mb-1">${p.quantity}</p>
         <p class="text-dim text-[14px] mb-4">${t('token.tokens')}</p>
         <p class="font-mono text-2xl font-bold text-mango mb-4">${p.price} lei</p>
-        <a href="${localePath('/booking')}" class="inline-block w-full bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('token.buyTokens')}</a>
+        <a href="${localePath('/booking')}" class="inline-block w-full bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('token.buyTokens')}</a>
       </div>
     `;
   }).join('');
@@ -79,7 +79,7 @@ export default async function Pricing(container) {
 
         <!-- CTA -->
         <div class="text-center">
-          <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-colors shadow-md">${t('token.buyTokens')}</a>
+          <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-8 py-4 rounded-2xl transition-colors shadow-md">${t('token.buyTokens')}</a>
         </div>
       </div>
     </section>

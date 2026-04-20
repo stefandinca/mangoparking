@@ -1,6 +1,9 @@
 export const TOTAL_CAPACITY = 110;
 export const SITE_NAME = 'Mango Parking';
+export const SITE_TAGLINE = 'safe & smart parking';
 export const SITE_URL = 'https://mangoparking.ro';
+export const LOGO_MASCOT = '/images/logo.png';
+export const LOGO_FULL = '/images/logo-full.jpeg';
 export const CONTACT_PHONE = '+40 721 000 000';
 export const CONTACT_EMAIL = 'contact@mangoparking.ro';
 export const CONTACT_ADDRESS = 'Str. Exemplu 42, Otopeni, Ilfov';

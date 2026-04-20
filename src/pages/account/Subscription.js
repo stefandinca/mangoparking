@@ -75,7 +75,7 @@ function renderActiveSub(sub, locale) {
 
     <!-- Actions -->
     <div class="flex flex-col sm:flex-row gap-3">
-      <button class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm" data-action="renew">${t('account.renewNow')}</button>
+      <button class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm" data-action="renew">${t('account.renewNow')}</button>
       <button class="bg-frost hover:bg-frost-deep text-dim font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors duration-200" data-action="pause">${t('account.pauseSub')}</button>
       <button class="text-danger hover:text-danger/80 font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors duration-200" data-action="cancel">${t('account.cancelSub')}</button>
     </div>
@@ -96,7 +96,7 @@ function renderNoSub() {
       </div>
       <h2 class="font-heading font-bold text-xl mb-2">${t('account.subCtaTitle')}</h2>
       <p class="text-dim text-[15px] leading-relaxed mb-6 max-w-sm mx-auto">${t('account.subCtaDesc')}</p>
-      <a href="${localePath('/commuter')}" class="inline-block bg-mango hover:bg-mango-hover text-white font-semibold text-[15px] px-8 py-3 rounded-xl transition-all duration-200 shadow-md">${t('account.subCtaBtn')}</a>
+      <a href="${localePath('/commuter')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-8 py-3 rounded-xl transition-all duration-200 shadow-md">${t('account.subCtaBtn')}</a>
     </div>
   `;
 }

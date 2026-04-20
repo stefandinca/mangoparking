@@ -78,17 +78,11 @@ export default function Home(container) {
     <div data-navbar></div>
 
     <!-- HERO -->
-    <section class="min-h-screen flex items-center pt-24 pb-16 relative overflow-hidden">
-      <div class="hero-bg">
-        <img src="https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=1920&q=80" alt="Airport parking lot aerial" loading="eager">
-      </div>
-      <div class="hero-glow bg-mango top-20 -left-40"></div>
-      <div class="hero-glow bg-blue-400 bottom-0 right-0"></div>
-
+    <section class="min-h-screen flex items-center pt-24 pb-16 relative overflow-hidden bg-frost">
       <div class="max-w-7xl mx-auto px-6 w-full relative z-10">
         <div class="grid lg:grid-cols-12 gap-12 items-center">
           <div class="lg:col-span-7">
-            <div class="inline-flex items-center gap-2 bg-white/60 backdrop-blur-sm border border-white/80 rounded-full px-4 py-1.5 mb-8 shadow-sm">
+            <div class="inline-flex items-center gap-2 bg-white  border border-frost-deep rounded-full px-4 py-1.5 mb-8 shadow-sm">
               <span class="w-2 h-2 rounded-full bg-leaf animate-[pulse_2s_ease-in-out_infinite]"></span>
               <span class="text-charcoal/60 text-[14px] font-medium" data-capacity-badge>${t('hero.badge', { count: MOCK_CAPACITY })}</span>
             </div>
@@ -101,8 +95,8 @@ export default function Home(container) {
             <p class="text-[17px] text-dim leading-relaxed max-w-md mb-10">${t('hero.subtitle')}</p>
 
             <div class="flex flex-col sm:flex-row gap-3 mb-14">
-              <a href="${localePath('/booking')}" class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('hero.cta1')}</a>
-              <a href="${localePath('/pricing')}" class="glass font-semibold text-[16px] px-8 py-4 rounded-2xl text-center hover:bg-white/70 transition-all duration-200 shadow-sm">${t('hero.cta2')}</a>
+              <a href="${localePath('/booking')}" class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('hero.cta1')}</a>
+              <a href="${localePath('/pricing')}" class="glass font-semibold text-[16px] px-8 py-4 rounded-2xl text-center hover:bg-white transition-all duration-200 shadow-sm">${t('hero.cta2')}</a>
             </div>
 
             <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -127,8 +121,8 @@ export default function Home(container) {
             <div class="relative w-full aspect-square max-w-md mx-auto">
               <div class="absolute inset-8 rounded-[32px] overflow-hidden shadow-2xl">
                 <img src="https://images.unsplash.com/photo-1568738009519-52d1bad47858?q=80&w=774&auto=format&fit=crop" alt="Secure gated parking" class="img-cover" loading="eager">
-                <div class="absolute inset-0 bg-gradient-to-t from-charcoal/30 to-transparent"></div>
               </div>
+              <img src="/images/logo.png" alt="" aria-hidden="true" class="absolute -bottom-6 -left-6 w-40 h-40 object-contain drop-shadow-2xl rotate-[-8deg] pointer-events-none select-none" />
 
               <div class="absolute top-0 left-0 glass rounded-2xl p-5 shadow-lg w-56">
                 <p class="text-[11px] font-mono uppercase text-dim tracking-[0.15em] mb-3">${t('hero.liveCapacity')}</p>
@@ -228,11 +222,11 @@ export default function Home(container) {
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking')}" class="block text-center bg-white/10 hover:bg-white/15 text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200">${t('pricing.bookNow')}</a>
+            <a href="${localePath('/booking')}" class="block text-center bg-charcoal-hover hover:bg-charcoal-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200">${t('pricing.bookNow')}</a>
           </div>
           <!-- Token Packs -->
           <div class="bg-white/[0.05] border border-mango/25 rounded-3xl p-8 hover:border-mango/40 transition-colors duration-300 relative">
-            <div class="absolute -top-3 right-8 bg-mango text-white text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
+            <div class="absolute -top-3 right-8 bg-mango text-charcoal text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
             <div class="flex items-center gap-3 mb-8">
               <div class="w-10 h-10 rounded-xl bg-mango/10 flex items-center justify-center">
                 ${clockIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-mango"')}
@@ -254,7 +248,7 @@ export default function Home(container) {
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200 shadow-md">${t('token.buyTokens')}</a>
+            <a href="${localePath('/booking')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors duration-200 shadow-md">${t('token.buyTokens')}</a>
           </div>
         </div>
         <p class="text-center mt-8"><a href="${localePath('/pricing')}" class="text-white/25 hover:text-white/50 text-[14px] transition-colors">${t('pricing.viewAll')}</a></p>
@@ -378,15 +372,14 @@ export default function Home(container) {
     <!-- CTA -->
     <section class="py-20">
       <div class="max-w-5xl mx-auto px-6">
-        <div class="rounded-[32px] overflow-hidden shadow-lg relative min-h-[400px] flex items-center">
-          <img src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1400&q=80" alt="Road to airport" class="absolute inset-0 img-cover" loading="lazy">
-          <div class="absolute inset-0 bg-gradient-to-r from-charcoal/85 via-charcoal/70 to-charcoal/40"></div>
+        <div class="rounded-[32px] shadow-lg relative min-h-[400px] flex items-center bg-charcoal overflow-hidden">
+          <img src="/images/logo.png" alt="" aria-hidden="true" class="absolute -right-10 -bottom-10 w-80 h-80 object-contain rotate-[8deg] pointer-events-none select-none hidden md:block" />
           <div class="relative z-10 p-6 sm:p-10 md:p-16 max-w-lg">
             <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-[-0.02em] mb-4 text-white">${t('cta.title')}</h2>
-            <p class="text-white/60 text-[16px] mb-8">${t('cta.subtitle')}</p>
+            <p class="text-white/70 text-[16px] mb-8">${t('cta.subtitle')}</p>
             <div class="flex flex-col sm:flex-row gap-3">
-              <a href="${localePath('/booking')}" class="bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">${t('cta.book')}</a>
-              <a href="${localePath('/contact')}" class="bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white font-medium text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
+              <a href="${localePath('/booking')}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">${t('cta.book')}</a>
+              <a href="${localePath('/contact')}" class="bg-charcoal-hover hover:bg-blueberry text-white font-medium text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
             </div>
           </div>
         </div>

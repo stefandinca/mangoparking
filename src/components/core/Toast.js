@@ -14,7 +14,7 @@ export function showToast(message, type = 'info', duration = 3000) {
     info: 'bg-charcoal text-white',
     success: 'bg-leaf text-white',
     error: 'bg-danger text-white',
-    warning: 'bg-mango text-white',
+    warning: 'bg-mango text-charcoal',
   };
 
   const toast = document.createElement('div');

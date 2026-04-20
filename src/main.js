@@ -15,7 +15,7 @@ if (params.get('seed') === 'true') {
       <div class="text-center">
         <h1 class="font-heading text-2xl font-bold mb-4">Database Seed</h1>
         <p class="text-dim mb-6" id="seed-status">Sign in with Google first, then we'll seed the database.</p>
-        <button id="seed-login" class="bg-mango hover:bg-mango-hover text-white font-semibold px-8 py-3 rounded-2xl transition-colors">Sign in with Google & Seed</button>
+        <button id="seed-login" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold px-8 py-3 rounded-2xl transition-colors">Sign in with Google & Seed</button>
       </div>
     </div>
   `;

@@ -61,7 +61,7 @@ export default async function AdminReports(container) {
             <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('admin.reports')}</h1>
             <p class="text-dim text-[15px] mt-1">${t('admin.reportsSubtitle')}</p>
           </div>
-          <button class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2" data-export-csv>
+          <button class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2" data-export-csv>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
             ${t('admin.exportCsv')}
           </button>
@@ -135,7 +135,7 @@ export default async function AdminReports(container) {
               </thead>
               <tbody class="divide-y divide-frost-deep/60">
                 ${breakdownRows.map(row => `
-                  <tr class="hover:bg-frost/50 transition-colors">
+                  <tr class="hover:bg-frost transition-colors">
                     <td class="px-6 py-4 text-[15px] font-medium text-charcoal">${row.cat}</td>
                     <td class="px-6 py-4 text-right font-mono text-[15px] font-semibold">${row.rev.toLocaleString()}</td>
                     <td class="px-6 py-4 text-right font-mono text-[14px] text-dim">${row.txn}</td>
@@ -144,7 +144,7 @@ export default async function AdminReports(container) {
                 `).join('')}
               </tbody>
               <tfoot>
-                <tr class="border-t-2 border-frost-deep bg-frost/30">
+                <tr class="border-t-2 border-frost-deep bg-frost">
                   <td class="px-6 py-4 text-[15px] font-bold text-charcoal">${t('admin.total')}</td>
                   <td class="px-6 py-4 text-right font-mono text-[15px] font-bold">${totalRev.toLocaleString()}</td>
                   <td class="px-6 py-4 text-right font-mono text-[14px] font-semibold">${totalTxn}</td>

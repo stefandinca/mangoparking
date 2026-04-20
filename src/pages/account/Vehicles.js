@@ -74,7 +74,7 @@ export default async function Vehicles(container) {
         </div>
         <div class="flex items-end">
           <button type="submit"
-            class="w-full bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">
+            class="w-full bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">
             ${t('account.addBtn')}
           </button>
         </div>

@@ -45,7 +45,7 @@ export default async function AdminBookings(container) {
         <div class="card-solid rounded-2xl p-6 mb-6">
           <div class="flex gap-3">
             <input type="text" data-plate-input placeholder="${t('token.searchPlate')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 uppercase font-mono">
-            <button data-search-plate class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors">${t('account.searchBtn')}</button>
+            <button data-search-plate class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-6 py-3 rounded-xl transition-colors">${t('account.searchBtn')}</button>
           </div>
         </div>
 
@@ -112,7 +112,7 @@ export default async function AdminBookings(container) {
           <button data-checkout class="bg-blue-500 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors ${!currentCheckedIn ? 'opacity-40 cursor-not-allowed' : 'hover:bg-blue-600'}" ${!currentCheckedIn ? 'disabled' : ''}>Check Out</button>
           <div class="flex gap-2 items-center">
             <input type="number" data-refund-qty min="1" value="1" class="w-20 px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] font-mono text-center focus:outline-none focus:border-mango/40">
-            <button data-refund-token class="bg-mango hover:bg-mango-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.refundTokens')}</button>
+            <button data-refund-token class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('token.refundTokens')}</button>
           </div>
         </div>
       </div>

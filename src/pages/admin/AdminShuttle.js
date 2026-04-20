@@ -38,7 +38,7 @@ export default async function AdminShuttle(container) {
             <h1 class="font-heading text-3xl font-bold tracking-tight text-charcoal">${t('admin.shuttleSchedule')}</h1>
             <p class="text-dim text-[15px] mt-1">${t('admin.todayDepartures')}</p>
           </div>
-          <button class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-add-departure>+ ${t('admin.addDeparture')}</button>
+          <button class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors" data-add-departure>+ ${t('admin.addDeparture')}</button>
         </div>
 
         <!-- Status Summary -->
@@ -76,7 +76,7 @@ export default async function AdminShuttle(container) {
                   const routeKey = ROUTE_DISPLAY[s.route] || 'admin.parkingToAirport';
                   const status = s.status || 'scheduled';
                   return `
-                  <tr class="hover:bg-frost/50 transition-colors" data-shuttle-id="${s.id}">
+                  <tr class="hover:bg-frost transition-colors" data-shuttle-id="${s.id}">
                     <td class="px-6 py-4 font-mono text-[15px] font-semibold">${s.departureTime || s.time || '—'}</td>
                     <td class="px-6 py-4 text-[15px]">${t(routeKey)}</td>
                     <td class="px-6 py-4 text-[15px] text-dim">${s.driver || '—'}</td>

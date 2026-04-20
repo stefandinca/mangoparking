@@ -4,7 +4,7 @@ import { t } from '../../i18n/index.js';
 export function openModal(content, { onClose } = {}) {
   const overlay = html`
     <div class="fixed inset-0 z-[90] flex items-center justify-center p-4" data-modal-overlay>
-      <div class="absolute inset-0 bg-charcoal/40 backdrop-blur-sm" data-modal-bg></div>
+      <div class="absolute inset-0 bg-charcoal/60" data-modal-bg></div>
       <div class="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-8" data-modal-content></div>
     </div>
   `;
@@ -48,7 +48,7 @@ export function confirmModal(message, { confirmText, cancelText, danger = false 
     const cancelLabel = cancelText || t('common.cancel');
     const btnColor = danger
       ? 'bg-red-500 hover:bg-red-600'
-      : 'bg-charcoal hover:bg-charcoal/85';
+      : 'bg-charcoal hover:bg-charcoal-hover';
 
     const { close, contentEl } = openModal(`
       <div class="text-center">
@@ -95,7 +95,7 @@ export function alertModal(message, { buttonText, type = 'info' } = {}) {
           ${icon.svg}
         </div>
         <p class="text-[16px] text-charcoal leading-relaxed mb-8">${message}</p>
-        <button data-modal-ok class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-8 py-3 rounded-xl transition-colors">${label}</button>
+        <button data-modal-ok class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-8 py-3 rounded-xl transition-colors">${label}</button>
       </div>
     `, {
       onClose: () => done(),

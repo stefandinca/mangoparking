@@ -70,7 +70,7 @@ export default async function AdminAudit(container) {
               </thead>
               <tbody class="divide-y divide-frost-deep/60" data-audit-body>
                 ${auditLog.map(log => `
-                  <tr class="hover:bg-frost/50 transition-colors" data-log-action="${log.action}" data-log-user="${log.user}">
+                  <tr class="hover:bg-frost transition-colors" data-log-action="${log.action}" data-log-user="${log.user}">
                     <td class="px-6 py-4 font-mono text-[13px] text-dim whitespace-nowrap">${log.timestamp || '—'}</td>
                     <td class="px-6 py-4">
                       <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full whitespace-nowrap ${ACTION_STYLES[log.action] || 'bg-gray-100 text-gray-600'}">${(log.action || '').replace(/_/g, ' ')}</span>

@@ -50,7 +50,7 @@ export default function Contact(container) {
                 <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.message')} *</label>
                 <textarea name="message" rows="5" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 resize-none" required></textarea>
               </div>
-              <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md">${t('contact.form.send')}</button>
+              <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md">${t('contact.form.send')}</button>
               <div data-success class="hidden text-leaf text-[15px] text-center font-medium mt-2">${t('contact.form.sent')}</div>
             </form>
           </div>

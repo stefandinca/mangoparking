@@ -41,7 +41,7 @@ export default function Commuter(container) {
           <span class="font-heading font-bold text-6xl">${rate}</span>
           <span class="text-dim text-lg">${t('pricing.leiMonth')}</span>
         </div>
-        <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-colors shadow-md">${t('commuterPage.cta')}</a>
+        <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl transition-colors shadow-md">${t('commuterPage.cta')}</a>
       </div>
     </section>
 
@@ -101,7 +101,7 @@ export default function Commuter(container) {
         <div class="bg-charcoal rounded-3xl p-12">
           <h2 class="font-heading text-3xl font-bold text-white mb-4">${t('cta.title')}</h2>
           <p class="text-white/50 mb-8">${t('cta.subtitle')}</p>
-          <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-colors shadow-md">${t('commuterPage.cta')}</a>
+          <a href="${localePath('/booking')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl transition-colors shadow-md">${t('commuterPage.cta')}</a>
         </div>
       </div>
     </section>

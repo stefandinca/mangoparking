@@ -116,7 +116,7 @@ export default function Loyalty(container) {
         <input type="text" placeholder="${t('account.enterPlate')}" data-car-search
           class="flex-1 min-w-0 bg-frost border border-frost-deep rounded-xl px-4 py-3 text-[15px] placeholder:text-dim/40 focus:outline-none focus:border-mango/40 focus:ring-2 focus:ring-mango/10 transition-all font-mono">
         <button data-car-search-btn
-          class="bg-mango hover:bg-mango-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm whitespace-nowrap">
+          class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm whitespace-nowrap">
           ${t('account.searchBtn')}
         </button>
       </div>

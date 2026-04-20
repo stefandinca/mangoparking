@@ -78,8 +78,8 @@ export default async function Booking(container) {
           <span class="text-dim text-[15px] ml-1">${t('token.tokens')}</span>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 justify-center">
-          <a href="${localePath('/')}" class="bg-charcoal hover:bg-charcoal/85 text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
-          <button data-new-purchase class="glass font-semibold text-[15px] px-6 py-3 rounded-xl hover:bg-white/70 transition-colors">${t('token.newPurchase')}</button>
+          <a href="${localePath('/')}" class="bg-charcoal hover:bg-charcoal-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
+          <button data-new-purchase class="glass font-semibold text-[15px] px-6 py-3 rounded-xl hover:bg-white transition-colors">${t('token.newPurchase')}</button>
         </div>
       </div>
     `;
@@ -92,8 +92,8 @@ export default async function Booking(container) {
       const name = locale === 'ro' && p.nameRo ? p.nameRo : p.name;
       return `
         <button data-pack-id="${p.id}" class="relative card-solid rounded-2xl p-6 text-left transition-all duration-200 border-[3px] ${isSelected ? 'border-mango shadow-lg ring-2 ring-mango/20' : 'border-transparent hover:border-mango/30'}">
-          ${isSelected ? `<div class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>` : ''}
-          ${isBest && !isSelected ? `<span class="absolute -top-3 right-4 text-[11px] font-bold bg-mango text-white px-3 py-1 rounded-full">${t('token.bestValue')}</span>` : ''}
+          ${isSelected ? `<div class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>` : ''}
+          ${isBest && !isSelected ? `<span class="absolute -top-3 right-4 text-[11px] font-bold bg-mango text-charcoal px-3 py-1 rounded-full">${t('token.bestValue')}</span>` : ''}
           <p class="font-heading font-bold text-2xl mb-1">${p.quantity} <span class="text-[16px] font-normal text-dim">${t('token.tokens')}</span></p>
           <p data-price class="font-mono text-lg font-semibold ${isSelected ? 'text-mango' : 'text-charcoal/70'}">${p.price} lei</p>
         </button>
@@ -189,7 +189,7 @@ export default async function Booking(container) {
           </div>
         </div>
 
-        <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
+        <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
           ${processing ? t('token.processing') : t('token.payNow')}
         </button>
       </form>
@@ -232,7 +232,7 @@ export default async function Booking(container) {
         // Toggle checkmark
         const existing = card.querySelector('[data-check]');
         if (isSel && !existing) {
-          card.insertAdjacentHTML('afterbegin', `<div data-check class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>`);
+          card.insertAdjacentHTML('afterbegin', `<div data-check class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>`);
         } else if (!isSel && existing) {
           existing.remove();
         }
