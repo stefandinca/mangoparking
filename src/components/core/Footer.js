@@ -6,24 +6,10 @@ import {
   ANPC_SAL_URL, ANPC_SOL_URL,
 } from '../../utils/constants.js';
 
-// Injects Netopia's merchant-logo script into the footer. Re-created on each
-// mount because the router re-renders the footer per navigation; Netopia's
-// script is idempotent and cached by the browser after the first hit.
-function mountNetopiaLogo(footerEl) {
-  const slot = footerEl.querySelector('[data-netopia-logo]');
-  if (!slot) return;
-  const s = document.createElement('script');
-  s.src = 'https://mny.ro/npId.js?p=163420';
-  s.type = 'text/javascript';
-  s.setAttribute('data-version', 'orizontal');
-  s.setAttribute('data-contrast-color', '#fef8e9');
-  slot.appendChild(s);
-}
-
 export function Footer() {
   const year = new Date().getFullYear();
 
-  const el = html`
+  return html`
     <footer class="pt-16 pb-8">
       <div class="max-w-7xl mx-auto px-6">
         <!-- Columns -->
@@ -89,10 +75,11 @@ export function Footer() {
             </div>
           </div>
 
-          <!-- Netopia (payments) — logo rendered by Netopia's own merchant script -->
+          <!-- Netopia (payments) — official hosted iframe. color param
+               matches our frost surface (#FFF8E8), merchant ID in secret. -->
           <div>
             <p class="text-[11px] font-mono uppercase text-charcoal/25 tracking-[0.15em] mb-3">${t('footer.payments')}</p>
-            <div class="inline-block" data-netopia-logo></div>
+            <iframe src="https://mny.ro/npId.html?color=%23FFF8E8&version=orizontal&secret=163420" title="NETOPIA Payments" loading="lazy" class="block w-[100px] h-[80px] border-0"></iframe>
             <p class="text-[12px] text-dim mt-2">${t('footer.netopia')}</p>
           </div>
 
@@ -119,7 +106,4 @@ export function Footer() {
       </div>
     </footer>
   `;
-
-  mountNetopiaLogo(el);
-  return el;
 }
