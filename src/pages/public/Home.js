@@ -141,18 +141,12 @@ export default function Home(container) {
                 <p class="text-dim text-xs mt-1">→ ${MOCK_SHUTTLE_DEST}</p>
               </div>
 
-              <div class="absolute bottom-12 left-4 glass rounded-2xl p-5 shadow-lg w-48">
+              <div class="absolute bottom-0 right-0 glass rounded-2xl p-5 shadow-lg w-48">
                 <p class="text-[11px] font-mono uppercase text-dim tracking-[0.15em] mb-2">${t('hero.fromPrice')}</p>
                 <div class="flex items-baseline gap-1">
                   <span class="font-heading font-bold text-3xl tracking-tight">29</span>
                   <span class="text-dim text-sm">${t('hero.leiDay')}</span>
                 </div>
-              </div>
-
-              <div class="absolute bottom-0 right-0 glass rounded-2xl p-4 shadow-lg w-52">
-                <div class="flex gap-0.5 mb-2">${starIcon}${starIcon}${starIcon}${starIcon}${starIcon}</div>
-                <p class="text-[13px] text-charcoal/60 leading-snug">${reviewTexts[0].slice(0, 60)}…"</p>
-                <p class="text-[12px] text-dim mt-2 font-medium">${MOCK_REVIEWS[0].name}</p>
               </div>
             </div>
           </div>
