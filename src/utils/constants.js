@@ -5,6 +5,14 @@ export const SITE_URL = 'https://mangoparking.ro';
 export const LOGO_MASCOT = '/images/logo.png';
 export const LOGO_FULL = '/images/logo-full.jpeg';
 
+// Cloud Functions Gen 2 — each function gets its own Cloud Run URL.
+// `createPayment` is the only one the client calls directly.
+// `netopiaCallback` is server-to-server (Netopia → our function), set in Netopia's panel.
+// Override via VITE_CREATE_PAYMENT_URL in .env.local for emulator / staging.
+export const CREATE_PAYMENT_URL =
+  import.meta.env.VITE_CREATE_PAYMENT_URL
+  || 'https://createpayment-zddpe6b7fa-ew.a.run.app';
+
 // ── Contact (public, operating location — the parking lot itself) ──
 // Corbeanca is adjacent to Otopeni (~5 km from Henri Coandă Airport); site copy
 // still references "Aeroportul Otopeni" as the destination served via shuttle.

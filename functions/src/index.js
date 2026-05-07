@@ -46,6 +46,12 @@ const NETOPIA_ENV         = defineSecret('NETOPIA_ENV');       // 'sandbox' | 'l
 const NETOPIA_API_KEY     = defineSecret('NETOPIA_API_KEY');   // reserved
 
 const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
+// `netopiaCallback` is a separate Cloud Run service in Gen 2 — its hostname
+// differs from `createPayment`, so we can't derive it from `req.host`.
+// Override per environment via NETOPIA_CALLBACK_URL when redeploying.
+const CALLBACK_URL =
+  process.env.NETOPIA_CALLBACK_URL
+  || 'https://netopiacallback-zddpe6b7fa-ew.a.run.app';
 
 function normalizePlate(plate) {
   return String(plate || '').toUpperCase().replace(/[\s-]/g, '');
@@ -182,7 +188,7 @@ export const createPayment = onRequest(
       currency: 'RON',
       signature: NETOPIA_SIGNATURE.value(),
       returnUrl: `${SITE_URL}/booking/return?orderId=${orderId}`,
-      confirmUrl: `${req.protocol}://${req.get('host')}/netopiaCallback`,
+      confirmUrl: CALLBACK_URL,
       details,
       billing: {
         first_name: firstName,

@@ -3,7 +3,8 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getLongTermRates, calculateLongTermCost, createLongTermBooking } from '../../services/longTermService.js';
+import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
+import { startNetopiaPayment } from '../../services/netopiaService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
@@ -221,20 +222,22 @@ export default function BookingLongTerm(container) {
     btn.textContent = t('longTerm.processing');
 
     try {
-      // Netopia payment stub — simulate 1.5s, then create booking
-      await new Promise(r => setTimeout(r, 1500));
-      await createLongTermBooking({
-        customerId: user?.uid || null,
-        licensePlate,
+      await startNetopiaPayment({
+        orderType: 'longTerm',
         startDate,
         endDate,
         days,
         totalPrice: quote.total,
-        contact: { name, email, phone },
-        paymentId: `stub_${Date.now()}`,
+        customerData: {
+          customerId: user?.uid || null,
+          licensePlate,
+          name,
+          email,
+          phone,
+        },
       });
-      form.style.display = 'none';
-      page.querySelector('[data-confirmation]').classList.remove('hidden');
+      // The browser is now navigating to Netopia's hosted page —
+      // nothing else to do here.
     } catch (err) {
       console.error(err);
       showToast(t('common.error'), 'error');

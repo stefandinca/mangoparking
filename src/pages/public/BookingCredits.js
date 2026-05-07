@@ -3,7 +3,8 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getTokenPacks, purchaseTokens, getBalance } from '../../services/tokenService.js';
+import { getTokenPacks } from '../../services/tokenService.js';
+import { startNetopiaPayment } from '../../services/netopiaService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { getDocument, updateDocument } from '../../firebase/db.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
@@ -314,45 +315,36 @@ export default async function Booking(container) {
       const btn = form.querySelector('[type="submit"]');
       if (btn) { btn.disabled = true; btn.textContent = t('credit.processing'); }
 
-      try {
-        // TODO: Netopia Integration
-        // Real flow:
-        //   1. Call Cloud Function: POST /api/createPayment { packId, qty, customerData }
-        //   2. Cloud Function creates Netopia payment session, returns redirect URL
-        //   3. Redirect user to Netopia payment page
-        //   4. Netopia POSTs callback to Cloud Function /api/netopiaCallback
-        //   5. Cloud Function verifies payment, calls purchaseTokens(), responds to Netopia
-        //   6. User is redirected back to /booking?status=success
-        //
-        // MVP stub: simulate 1.5s processing delay, then credit tokens directly
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        const result = await purchaseTokens(packId, qty, {
-          customerId: user?.uid || null,
-          licensePlate,
-          name,
-          email,
-          phone,
-        });
-
-        // Save new vehicle to profile if logged in
-        if (user && licensePlate) {
-          const normalizedPlate = licensePlate.toUpperCase().trim();
-          const alreadySaved = profileVehicles.some(v => v.plate.toUpperCase().replace(/[\s-]/g, '') === normalizedPlate.replace(/[\s-]/g, ''));
-          if (!alreadySaved) {
-            const makeModel = fd.get('makeModel') || '';
-            const [make, ...rest] = makeModel.split(' ');
-            profileVehicles.push({ plate: normalizedPlate, make: make || '', model: rest.join(' ') || '' });
-            await updateDocument('users', user.uid, { vehicles: profileVehicles }).catch(() => {});
-          }
+      // Save the new vehicle to the user's profile BEFORE redirecting.
+      // The Netopia handoff navigates away from the SPA, so anything we
+      // want persisted must happen here. Even if the user cancels payment,
+      // the saved vehicle is harmless (they can remove it from /account/vehicles).
+      if (user && licensePlate) {
+        const normalizedPlate = licensePlate.toUpperCase().trim();
+        const alreadySaved = profileVehicles.some(v => v.plate.toUpperCase().replace(/[\s-]/g, '') === normalizedPlate.replace(/[\s-]/g, ''));
+        if (!alreadySaved) {
+          const makeModel = fd.get('makeModel') || '';
+          const [make, ...rest] = makeModel.split(' ');
+          profileVehicles.push({ plate: normalizedPlate, make: make || '', model: rest.join(' ') || '' });
+          await updateDocument('users', user.uid, { vehicles: profileVehicles }).catch(() => {});
         }
+      }
 
-        resultBalance = result.balance;
-        confirmed = true;
-        container.innerHTML = '';
-        const newPage = render();
-        container.appendChild(newPage);
-        bindEvents(newPage);
+      try {
+        await startNetopiaPayment({
+          orderType: 'credits',
+          packId,
+          quantity: qty,
+          packPrice: getSelectedPrice(),
+          customerData: {
+            customerId: user?.uid || null,
+            licensePlate,
+            name,
+            email,
+            phone,
+          },
+        });
+        // Browser is navigating to Netopia — nothing else to do.
       } catch (err) {
         console.error(err);
         showToast(t('common.error'), 'error');

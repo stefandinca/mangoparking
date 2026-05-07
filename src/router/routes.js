@@ -21,6 +21,11 @@ export const routes = [
     guards: [],
   },
   {
+    path: '/booking/return',
+    component: () => import('../pages/public/BookingReturn.js'),
+    guards: [],
+  },
+  {
     path: '/pricing',
     component: () => import('../pages/public/Pricing.js'),
     guards: [],

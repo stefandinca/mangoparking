@@ -16,10 +16,10 @@ const HOST = `http://localhost:${PORT}`;
 
 const ROUTES = [
   '/', '/pricing', '/shuttle', '/about', '/contact',
-  '/booking', '/booking/credits', '/booking/long-term',
+  '/booking', '/booking/credits', '/booking/long-term', '/booking/return',
   '/terms', '/privacy', '/gdpr', '/delivery', '/cancellation',
   '/en', '/en/pricing', '/en/shuttle', '/en/about', '/en/contact',
-  '/en/booking', '/en/booking/credits', '/en/booking/long-term',
+  '/en/booking', '/en/booking/credits', '/en/booking/long-term', '/en/booking/return',
   '/en/terms', '/en/privacy', '/en/gdpr', '/en/delivery', '/en/cancellation',
 ];
 

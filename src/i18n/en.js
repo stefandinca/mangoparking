@@ -804,6 +804,25 @@ export default {
     viewBooking: 'View details',
   },
 
+  // Netopia return page (/booking/return)
+  return: {
+    title: 'Payment',
+    titleProcessing: 'Processing payment…',
+    subtitleProcessing: 'Confirming with Netopia. This usually takes a few seconds.',
+    titleSuccess: 'Payment confirmed!',
+    subtitleSuccess: 'Your order is complete — confirmation emailed.',
+    titleFailure: 'Payment was not completed',
+    subtitleFailure: 'The transaction was cancelled or refused. No charge was made.',
+    titleSlow: 'Still processing…',
+    subtitleSlow: 'Netopia is taking longer than usual. If you were charged, your tokens / booking will appear shortly. Order ref:',
+    tryAgain: 'Try again',
+    contactUs: 'Contact us',
+    backToBooking: 'Back to booking',
+    viewBookings: 'View my bookings',
+    viewBalance: 'View my balance',
+    missingOrderId: 'Missing order reference. If you completed a payment and need help, contact us.',
+  },
+
   // Admin: rates + booking records
   rates: {
     pageTitle: 'Rates & Policies',

@@ -61,6 +61,13 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // Pending orders - public read by orderId (for /booking/return polling).
+    // The Netopia callback (admin SDK) is the only writer; clients never write.
+    match /pendingOrders/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Bookings - customer reads own, staff reads all
     match /bookings/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);

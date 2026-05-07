@@ -805,6 +805,25 @@ export default {
     viewBooking: 'Vezi detalii',
   },
 
+  // Pagina de retur Netopia (/booking/return)
+  return: {
+    title: 'Plată',
+    titleProcessing: 'Procesăm plata…',
+    subtitleProcessing: 'Confirmăm cu Netopia. Durează de obicei câteva secunde.',
+    titleSuccess: 'Plată confirmată!',
+    subtitleSuccess: 'Comanda este finalizată — am trimis confirmarea pe email.',
+    titleFailure: 'Plata nu s-a finalizat',
+    subtitleFailure: 'Tranzacția a fost anulată sau refuzată. Nu s-a făcut nicio debitare.',
+    titleSlow: 'Încă procesăm…',
+    subtitleSlow: 'Netopia răspunde mai greu decât de obicei. Dacă ai fost debitat, creditele sau rezervarea vor apărea în scurt timp. Referință comandă:',
+    tryAgain: 'Încearcă din nou',
+    contactUs: 'Contactează-ne',
+    backToBooking: 'Înapoi la rezervare',
+    viewBookings: 'Vezi rezervările mele',
+    viewBalance: 'Vezi soldul meu',
+    missingOrderId: 'Lipsește referința comenzii. Dacă ai finalizat o plată și ai nevoie de ajutor, contactează-ne.',
+  },
+
   // Admin: rates + booking records
   rates: {
     pageTitle: 'Tarife & Politici',
