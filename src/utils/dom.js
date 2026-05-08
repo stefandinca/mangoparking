@@ -67,3 +67,24 @@ export function delegate(parent, event, selector, handler) {
     if (target && parent.contains(target)) handler(e, target);
   });
 }
+
+/**
+ * Toggle a "field is invalid" visual state on a form input.
+ * Adds red border + light-red background, removes the default subtle border.
+ */
+export function setFieldError(input, hasError) {
+  if (!input) return;
+  input.classList.toggle('border-red-500', hasError);
+  input.classList.toggle('bg-red-50', hasError);
+  input.classList.toggle('border-frost-deep', !hasError);
+}
+
+/**
+ * Wire a form input so its error state clears as the user edits it.
+ * Idempotent — safe to call multiple times on the same input.
+ */
+export function clearErrorOnInput(input) {
+  if (!input || input.dataset.errorClearWired) return;
+  input.dataset.errorClearWired = '1';
+  input.addEventListener('input', () => setFieldError(input, false));
+}

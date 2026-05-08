@@ -1,10 +1,13 @@
 import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
-import { html, delegate } from '../../utils/dom.js';
+import { html, delegate, setFieldError, clearErrorOnInput } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { startNetopiaPayment } from '../../services/netopiaService.js';
+import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
+import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
+import { getMyVoucher } from '../../services/voucherService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { getDocument, updateDocument } from '../../firebase/db.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
@@ -21,7 +24,9 @@ export default async function Booking(container) {
   });
 
   const packs = await getTokenPacks().catch(() => []);
+  const discount = await getOnlineDiscountPercent().catch(() => 0);
   const user = getCurrentUser();
+  const voucher = user ? await getMyVoucher().catch(() => null) : null;
   const profile = user ? await getDocument('users', user.uid).catch(() => getUserProfile()) : null;
   const profileVehicles = profile?.vehicles || [];
 
@@ -96,7 +101,14 @@ export default async function Booking(container) {
           ${isSelected ? `<div class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>` : ''}
           ${isBest && !isSelected ? `<span class="absolute -top-3 right-4 text-[11px] font-bold bg-mango text-charcoal px-3 py-1 rounded-full">${t('credit.bestValue')}</span>` : ''}
           <p class="font-heading font-bold text-2xl mb-1">${p.quantity} <span class="text-[16px] font-normal text-dim">${t('credit.plural')}</span></p>
-          <p data-price class="font-mono text-lg font-semibold ${isSelected ? 'text-mango' : 'text-charcoal/70'}">${p.price} lei</p>
+          ${(() => {
+            const orig = originalFromOnline(p.price, discount);
+            if (orig != null && orig !== p.price) {
+              return `<p class="font-mono text-[13px] text-dim line-through">${orig} lei</p>
+                <p data-price class="font-mono text-lg font-semibold ${isSelected ? 'text-mango' : 'text-charcoal/70'}">${p.price} lei</p>`;
+            }
+            return `<p data-price class="font-mono text-lg font-semibold ${isSelected ? 'text-mango' : 'text-charcoal/70'}">${p.price} lei</p>`;
+          })()}
         </button>
       `;
     }).join('');
@@ -179,14 +191,28 @@ export default async function Booking(container) {
         </div>
         `}
 
+        <!-- Billing (PF/PJ) -->
+        ${billingFieldsHtml(profile?.billing)}
+
         <!-- Summary -->
         <div class="card-solid rounded-2xl p-6" data-summary>
           <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.summary')}</h3>
           <div data-price-summary>
-            ${selectedPack
-              ? `<div class="flex justify-between mb-2"><span>${selectedPack.quantity} ${t('credit.plural')}</span><span class="font-mono font-semibold">${selectedPack.price} lei</span></div>`
-              : `<p class="text-dim/60">${t('credit.selectPack')}</p>`
-            }
+            ${(() => {
+              if (!selectedPack) return `<p class="text-dim/60">${t('credit.selectPack')}</p>`;
+              const orig = originalFromOnline(selectedPack.price, discount);
+              const showAnchor = orig != null && orig !== selectedPack.price;
+              const voucherActive = voucher && voucher.status === 'unused' && selectedPack.price > voucher.amount;
+              return `
+                <div class="flex justify-between items-center mb-1"><span>${selectedPack.quantity} ${t('credit.plural')}</span>
+                  <div class="text-right">
+                    ${showAnchor ? `<div class="font-mono text-[13px] text-dim line-through leading-none">${orig} lei</div>` : ''}
+                    <div class="font-mono font-semibold">${selectedPack.price} lei</div>
+                    ${showAnchor ? `<div class="text-[10px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</div>` : ''}
+                  </div>
+                </div>
+                ${voucherActive ? `<p class="text-[13px] text-mango mt-2">${t('voucher.applied', { amount: voucher.amount })}</p>` : ''}`;
+            })()}
           </div>
         </div>
 
@@ -283,6 +309,15 @@ export default async function Booking(container) {
     const form = pageEl.querySelector('[data-purchase-form]');
     if (!form) return;
 
+    // Clear red field-error state as the user edits any input.
+    ['licensePlate', 'name', 'phone', 'email', 'makeModel'].forEach(n => {
+      const input = form.elements[n];
+      if (input) clearErrorOnInput(input);
+    });
+
+    // Wire PF/PJ toggle for the billing block (idempotent — safe across re-renders).
+    wireBillingToggle(form);
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (processing) return;
@@ -300,12 +335,32 @@ export default async function Booking(container) {
         licensePlate = profileVehicles[idx]?.plate || licensePlate;
       }
 
+      // Validate everything up-front so we can highlight all bad fields at once.
+      const errors = [];
       if (!user) {
-        if (!required(name)) { showToast(t('booking.errors.name'), 'error'); return; }
-        if (!isValidPhone(phone)) { showToast(t('booking.errors.phone'), 'error'); return; }
-        if (!isValidEmail(email)) { showToast(t('booking.errors.email'), 'error'); return; }
+        const nameOk = required(name);
+        const phoneOk = isValidPhone(phone);
+        const emailOk = isValidEmail(email);
+        setFieldError(form.elements.name, !nameOk);
+        setFieldError(form.elements.phone, !phoneOk);
+        setFieldError(form.elements.email, !emailOk);
+        if (!nameOk) errors.push(t('booking.errors.name'));
+        if (!phoneOk) errors.push(t('booking.errors.phone'));
+        if (!emailOk) errors.push(t('booking.errors.email'));
       }
-      if (!licensePlate || !isValidLicensePlate(licensePlate)) { showToast(t('booking.errors.plate'), 'error'); return; }
+      const plateOk = !!licensePlate && isValidLicensePlate(licensePlate);
+      if (!plateOk && form.elements.licensePlate) setFieldError(form.elements.licensePlate, true);
+      if (!plateOk) errors.push(t('booking.errors.plate'));
+      if (errors.length) {
+        showToast(errors[0], 'error');
+        return;
+      }
+
+      const billing = readBilling(form);
+      if (billing.error) {
+        showToast(billing.error, 'error');
+        return;
+      }
 
       const qty = getSelectedQty();
       const packId = selectedPack?.id || null;
@@ -330,18 +385,24 @@ export default async function Booking(container) {
         }
       }
 
+      const voucherIdToSend = (voucher && voucher.status === 'unused' && getSelectedPrice() > voucher.amount)
+        ? voucher.userId
+        : null;
+
       try {
         await startNetopiaPayment({
           orderType: 'credits',
           packId,
           quantity: qty,
           packPrice: getSelectedPrice(),
+          voucherId: voucherIdToSend,
           customerData: {
             customerId: user?.uid || null,
             licensePlate,
             name,
             email,
             phone,
+            billing,
           },
         });
         // Browser is navigating to Netopia — nothing else to do.

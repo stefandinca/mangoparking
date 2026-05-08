@@ -1,23 +1,45 @@
 import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
-import { html, delegate } from '../../utils/dom.js';
+import { html, delegate, setFieldError, clearErrorOnInput } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
 import { startNetopiaPayment } from '../../services/netopiaService.js';
+import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
+import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
+import { getMyVoucher } from '../../services/voucherService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
 
-function daysBetween(startIso, endIso) {
-  const s = new Date(startIso).setHours(0, 0, 0, 0);
-  const e = new Date(endIso).setHours(0, 0, 0, 0);
-  const diff = Math.round((e - s) / 86_400_000);
-  return diff > 0 ? diff : 0;
+// Billing rule: 1 day = 24h from drop-off, with a single 2h grace at the end
+// of the entire booking. Booked 24h+ ≤ 26h → 1 day; >26h ≤ 50h → 2 days; etc.
+const GRACE_MS = 2 * 60 * 60 * 1000;
+
+function billingDays(dropoffMs, pickupMs) {
+  const duration = pickupMs - dropoffMs;
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  return Math.max(1, Math.ceil((duration - GRACE_MS) / 86_400_000));
 }
 
-function formatIsoDate(d) {
-  return d.toISOString().slice(0, 10);
+function durationHours(dropoffMs, pickupMs) {
+  const ms = pickupMs - dropoffMs;
+  if (!Number.isFinite(ms) || ms <= 0) return 0;
+  return Math.round(ms / 3_600_000);
+}
+
+// Render a Date as "YYYY-MM-DDTHH:MM" in local time (the format that
+// <input type="datetime-local"> expects/produces).
+function toLocalDatetimeValue(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Convert "YYYY-MM-DDTHH:MM" (local) → ISO with timezone offset (UTC).
+function localDatetimeToIso(localValue) {
+  if (!localValue) return null;
+  const d = new Date(localValue);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
 }
 
 export default function BookingLongTerm(container) {
@@ -30,12 +52,19 @@ export default function BookingLongTerm(container) {
 
   const user = getCurrentUser();
   const profile = getUserProfile();
-  const today = new Date();
-  const tomorrow = new Date(today.getTime() + 86_400_000);
-  const dayAfter = new Date(today.getTime() + 3 * 86_400_000);
+
+  // Default suggestion: drop-off tomorrow 10:00, pick-up the day after at 10:00.
+  // Stored as local-time-formatted strings for the datetime-local input.
+  const tomorrow10 = new Date();
+  tomorrow10.setDate(tomorrow10.getDate() + 1);
+  tomorrow10.setHours(10, 0, 0, 0);
+  const dayAfter10 = new Date(tomorrow10.getTime() + 86_400_000);
+  const minDropoff = new Date(); // can't drop off in the past
 
   let rates = null;
-  let quote = { days: 2, perDay: 0, total: 0 };
+  let discount = 0;
+  let voucher = null;  // user's unused signup voucher, if any
+  let quote = { days: 1, perDay: 0, total: 0, hours: 24 };
 
   const page = html`<div>
     <div data-navbar></div>
@@ -43,26 +72,27 @@ export default function BookingLongTerm(container) {
     <section class="pt-28 pb-16 bg-frost min-h-screen">
       <div class="max-w-4xl mx-auto px-6">
         <div class="text-center mb-10">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">Long-term</p>
+          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('funnel.longTerm.title')}</p>
           <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${t('longTerm.pageTitle')}</h1>
           <p class="text-dim text-[17px]">${t('longTerm.pageSubtitle')}</p>
         </div>
 
         <form data-long-form class="grid md:grid-cols-2 gap-6">
-          <!-- Dates -->
+          <!-- Drop-off / Pick-up date+time -->
           <div class="card-solid rounded-3xl p-6 md:col-span-2">
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.startDate')} / ${t('longTerm.endDate')}</h3>
+            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.dropoffAt')} / ${t('longTerm.pickupAt')}</h3>
             <div class="grid sm:grid-cols-2 gap-4">
               <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.startDate')} *</label>
-                <input type="date" name="startDate" required min="${formatIsoDate(today)}" value="${formatIsoDate(tomorrow)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.dropoffAt')} *</label>
+                <input type="datetime-local" name="dropoffAt" required min="${toLocalDatetimeValue(minDropoff)}" value="${toLocalDatetimeValue(tomorrow10)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
               </div>
               <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.endDate')} *</label>
-                <input type="date" name="endDate" required min="${formatIsoDate(tomorrow)}" value="${formatIsoDate(dayAfter)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.pickupAt')} *</label>
+                <input type="datetime-local" name="pickupAt" required min="${toLocalDatetimeValue(tomorrow10)}" value="${toLocalDatetimeValue(dayAfter10)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
               </div>
             </div>
-            <p class="text-[12px] text-dim mt-3">${t('longTerm.tierNote')}</p>
+            <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>
+            <p class="text-[12px] text-dim mt-1">${t('longTerm.tierNote')}</p>
           </div>
 
           <!-- Price tiers -->
@@ -76,11 +106,15 @@ export default function BookingLongTerm(container) {
           <!-- Summary (live total) -->
           <div class="rounded-3xl p-6 md:col-span-2 bg-blueberry-deep text-white shadow-lg">
             <p class="text-[12px] text-white/70 uppercase tracking-wider font-mono mb-2">${t('longTerm.totalLabel')}</p>
+            <p class="text-white/50 line-through font-mono text-[15px] hidden" data-quote-original></p>
             <div class="flex items-baseline gap-2 mb-2">
               <span class="font-heading font-bold text-5xl" data-quote-total>—</span>
               <span class="text-white/70 text-lg">lei</span>
+              <span class="text-[11px] font-bold uppercase tracking-wider text-mango ml-2 hidden" data-quote-discount-badge></span>
             </div>
             <p class="text-[14px] text-white/70"><span data-quote-days>—</span> ${t('longTerm.days')} × <span data-quote-perday>—</span> ${t('longTerm.perDay')}</p>
+            <p class="text-[12px] text-white/50 mt-1" data-quote-hours-line>—</p>
+            <p class="text-[13px] text-mango mt-2 hidden" data-voucher-line></p>
           </div>
 
           <!-- Vehicle -->
@@ -88,6 +122,11 @@ export default function BookingLongTerm(container) {
             <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.vehicleInfo')}</h3>
             <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
             <input type="text" name="licensePlate" required placeholder="B 123 ABC" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
+          </div>
+
+          <!-- Billing (PF/PJ) -->
+          <div class="md:col-span-2">
+            ${billingFieldsHtml(profile?.billing)}
           </div>
 
           <!-- Contact -->
@@ -137,6 +176,10 @@ export default function BookingLongTerm(container) {
   const totalEl = page.querySelector('[data-quote-total]');
   const daysEl = page.querySelector('[data-quote-days]');
   const perdayEl = page.querySelector('[data-quote-perday]');
+  const hoursLineEl = page.querySelector('[data-quote-hours-line]');
+  const originalEl = page.querySelector('[data-quote-original]');
+  const discountBadgeEl = page.querySelector('[data-quote-discount-badge]');
+  const voucherLineEl = page.querySelector('[data-voucher-line]');
   const tiersEl = page.querySelector('[data-tiers]');
 
   function renderTiers() {
@@ -167,13 +210,38 @@ export default function BookingLongTerm(container) {
 
   function recompute() {
     if (!rates) return;
-    const startDate = form.startDate.value;
-    const endDate = form.endDate.value;
-    const days = daysBetween(startDate, endDate);
-    quote = calculateLongTermCost(days, rates);
-    totalEl.textContent = quote.total;
-    daysEl.textContent = quote.days;
-    perdayEl.textContent = quote.perDay;
+    const dropoffMs = new Date(form.dropoffAt.value).getTime();
+    const pickupMs = new Date(form.pickupAt.value).getTime();
+    const days = billingDays(dropoffMs, pickupMs);
+    const hours = durationHours(dropoffMs, pickupMs);
+    quote = { ...calculateLongTermCost(days, rates), hours };
+    totalEl.textContent = quote.total || '—';
+    daysEl.textContent = quote.days || '—';
+    perdayEl.textContent = quote.perDay || '—';
+    hoursLineEl.textContent = hours > 0 ? t('longTerm.durationHours', { hours }) : '—';
+    // Strikethrough anchor + discount badge — only when discount is configured.
+    const original = originalFromOnline(quote.total, discount);
+    if (original != null && original !== quote.total) {
+      originalEl.textContent = `${original} lei`;
+      originalEl.classList.remove('hidden');
+      discountBadgeEl.textContent = t('discount.online', { percent: discount });
+      discountBadgeEl.classList.remove('hidden');
+    } else {
+      originalEl.classList.add('hidden');
+      discountBadgeEl.classList.add('hidden');
+    }
+    // Voucher line — visible only if user has an unused voucher AND order
+    // total is strictly above voucher amount (we never apply if it would
+    // zero/negative the Netopia charge).
+    if (voucher && voucher.status === 'unused' && quote.total > voucher.amount) {
+      voucherLineEl.textContent = t('voucher.applied', { amount: voucher.amount });
+      voucherLineEl.classList.remove('hidden');
+    } else {
+      voucherLineEl.classList.add('hidden');
+    }
+    // Keep pickup's min in sync with the chosen dropoff so the native
+    // date picker stops the user before they submit something invalid.
+    if (form.dropoffAt.value) form.pickupAt.min = form.dropoffAt.value;
     highlightActiveTier();
   }
 
@@ -187,24 +255,55 @@ export default function BookingLongTerm(container) {
       { minDays: 14, maxDays: null, perDay: 29 },
     ],
   };
-  getLongTermRates()
-    .catch(() => FALLBACK_RATES)
-    .then(r => {
-      rates = r && r.tiers?.length ? r : FALLBACK_RATES;
-      renderTiers();
-      recompute();
-    });
+  Promise.all([
+    getLongTermRates().catch(() => FALLBACK_RATES),
+    getOnlineDiscountPercent().catch(() => 0),
+    getMyVoucher().catch(() => null),
+  ]).then(([r, d, v]) => {
+    rates = r && r.tiers?.length ? r : FALLBACK_RATES;
+    discount = d || 0;
+    voucher = v;
+    renderTiers();
+    recompute();
+  });
 
-  ['startDate', 'endDate'].forEach(name => {
+  ['dropoffAt', 'pickupAt'].forEach(name => {
     form[name].addEventListener('change', recompute);
     form[name].addEventListener('input', recompute);
   });
 
+  // Clear red field-error state as the user edits.
+  ['dropoffAt', 'pickupAt', 'licensePlate', 'name', 'email', 'phone']
+    .forEach(name => clearErrorOnInput(form[name]));
+
+  // Wire the PF/PJ toggle.
+  wireBillingToggle(form);
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const startDate = form.startDate.value;
-    const endDate = form.endDate.value;
-    const days = daysBetween(startDate, endDate);
+    const dropoffLocal = form.dropoffAt.value;
+    const pickupLocal = form.pickupAt.value;
+    const dropoffIso = localDatetimeToIso(dropoffLocal);
+    const pickupIso = localDatetimeToIso(pickupLocal);
+    if (!dropoffIso || !pickupIso) {
+      setFieldError(form.dropoffAt, !dropoffIso);
+      setFieldError(form.pickupAt, !pickupIso);
+      showToast(t('longTerm.invalidDates'), 'error');
+      return;
+    }
+    const dropoffMs = new Date(dropoffIso).getTime();
+    const pickupMs = new Date(pickupIso).getTime();
+    if (pickupMs <= dropoffMs) {
+      setFieldError(form.pickupAt, true);
+      showToast(t('longTerm.invalidDates'), 'error');
+      return;
+    }
+    if (pickupMs - dropoffMs < 60 * 60 * 1000) {
+      setFieldError(form.pickupAt, true);
+      showToast(t('longTerm.minDuration'), 'error');
+      return;
+    }
+    const days = billingDays(dropoffMs, pickupMs);
     if (days < 1) { showToast(t('longTerm.invalidDates'), 'error'); return; }
 
     const licensePlate = form.licensePlate.value.trim();
@@ -212,8 +311,24 @@ export default function BookingLongTerm(container) {
     const email = form.email.value.trim();
     const phone = form.phone.value.trim();
 
-    if (!isValidLicensePlate(licensePlate) || !required(name) || !isValidEmail(email)) {
+    const checks = [
+      [form.licensePlate, isValidLicensePlate(licensePlate)],
+      [form.name, required(name)],
+      [form.email, isValidEmail(email)],
+    ];
+    let hasError = false;
+    for (const [input, ok] of checks) {
+      setFieldError(input, !ok);
+      if (!ok) hasError = true;
+    }
+    if (hasError) {
       showToast(t('common.error'), 'error');
+      return;
+    }
+
+    const billing = readBilling(form);
+    if (billing.error) {
+      showToast(billing.error, 'error');
       return;
     }
 
@@ -221,19 +336,31 @@ export default function BookingLongTerm(container) {
     btn.disabled = true;
     btn.textContent = t('longTerm.processing');
 
+    // Apply voucher only if it would still leave a positive Netopia charge.
+    const voucherIdToSend = (voucher && voucher.status === 'unused' && quote.total > voucher.amount)
+      ? voucher.userId
+      : null;
+
     try {
       await startNetopiaPayment({
         orderType: 'longTerm',
-        startDate,
-        endDate,
+        // Backward compat: keep date-only fields populated so older admin
+        // displays + the existing function path still work. New canonical
+        // fields are dropoffAt/pickupAt.
+        startDate: dropoffIso.slice(0, 10),
+        endDate: pickupIso.slice(0, 10),
+        dropoffAt: dropoffIso,
+        pickupAt: pickupIso,
         days,
         totalPrice: quote.total,
+        voucherId: voucherIdToSend,
         customerData: {
           customerId: user?.uid || null,
           licensePlate,
           name,
           email,
           phone,
+          billing,
         },
       });
       // The browser is now navigating to Netopia's hosted page —

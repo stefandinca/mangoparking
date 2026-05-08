@@ -138,6 +138,18 @@ export default {
     commuter: 'Navetist',
   },
 
+  // Admin reviews CRUD
+  reviewsAdmin: {
+    subtitle: 'Adaugă, editează sau șterge recenziile afișate pe pagina principală.',
+    add: '+ Adaugă recenzie',
+    comment: 'Comentariu',
+    published: 'Public',
+    empty: 'Nicio recenzie încă. Adaugă una de mai sus.',
+    added: 'Recenzie adăugată.',
+    deleted: 'Recenzie ștearsă.',
+    deleteConfirm: 'Ștergi această recenzie?',
+  },
+
   // FAQ
   faq: {
     label: 'Întrebări Frecvente',
@@ -365,6 +377,7 @@ export default {
     },
     info: 'Informații Contact',
     phone: 'Telefon',
+    callBtn: 'Sună',
     emailLabel: 'Email',
     address: 'Adresa parcării',
     hoursLabel: 'Program',
@@ -517,6 +530,7 @@ export default {
     capacity: 'Capacitate',
     pricing: 'Tarife',
     shuttle: 'Microbuz',
+    reviews: 'Recenzii',
     reports: 'Rapoarte',
     audit: 'Jurnal Audit',
     // Dashboard
@@ -712,6 +726,11 @@ export default {
     typeUse: 'Utilizat',
     typeRefund: 'Rambursare',
     typeCheckout: 'Check Out',
+    typeLateFee: 'Penalitate',
+    chargeLateFee: 'Penalitate întârziere',
+    lateFeeHint: 'Pentru clienți navetiști care nu au plecat până la 20:00. Banii se colectează la fața locului.',
+    lateFeeConfirm: 'Confirmi adăugarea unei penalități de {amount} lei pentru acest client?',
+    lateFeeCharged: 'Penalitate de {amount} lei înregistrată.',
     noTransactions: 'Nicio tranzacție de credite.',
     filterAll: 'Toate',
     filterPurchase: 'Achiziții',
@@ -746,6 +765,42 @@ export default {
     packSaved: 'Pachetele de credite au fost salvate!',
   },
 
+  // Billing (PF / PJ — invoicing data for SmartBill)
+  billing: {
+    title: 'Date de facturare',
+    typePF: 'Persoană fizică',
+    typePJ: 'Persoană juridică',
+    companyName: 'Denumire firmă',
+    cui: 'CUI',
+    regCom: 'Nr. Reg. Com. (opțional)',
+    companyAddress: 'Adresa firmei',
+    errors: {
+      companyName: 'Introdu denumirea firmei.',
+      cui: 'CUI invalid (ex: RO12345678).',
+      regCom: 'Nr. Reg. Com. invalid (ex: J40/123/2020).',
+      companyAddress: 'Introdu adresa firmei.',
+    },
+  },
+
+  // Signup voucher
+  voucher: {
+    applied: 'Voucher fidelitate aplicat: −{amount} lei',
+    dashboardTitle: 'Voucher de {amount} lei disponibil',
+    dashboardHint: 'Se aplică automat la următoarea ta achiziție.',
+    signupCtaTitle: 'Fă-ți cont și primești {amount} lei la următoarea achiziție',
+    signupCtaHint: 'Salvează-ți datele pentru rezervări mai rapide. Voucherul se aplică automat la prima achiziție din cont.',
+    signupGoogle: 'Continuă cu Google',
+    signupEmail: 'Cont cu email',
+  },
+
+  // Online payment discount
+  discount: {
+    online: '-{percent}% online',
+    settingsTitle: 'Discount plată online',
+    settingsHint: 'Procent aplicat tuturor prețurilor (0 = fără discount). Recomandat: 10%.',
+    settingsLabel: 'Procent discount (%)',
+  },
+
   // Common
   common: {
     loading: 'Se încarcă...',
@@ -769,27 +824,29 @@ export default {
     pageTitle: 'Alege tipul de parcare',
     pageSubtitle: 'Două planuri. Plătești pentru ce ai nevoie.',
     longTerm: {
-      title: 'Parcare pe termen lung',
+      title: 'Parcare aeroport',
       tagline: 'Călătorești și lași mașina la noi',
       description: 'Pentru vacanțe și călătorii de lungă durată. Plătești un tarif fix pe zi. Acces 24/7.',
       features: ['Acces 24/7', 'Tarif descrescător cu numărul de zile', 'Microbuz gratuit la aeroport', 'Rezervare pe dată specifică'],
-      cta: 'Rezervă pe termen lung',
+      cta: 'Rezervă parcare aeroport',
     },
     commuter: {
-      title: 'Credite zilnice',
+      title: 'Parcare navetiști',
       tagline: 'Parchezi zilnic, pleci în aceeași zi',
       description: 'Pentru navetiști. Cumperi un pachet de credite — 1 credit = 1 zi de parcare (Luni–Vineri, 06:00–20:00).',
       features: ['Luni–Vineri, 06:00–20:00', 'Credite flexibile — folosești oricând', 'Nu expiră', 'Microbuz gratuit'],
-      cta: 'Cumpără Credite',
+      cta: 'Cumpără credite',
     },
   },
 
   // Long-term booking page
   longTerm: {
-    pageTitle: 'Rezervare pe termen lung',
+    pageTitle: 'Rezervare parcare aeroport',
     pageSubtitle: 'Alege perioada, plătești pe loc. Acces 24/7.',
     startDate: 'Data sosire',
     endDate: 'Data plecare',
+    dropoffAt: 'Sosire (data și ora)',
+    pickupAt: 'Plecare (data și ora)',
     days: 'zile',
     oneDay: '1 zi',
     perDay: 'lei / zi',
@@ -800,8 +857,11 @@ export default {
     processing: 'Se procesează plata...',
     confirmed: 'Rezervare Confirmată!',
     confirmMessage: 'Am trimis detaliile pe email. Ne vedem la sosire.',
-    invalidDates: 'Alege o perioadă validă (dată plecare după dată sosire).',
-    tierNote: 'Tarif automat, cu descont pentru șederi mai lungi.',
+    invalidDates: 'Alege o perioadă validă (data plecare după data sosire).',
+    minDuration: 'Rezervarea minimă este de 1 oră.',
+    tierNote: 'Tarif automat, cu discount pentru șederi mai lungi.',
+    graceNote: 'O zi de parcare = 24 ore de la sosire. Primele 2 ore peste perioada rezervată sunt gratuite — după, se adaugă o zi suplimentară.',
+    durationHours: '{hours} ore parcare',
     viewBooking: 'Vezi detalii',
   },
 
@@ -853,5 +913,6 @@ export default {
     noBookings: 'Nicio rezervare activă.',
     viewDetails: 'Vezi detalii',
     lateFee: 'Penalitate',
+    overtime: 'Întârziere',
   },
 };

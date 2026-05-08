@@ -3,14 +3,16 @@ import { t, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getLongTermRates, saveLongTermRates, getCommuterPolicy, saveCommuterPolicy } from '../../services/longTermService.js';
+import { getOnlineDiscountPercent, saveOnlineDiscountPercent } from '../../services/discountService.js';
 import { showToast } from '../../components/core/Toast.js';
 
 export default async function AdminRates(container) {
   updateMeta({ title: `${t('rates.pageTitle')} — Admin`, lang: getLocale() });
 
-  const [rates, policy] = await Promise.all([getLongTermRates(), getCommuterPolicy()]);
+  const [rates, policy, discount] = await Promise.all([getLongTermRates(), getCommuterPolicy(), getOnlineDiscountPercent()]);
   let working = JSON.parse(JSON.stringify(rates));
   let workingPolicy = { ...policy };
+  let workingDiscount = discount;
 
   const tierRow = (tier, i) => `
     <div class="grid grid-cols-12 gap-3 items-end" data-tier-row data-index="${i}">
@@ -54,6 +56,14 @@ export default async function AdminRates(container) {
       <p class="text-dim text-[14px] mb-5">${t('rates.latePickupHelp')}</p>
       <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('rates.latePickupRate')}</label>
       <input type="number" min="0" step="1" data-late-rate value="${workingPolicy.latePickupDailyRate}" class="w-48 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono">
+    </section>
+
+    <!-- Online discount -->
+    <section class="card-solid rounded-3xl p-6 md:p-8 mb-6">
+      <h2 class="font-heading font-bold text-xl text-blueberry-deep mb-1">${t('discount.settingsTitle')}</h2>
+      <p class="text-dim text-[14px] mb-5">${t('discount.settingsHint')}</p>
+      <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('discount.settingsLabel')}</label>
+      <input type="number" min="0" max="50" step="1" data-discount-pct value="${workingDiscount}" class="w-48 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono">
     </section>
 
     <!-- Save -->
@@ -103,6 +113,10 @@ export default async function AdminRates(container) {
     workingPolicy.latePickupDailyRate = Number(e.target.value) || 0;
   });
 
+  page.querySelector('[data-discount-pct]').addEventListener('input', (e) => {
+    workingDiscount = Number(e.target.value) || 0;
+  });
+
   page.querySelector('[data-save-all]').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
@@ -110,6 +124,7 @@ export default async function AdminRates(container) {
       await Promise.all([
         saveLongTermRates(working),
         saveCommuterPolicy(workingPolicy),
+        saveOnlineDiscountPercent(workingDiscount),
       ]);
       showToast(t('rates.saved'), 'success');
     } catch (err) {

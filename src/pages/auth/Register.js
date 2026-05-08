@@ -2,6 +2,7 @@ import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { registerWithEmail, loginWithGoogle } from '../../firebase/auth.js';
+import { ensureSignupVoucher } from '../../services/voucherService.js';
 import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { html } from '../../utils/dom.js';
@@ -134,6 +135,7 @@ export default function Register(container) {
     btn.textContent = '...';
     try {
       await registerWithEmail(email, password, displayName);
+      await ensureSignupVoucher().catch(() => {});
       navigate(localePath('/account'));
     } catch (err) {
       const key = FIREBASE_ERROR_MAP[err.code] || 'auth.errors.invalidEmail';
@@ -149,6 +151,7 @@ export default function Register(container) {
     clearError();
     try {
       await loginWithGoogle();
+      await ensureSignupVoucher().catch(() => {});
       navigate(localePath('/account'));
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {

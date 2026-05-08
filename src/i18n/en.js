@@ -138,6 +138,18 @@ export default {
     commuter: 'Commuter',
   },
 
+  // Admin reviews CRUD
+  reviewsAdmin: {
+    subtitle: 'Add, edit, or remove the reviews shown on the homepage.',
+    add: '+ Add review',
+    comment: 'Comment',
+    published: 'Public',
+    empty: 'No reviews yet. Add one above.',
+    added: 'Review added.',
+    deleted: 'Review deleted.',
+    deleteConfirm: 'Delete this review?',
+  },
+
   // FAQ
   faq: {
     label: 'FAQ',
@@ -364,6 +376,7 @@ export default {
     },
     info: 'Contact Information',
     phone: 'Phone',
+    callBtn: 'Call',
     emailLabel: 'Email',
     address: 'Parking address',
     hoursLabel: 'Hours',
@@ -516,6 +529,7 @@ export default {
     capacity: 'Capacity',
     pricing: 'Pricing',
     shuttle: 'Shuttle',
+    reviews: 'Reviews',
     reports: 'Reports',
     audit: 'Audit Log',
     // Dashboard
@@ -711,6 +725,11 @@ export default {
     typeUse: 'Used',
     typeRefund: 'Refund',
     typeCheckout: 'Check Out',
+    typeLateFee: 'Late Fee',
+    chargeLateFee: 'Charge late fee',
+    lateFeeHint: 'For commuter customers who did not leave by 8 PM. Money is collected on-site.',
+    lateFeeConfirm: 'Confirm charging a {amount} lei late fee for this customer?',
+    lateFeeCharged: 'Late fee of {amount} lei recorded.',
     noTransactions: 'No credit transactions yet.',
     filterAll: 'All',
     filterPurchase: 'Purchases',
@@ -745,6 +764,42 @@ export default {
     packSaved: 'Credit packs saved!',
   },
 
+  // Billing (PF / PJ — invoicing data for SmartBill)
+  billing: {
+    title: 'Billing details',
+    typePF: 'Individual',
+    typePJ: 'Company',
+    companyName: 'Company name',
+    cui: 'CUI / VAT',
+    regCom: 'Trade reg. nr. (optional)',
+    companyAddress: 'Company address',
+    errors: {
+      companyName: 'Enter the company name.',
+      cui: 'Invalid CUI (e.g. RO12345678).',
+      regCom: 'Invalid trade registry number (e.g. J40/123/2020).',
+      companyAddress: 'Enter the company address.',
+    },
+  },
+
+  // Signup voucher
+  voucher: {
+    applied: 'Loyalty voucher applied: −{amount} lei',
+    dashboardTitle: '{amount} lei voucher available',
+    dashboardHint: 'Auto-applied on your next purchase.',
+    signupCtaTitle: 'Sign up and get {amount} lei off your next purchase',
+    signupCtaHint: 'Save your details for faster bookings. The voucher applies automatically on your first purchase from the account.',
+    signupGoogle: 'Continue with Google',
+    signupEmail: 'Sign up with email',
+  },
+
+  // Online payment discount
+  discount: {
+    online: '-{percent}% online',
+    settingsTitle: 'Online-payment discount',
+    settingsHint: 'Applied to all displayed prices (0 = no discount). Recommended: 10%.',
+    settingsLabel: 'Discount percent (%)',
+  },
+
   // Common
   common: {
     loading: 'Loading...',
@@ -768,14 +823,14 @@ export default {
     pageTitle: 'Choose your parking type',
     pageSubtitle: 'Two plans. You only pay for what you need.',
     longTerm: {
-      title: 'Long-term Parking',
+      title: 'Airport Parking',
       tagline: 'Travelling and leaving your car with us',
       description: 'For trips and vacations. Flat daily rate, fewer RON the longer you stay. 24/7 access.',
       features: ['24/7 access', 'Cheaper rate for longer stays', 'Free airport shuttle', 'Reserve specific dates'],
-      cta: 'Book Long-term',
+      cta: 'Book Airport Parking',
     },
     commuter: {
-      title: 'Daily Credits',
+      title: 'Commuter Parking',
       tagline: 'You park during the day and leave same-day',
       description: 'For commuters. Buy a credit pack — 1 credit = 1 day of parking (Mon–Fri, 6 AM – 8 PM).',
       features: ['Mon–Fri, 6 AM – 8 PM', 'Flexible credits — use anytime', 'Never expire', 'Free shuttle'],
@@ -785,10 +840,12 @@ export default {
 
   // Long-term booking page
   longTerm: {
-    pageTitle: 'Long-term Booking',
+    pageTitle: 'Airport Parking Booking',
     pageSubtitle: 'Pick your dates and pay upfront. 24/7 access.',
     startDate: 'Drop-off date',
     endDate: 'Pick-up date',
+    dropoffAt: 'Drop-off (date & time)',
+    pickupAt: 'Pick-up (date & time)',
     days: 'days',
     oneDay: '1 day',
     perDay: 'lei / day',
@@ -800,7 +857,10 @@ export default {
     confirmed: 'Booking Confirmed!',
     confirmMessage: 'We\'ve emailed the details. See you on arrival.',
     invalidDates: 'Pick a valid range (pick-up after drop-off).',
+    minDuration: 'Minimum booking is 1 hour.',
     tierNote: 'Auto-tiered pricing — cheaper per day the longer you stay.',
+    graceNote: 'One parking day = 24 hours from drop-off. The first 2 hours past your booked end-time are free — after that, an extra day is added.',
+    durationHours: '{hours}h parking',
     viewBooking: 'View details',
   },
 
@@ -852,5 +912,6 @@ export default {
     noBookings: 'No active bookings.',
     viewDetails: 'View details',
     lateFee: 'Late fee',
+    overtime: 'Overtime',
   },
 };

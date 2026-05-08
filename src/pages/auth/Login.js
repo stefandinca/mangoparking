@@ -2,6 +2,7 @@ import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { loginWithEmail, loginWithGoogle } from '../../firebase/auth.js';
+import { ensureSignupVoucher } from '../../services/voucherService.js';
 import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { html } from '../../utils/dom.js';
@@ -119,6 +120,10 @@ export default function Login(container) {
     btn.textContent = '...';
     try {
       await loginWithEmail(email, password);
+      // Idempotent — creates the signup voucher only if the user doesn't
+      // already have one. Lets pre-feature accounts also receive it on
+      // their first login after the feature ships.
+      await ensureSignupVoucher().catch(() => {});
       navigate(localePath('/account'));
     } catch (err) {
       showError(err.code);
@@ -133,6 +138,7 @@ export default function Login(container) {
     clearError();
     try {
       await loginWithGoogle();
+      await ensureSignupVoucher().catch(() => {});
       navigate(localePath('/account'));
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {

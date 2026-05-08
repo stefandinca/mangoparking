@@ -10,6 +10,8 @@ import { showToast } from '../../components/core/Toast.js';
 import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
 import { accountLayout, initAccountNav, NAV_ICONS } from '../../components/account/AccountLayout.js';
 import { formatDate } from '../../utils/date.js';
+import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
+import { getMyVoucher } from '../../services/voucherService.js';
 
 const TYPE_STYLES = {
   purchase: 'bg-leaf/10 text-leaf',
@@ -24,10 +26,11 @@ export default async function Dashboard(container) {
   const profile = uid ? await getDocument('users', uid).catch(() => getUserProfile()) : getUserProfile();
   const displayName = profile?.displayName || 'User';
 
-  const [balanceDoc, transactions, shuttleSchedule] = await Promise.all([
+  const [balanceDoc, transactions, shuttleSchedule, voucher] = await Promise.all([
     uid ? getBalance(uid).catch(() => null) : Promise.resolve(null),
     uid ? getTransactions(uid, 5).catch(() => []) : Promise.resolve([]),
     getShuttleSchedule().catch(() => []),
+    uid ? getMyVoucher().catch(() => null) : Promise.resolve(null),
   ]);
 
   const balance = balanceDoc?.balance ?? 0;
@@ -85,12 +88,30 @@ export default async function Dashboard(container) {
             <input type="tel" name="phone" value="${profile?.phone || ''}" class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40">
           </div>
         </div>
+        <div class="mb-4">
+          ${billingFieldsHtml(profile?.billing)}
+        </div>
         <div class="flex gap-2">
           <button type="submit" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('common.save')}</button>
           <button type="button" data-cancel-profile class="text-dim text-[14px] px-4 py-2.5 hover:text-charcoal transition-colors">${t('common.cancel')}</button>
         </div>
       </form>
     </div>
+
+    ${voucher && voucher.status === 'unused' ? `
+    <!-- Voucher banner -->
+    <div class="rounded-2xl p-5 mb-6 bg-mango/10 border-2 border-mango/30 flex items-center gap-4">
+      <div class="w-12 h-12 rounded-xl bg-mango flex items-center justify-center shrink-0">
+        <svg class="w-6 h-6 text-charcoal" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-heading font-bold text-lg text-blueberry-deep">${t('voucher.dashboardTitle', { amount: voucher.amount })}</p>
+        <p class="text-charcoal/70 text-[14px]">${t('voucher.dashboardHint')}</p>
+      </div>
+    </div>
+    ` : ''}
 
     <!-- Stats row -->
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
@@ -178,6 +199,9 @@ export default async function Dashboard(container) {
   const profileView = page.querySelector('[data-profile-view]');
   const profileForm = page.querySelector('[data-profile-form]');
 
+  // Wire PF/PJ toggle inside the profile form.
+  if (profileForm) wireBillingToggle(profileForm);
+
   delegate(page, 'click', '[data-edit-profile]', () => {
     profileView.classList.add('hidden');
     profileForm.classList.remove('hidden');
@@ -194,11 +218,17 @@ export default async function Dashboard(container) {
       const fd = new FormData(profileForm);
       const uid = getCurrentUser()?.uid;
       if (!uid) return;
+      const billing = readBilling(profileForm);
+      if (billing.error) {
+        showToast(billing.error, 'error');
+        return;
+      }
       try {
         await updateDocument('users', uid, {
           displayName: fd.get('displayName') || '',
           email: fd.get('email') || '',
           phone: fd.get('phone') || '',
+          billing,
         });
         // Update view
         const vals = profileView.querySelectorAll('p.font-medium');

@@ -2,8 +2,9 @@ import { html, delegate } from '../../utils/dom.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { lookupByPlate, useToken, checkOut, refundToken, getAllRecentTransactions } from '../../services/tokenService.js';
-import { getRecentBookings } from '../../services/longTermService.js';
-import { getDocument } from '../../firebase/db.js';
+import { getRecentBookings, getLongTermRates } from '../../services/longTermService.js';
+import { getDocument, addDocument } from '../../firebase/db.js';
+import { auditLog } from '../../services/auditService.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { showToast } from '../../components/core/Toast.js';
 import { formatDate } from '../../utils/date.js';
@@ -13,17 +14,21 @@ const TYPE_STYLES = {
   use: 'bg-blue-100 text-blue-600',
   refund: 'bg-mango/10 text-mango',
   checkout: 'bg-purple-100 text-purple-600',
+  lateFee: 'bg-danger/10 text-danger',
 };
 
 function renderTransaction(tx, locale) {
   const time = tx.timestamp ? formatDate(tx.timestamp, locale) : '—';
   const typeCls = TYPE_STYLES[tx.type] || 'bg-gray-100 text-gray-600';
-  const qty = tx.type === 'use' ? tx.quantity : `+${tx.quantity}`;
+  // Late fee logs the RON amount, not a token quantity.
+  const valueCol = tx.type === 'lateFee'
+    ? `${tx.feeAmount ?? 0} ${t('common.lei')}`
+    : (tx.type === 'use' ? tx.quantity : `+${tx.quantity}`);
   return `
     <div class="flex items-center gap-4 px-6 py-4">
       <span class="font-mono text-[13px] text-dim w-28 shrink-0">${time}</span>
       <span class="text-[12px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${typeCls}">${t('credit.type' + tx.type.charAt(0).toUpperCase() + tx.type.slice(1))}</span>
-      <span class="font-mono font-semibold text-[15px] w-12 text-center">${qty}</span>
+      <span class="font-mono font-semibold text-[15px] w-20 text-center">${valueCol}</span>
       <span class="text-[14px] text-dim truncate">${tx.licensePlate || '—'}</span>
     </div>`;
 }
@@ -38,12 +43,34 @@ export default async function AdminBookings(container) {
   ]);
   const longTermBookings = recentBookings.filter(b => b.type === 'longTerm');
 
+  // Format an ISO timestamp as "dd/MM HH:mm" in local time.
+  // Falls back to date-only "dd/MM" when only a date string is given.
+  function fmtMoment(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+    const pad = (n) => String(n).padStart(2, '0');
+    const datePart = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+    const hasTime = iso.length > 10;
+    return hasTime ? `${datePart} ${pad(d.getHours())}:${pad(d.getMinutes())}` : datePart;
+  }
+
+  // 2h grace beyond pickup, then a booking is "overtime" — staff should
+  // collect an extra long-term day at the lot.
+  const OVERTIME_GRACE_MS = 2 * 60 * 60 * 1000;
+
   function renderBookingRow(b) {
-    const dateStr = b.startDate?.slice(0, 10) + ' → ' + b.endDate?.slice(0, 10);
+    const fromIso = b.dropoffAt || b.startDate;
+    const toIso = b.pickupAt || b.endDate;
+    const dateStr = `${fmtMoment(fromIso)} → ${fmtMoment(toIso)}`;
     const statusCls = b.status === 'active' ? 'bg-leaf/10 text-leaf'
       : b.status === 'upcoming' ? 'bg-blue-100 text-blue-600'
       : b.status === 'completed' ? 'bg-gray-100 text-gray-600'
       : 'bg-danger/10 text-danger';
+    const pickupMs = b.pickupAt ? new Date(b.pickupAt).getTime() : null;
+    const isOvertime = pickupMs
+      && b.status !== 'completed'
+      && Date.now() > pickupMs + OVERTIME_GRACE_MS;
     return `
       <div class="flex items-center gap-4 px-6 py-4 text-[14px]">
         <span class="font-mono text-[13px] text-dim w-44 shrink-0 truncate">${dateStr}</span>
@@ -51,6 +78,7 @@ export default async function AdminBookings(container) {
         <span class="text-dim w-20 text-right font-mono">${b.days}${t('common.day')}</span>
         <span class="text-dim w-28 text-right font-mono">${b.totalPrice} lei</span>
         <span class="text-[12px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${statusCls}">${b.status}</span>
+        ${isOvertime ? `<span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-danger/10 text-danger">${t('bookingsAdmin.overtime')}</span>` : ''}
       </div>`;
   }
 
@@ -145,7 +173,9 @@ export default async function AdminBookings(container) {
             <input type="number" data-refund-qty min="1" value="1" class="w-20 px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] font-mono text-center focus:outline-none focus:border-mango/40">
             <button data-refund-credit class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('credit.refundTokens')}</button>
           </div>
+          <button data-late-fee class="ml-auto bg-danger/10 hover:bg-danger/20 text-danger font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('credit.chargeLateFee')}</button>
         </div>
+        <p class="text-[12px] text-dim mt-3">${t('credit.lateFeeHint')}</p>
       </div>
     `;
     el.classList.remove('hidden');
@@ -232,6 +262,50 @@ export default async function AdminBookings(container) {
       showToast(t('common.error'), 'error');
     } finally {
       actionBusy = false;
+    }
+  });
+
+  // Charge late-pickup fee (commuter who didn't leave by 8 PM).
+  // Logs a tokenTransactions doc for accounting; money is collected in
+  // person at the lot. Fee = current 1-day long-term tier rate.
+  delegate(page, 'click', '[data-late-fee]', async () => {
+    if (!currentCustomer) return;
+    if (actionBusy) return;
+    let rate = 0;
+    try {
+      const rates = await getLongTermRates();
+      rate = rates?.tiers?.[0]?.perDay ?? 0;
+    } catch (err) {
+      console.error(err);
+    }
+    if (!rate) {
+      showToast(t('common.error'), 'error');
+      return;
+    }
+    const plate = (currentCustomer.plates || [])[0] || '';
+    const confirmMsg = t('credit.lateFeeConfirm', { amount: rate });
+    if (!window.confirm(confirmMsg)) return;
+    actionBusy = true;
+    setBtnLoading(page.querySelector('[data-late-fee]'), true);
+    try {
+      await addDocument('tokenTransactions', {
+        customerId: currentCustomer.id || null,
+        licensePlate: plate,
+        type: 'lateFee',
+        quantity: 0,
+        feeAmount: rate,
+        feeCurrency: 'RON',
+        timestamp: new Date().toISOString(),
+        source: 'admin-manual',
+      });
+      await auditLog('late_fee_charged', 'tokenTransactions', plate || 'unknown', null, { plate, amount: rate });
+      showToast(t('credit.lateFeeCharged', { amount: rate }), 'success');
+    } catch (err) {
+      console.error(err);
+      showToast(t('common.error'), 'error');
+    } finally {
+      actionBusy = false;
+      setBtnLoading(page.querySelector('[data-late-fee]'), false);
     }
   });
 

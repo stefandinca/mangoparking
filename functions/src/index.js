@@ -97,6 +97,7 @@ async function creditTokens({ packId, quantity, customerData }) {
     packId: packId || null,
     timestamp: new Date().toISOString(),
     source: 'netopia',
+    billing: customerData.billing || { type: 'PF' },
   });
 
   return docId;
@@ -108,8 +109,12 @@ async function createBookingFromOrder(orderId, order) {
     type: 'longTerm',
     customerId: order.customerData.customerId || null,
     licensePlate: normalizePlate(order.customerData.licensePlate),
+    // Date-only fields kept for backward compat with older admin views
+    // and existing booking docs. New canonical fields are dropoffAt/pickupAt.
     startDate: order.startDate,
     endDate: order.endDate,
+    dropoffAt: order.dropoffAt || null,
+    pickupAt: order.pickupAt || null,
     days: order.days,
     basePrice: order.totalPrice,
     latePrice: 0,
@@ -120,6 +125,7 @@ async function createBookingFromOrder(orderId, order) {
       email: order.customerData.email || '',
       phone: order.customerData.phone || '',
     },
+    billing: order.customerData.billing || { type: 'PF' },
     paymentId: orderId,
     createdAt: new Date().toISOString(),
     completedAt: null,
@@ -170,11 +176,37 @@ export const createPayment = onRequest(
       return res.status(400).json({ error: 'Missing or invalid amount' });
     }
 
+    // Voucher application — only honored for authenticated customers; voucher
+    // doc ID equals the user's uid. Reject silently (don't apply) if anything
+    // is off; the IPN consumption code is the source of truth and re-checks.
+    let voucherAmount = 0;
+    let voucherId = null;
+    if (body.voucherId && cd.customerId && body.voucherId === cd.customerId) {
+      try {
+        const v = await getFirestore().collection('vouchers').doc(body.voucherId).get();
+        if (v.exists) {
+          const data = v.data();
+          if (data.userId === cd.customerId
+              && data.status === 'unused'
+              && Number(data.amount) > 0
+              && Number(data.amount) < amount) {  // strict <: keep amount > 0 for Netopia
+            voucherAmount = Number(data.amount);
+            voucherId = body.voucherId;
+            amount = amount - voucherAmount;
+          }
+        }
+      } catch (err) {
+        console.warn('Voucher lookup failed (ignoring):', err);
+      }
+    }
+
     // Persist pending order so the IPN callback can replay it by orderId.
     await getFirestore().collection('pendingOrders').doc(orderId).set({
       orderType,
       ...body,
       amount,
+      voucherId,           // null when no voucher applied
+      voucherAmount,       // 0 when no voucher applied
       status: 'pending',
       createdAt: new Date().toISOString(),
     });
@@ -287,6 +319,26 @@ export const netopiaCallback = onRequest(
             netopiaAction: action,
             paidAt: new Date().toISOString(),
           });
+        }
+        // Consume the applied voucher (if any) — flip status to 'redeemed'.
+        // Best-effort: a failure here doesn't undo the order. Idempotent
+        // (a transaction guards against double-redeem on IPN retries).
+        if (pending.voucherId) {
+          try {
+            await getFirestore().runTransaction(async (tx) => {
+              const ref = getFirestore().collection('vouchers').doc(pending.voucherId);
+              const snap = await tx.get(ref);
+              if (snap.exists && snap.data().status === 'unused') {
+                tx.update(ref, {
+                  status: 'redeemed',
+                  redeemedAt: new Date().toISOString(),
+                  redeemedOn: orderId,
+                });
+              }
+            });
+          } catch (err) {
+            console.warn('Voucher consumption failed (order still credited):', err);
+          }
         }
         return res.status(200).send(crcSuccess());
       } catch (err) {

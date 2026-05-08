@@ -151,6 +151,11 @@ export const routes = [
     component: () => import('../pages/admin/AdminShuttle.js'),
     guards: ['auth', 'admin'],
   },
+  {
+    path: '/admin/reviews',
+    component: () => import('../pages/admin/AdminReviews.js'),
+    guards: ['auth', 'admin'],
+  },
   // MVP: hidden
   // {
   //   path: '/admin/reports',

@@ -9,12 +9,24 @@ import { subscribeCapacity } from '../../services/capacityService.js';
 import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
 import { getLongTermRates } from '../../services/longTermService.js';
 import { getTokenPacks } from '../../services/tokenService.js';
+import { getPublishedReviews } from '../../services/reviewService.js';
 
-const MOCK_REVIEWS = [
-  { initials: 'AP', name: 'Andrei P.', type: 'traveler', rating: 5 },
-  { initials: 'MI', name: 'Maria I.', type: 'traveler', rating: 5 },
-  { initials: 'DV', name: 'Dan V.', type: 'traveler', rating: 4 },
+// Fallback reviews shown when the Firestore reviews collection is empty.
+// Once admin adds real ones (via /admin/reviews), those replace these.
+const FALLBACK_REVIEWS = [
+  { name: 'Andrei P.', type: 'traveler', rating: 5, comment: null },
+  { name: 'Maria I.', type: 'traveler', rating: 5, comment: null },
+  { name: 'Dan V.', type: 'traveler', rating: 4, comment: null },
 ];
+
+function initialsOf(name) {
+  return String(name || '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || '')
+    .join('');
+}
 
 export default function Home(container) {
   const locale = getLocale();
@@ -103,11 +115,6 @@ export default function Home(container) {
 
             <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
               <div>
-                <p class="font-heading font-bold text-2xl tracking-tight">${TOTAL_CAPACITY}</p>
-                <p class="text-[12px] text-dim uppercase tracking-wider mt-0.5">${t('hero.totalSpots')}</p>
-              </div>
-              <div class="w-px h-8 bg-frost-deep hidden sm:block"></div>
-              <div>
                 <p class="font-heading font-bold text-2xl tracking-tight">15<span class="text-dim text-base font-normal"> ${t('common.min')}</span></p>
                 <p class="text-[12px] text-dim uppercase tracking-wider mt-0.5">${t('hero.shuttleFreq')}</p>
               </div>
@@ -125,17 +132,6 @@ export default function Home(container) {
                 <img src="https://images.unsplash.com/photo-1568738009519-52d1bad47858?q=80&w=774&auto=format&fit=crop" alt="Secure gated parking" class="img-cover" loading="eager">
               </div>
               <img src="/images/logo.png" alt="" aria-hidden="true" class="absolute -bottom-6 -left-6 w-40 h-40 object-contain drop-shadow-2xl rotate-[-8deg] pointer-events-none select-none" />
-
-              <div class="absolute top-0 left-0 glass rounded-2xl p-5 shadow-lg w-56">
-                <p class="text-[11px] font-mono uppercase text-dim tracking-[0.15em] mb-3">${t('hero.liveCapacity')}</p>
-                <div class="flex items-baseline gap-1.5 mb-3">
-                  <span class="font-heading font-bold text-4xl tracking-tight" data-capacity-number>${MOCK_CAPACITY}</span>
-                  <span class="text-dim text-sm">/ ${TOTAL_CAPACITY}</span>
-                </div>
-                <div class="h-2 bg-frost-deep rounded-full overflow-hidden">
-                  <div class="h-full rounded-full bg-gradient-to-r from-leaf to-mango transition-all duration-500" style="width:${capacityPct}%" data-capacity-bar></div>
-                </div>
-              </div>
 
               <div class="absolute top-4 right-0 glass rounded-2xl p-5 shadow-lg w-48">
                 <p class="text-[11px] font-mono uppercase text-dim tracking-[0.15em] mb-2">${t('hero.nextShuttle')}</p>
@@ -302,22 +298,8 @@ export default function Home(container) {
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('reviews.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('reviews.title')}</h2>
         </div>
-        <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          ${MOCK_REVIEWS.map((r, i) => `
-            <div class="card-solid rounded-3xl p-7">
-              <div class="flex gap-0.5 mb-4">
-                ${Array(5).fill(0).map((_, j) => `<div class="w-6 h-1 rounded-full ${j < r.rating ? 'bg-mango' : 'bg-frost-deep'}"></div>`).join('')}
-              </div>
-              <p class="text-[15px] text-charcoal/60 leading-relaxed mb-6">${reviewTexts[i]}</p>
-              <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-frost flex items-center justify-center text-[12px] font-bold">${r.initials}</div>
-                <div>
-                  <p class="text-[14px] font-semibold">${r.name}</p>
-                  <p class="text-[12px] text-dim">${t('reviews.' + r.type)}</p>
-                </div>
-              </div>
-            </div>
-          `).join('')}
+        <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto" data-reviews-grid>
+          <!-- Populated after getPublishedReviews() resolves; uses FALLBACK_REVIEWS until then. -->
         </div>
       </div>
     </section>
@@ -417,6 +399,35 @@ export default function Home(container) {
     const creditsEl = page.querySelector('[data-credits-from]');
     if (longEl && longFrom != null) longEl.textContent = longFrom;
     if (creditsEl && creditsFrom != null) creditsEl.textContent = Math.round(creditsFrom);
+  }).catch(() => {});
+
+  // Reviews — load published from Firestore; fall back to FALLBACK_REVIEWS
+  // when none exist yet (admin hasn't added any), so the section never looks
+  // broken on a fresh deployment.
+  function renderReviews(reviews) {
+    const grid = page.querySelector('[data-reviews-grid]');
+    if (!grid) return;
+    grid.innerHTML = reviews.map((r, i) => {
+      const text = r.comment || reviewTexts[i] || '';
+      return `
+        <div class="card-solid rounded-3xl p-7">
+          <div class="flex gap-0.5 mb-4">
+            ${Array(5).fill(0).map((_, j) => `<div class="w-6 h-1 rounded-full ${j < r.rating ? 'bg-mango' : 'bg-frost-deep'}"></div>`).join('')}
+          </div>
+          <p class="text-[15px] text-charcoal/60 leading-relaxed mb-6">${text}</p>
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full bg-frost flex items-center justify-center text-[12px] font-bold">${initialsOf(r.name)}</div>
+            <div>
+              <p class="text-[14px] font-semibold">${r.name}</p>
+              <p class="text-[12px] text-dim">${t('reviews.' + (r.type || 'traveler'))}</p>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  renderReviews(FALLBACK_REVIEWS);
+  getPublishedReviews(3).then(real => {
+    if (real?.length) renderReviews(real);
   }).catch(() => {});
 
   // Real-time capacity subscription

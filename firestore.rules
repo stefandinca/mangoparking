@@ -61,6 +61,22 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // Vouchers - one per user. Doc ID is the owning user's uid which
+    // enforces ONE signup voucher per account (a second create collides).
+    // Client may only create the signup-incentive voucher with the exact
+    // configured amount. Client cannot update/delete — the IPN callback
+    // (admin SDK) flips status to 'redeemed' atomically with fulfilment.
+    match /vouchers/{voucherId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated()
+                    && voucherId == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.source == 'signup-incentive'
+                    && request.resource.data.status == 'unused'
+                    && request.resource.data.amount == 20;
+      allow update, delete: if false;
+    }
+
     // Pending orders - public read by orderId (for /booking/return polling).
     // The Netopia callback (admin SDK) is the only writer; clients never write.
     match /pendingOrders/{id} {

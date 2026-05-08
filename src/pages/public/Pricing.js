@@ -5,6 +5,7 @@ import { html } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { getLongTermRates } from '../../services/longTermService.js';
+import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
 
 export default async function Pricing(container) {
   const locale = getLocale();
@@ -12,16 +13,32 @@ export default async function Pricing(container) {
   updateMeta({
     title: locale === 'ro' ? 'Tarife — Mango Parking' : 'Pricing — Mango Parking',
     description: locale === 'ro'
-      ? 'Tarife long-term pe tranșe și credite săptămânale la Aeroportul Otopeni.'
-      : 'Long-term tiered rates and weekday credits at Otopeni Airport.',
+      ? 'Tarife parcare aeroport pe tranșe și parcare navetiști la Aeroportul Otopeni.'
+      : 'Airport parking tiered rates and commuter credits at Otopeni Airport.',
     lang: locale,
   });
 
-  const [packs, rates] = await Promise.all([
+  const [packs, rates, discount] = await Promise.all([
     getTokenPacks().catch(() => []),
     getLongTermRates().catch(() => ({ tiers: [] })),
+    getOnlineDiscountPercent().catch(() => 0),
   ]);
   const bestPack = packs.reduce((best, p) => (!best || p.quantity > best.quantity) ? p : best, null);
+
+  // Render an online price with optional strikethrough "original" anchor.
+  function priceBlock(online, suffix = 'lei') {
+    const original = originalFromOnline(online, discount);
+    if (original == null || original === online) {
+      return `<p class="font-mono text-2xl font-bold text-mango">${online} ${suffix}</p>`;
+    }
+    return `
+      <div>
+        <p class="font-mono text-[15px] text-dim line-through">${original} ${suffix}</p>
+        <p class="font-mono text-2xl font-bold text-mango">${online} ${suffix}</p>
+        <p class="text-[11px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</p>
+      </div>
+    `;
+  }
 
   const packCards = packs.map(p => {
     const isBest = p.id === bestPack?.id;
@@ -31,7 +48,7 @@ export default async function Pricing(container) {
         ${isBest ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-bold bg-mango text-charcoal px-4 py-1 rounded-full">${t('credit.bestValue')}</span>` : ''}
         <p class="font-heading font-bold text-4xl tracking-tight mb-1">${p.quantity}</p>
         <p class="text-dim text-[14px] mb-4">${t('credit.plural')}</p>
-        <p class="font-mono text-2xl font-bold text-mango mb-4">${p.price} lei</p>
+        <div class="mb-4">${priceBlock(p.price)}</div>
         <a href="${localePath('/booking/credits')}" class="inline-block w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('credit.buyTokens')}</a>
       </div>
     `;
@@ -49,14 +66,19 @@ export default async function Pricing(container) {
         <h2 class="font-heading font-bold text-2xl text-blueberry-deep mb-2">${t('funnel.longTerm.title')}</h2>
         <p class="text-dim text-[15px] mb-6">${t('longTerm.tierNote')}</p>
         <div class="grid sm:grid-cols-3 gap-4 mb-12">
-          ${rates.tiers.map((tier, i) => `
+          ${rates.tiers.map((tier, i) => {
+            const original = originalFromOnline(tier.perDay, discount);
+            const showAnchor = original != null && original !== tier.perDay;
+            return `
             <div class="card-solid rounded-2xl p-6 text-center">
               <p class="text-[12px] font-mono uppercase text-dim tracking-wider mb-2">${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}</p>
+              ${showAnchor ? `<p class="font-mono text-[14px] text-dim line-through">${original}</p>` : ''}
               <p class="font-heading font-bold text-4xl text-blueberry-deep">${tier.perDay}</p>
               <p class="text-dim text-[13px] mt-1">${t('longTerm.perDay')}</p>
+              ${showAnchor ? `<p class="text-[11px] font-bold uppercase tracking-wider text-leaf mt-1">${t('discount.online', { percent: discount })}</p>` : ''}
               ${i === 0 ? `<a href="${localePath('/booking/long-term')}" class="inline-block w-full mt-5 bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-2.5 rounded-xl transition-colors">${t('funnel.longTerm.cta')} →</a>` : ''}
             </div>
-          `).join('')}
+          `;}).join('')}
         </div>
 
         <!-- Credit packs -->
