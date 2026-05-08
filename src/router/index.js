@@ -56,12 +56,21 @@ export function navigate(path, replace = false) {
 async function handleRoute(fullPath) {
   currentPath = fullPath;
 
+  // Normalize the path before matching:
+  //   - strip query string + hash (404.html's ?redirect=… handoff and
+  //     Netopia's return URL both carry query strings)
+  //   - strip trailing slash (nginx on Plesk 301s /booking/return →
+  //     /booking/return/, our routes are declared without trailing slash)
+  // Routes are declared without queries/hashes/trailing-slashes so an
+  // exact-equality match would otherwise fall through to 404 → home.
+  const pathOnly = (fullPath.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/');
+
   // Detect and set locale from path
-  const locale = detectLocale(fullPath);
+  const locale = detectLocale(pathOnly);
   setLocale(locale);
 
   // Strip locale prefix to match route
-  const path = stripLocale(fullPath);
+  const path = stripLocale(pathOnly);
 
   // Find matching route
   const route = routes.find((r) => r.path === path);
