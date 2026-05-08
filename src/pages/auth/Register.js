@@ -3,6 +3,7 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { registerWithEmail, loginWithGoogle } from '../../firebase/auth.js';
 import { ensureSignupVoucher } from '../../services/voucherService.js';
+import { mergeGuestDataForCurrentUser } from '../../services/userMergeService.js';
 import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { html } from '../../utils/dom.js';
@@ -136,6 +137,10 @@ export default function Register(container) {
     try {
       await registerWithEmail(email, password, displayName);
       await ensureSignupVoucher().catch(() => {});
+      // Reconcile any prior guest purchases tied to this email — the
+      // sign-up CTA on the thank-you page is the main entry point so
+      // this is where the payoff happens.
+      await mergeGuestDataForCurrentUser();
       navigate(localePath('/account'));
     } catch (err) {
       const key = FIREBASE_ERROR_MAP[err.code] || 'auth.errors.invalidEmail';
@@ -152,6 +157,7 @@ export default function Register(container) {
     try {
       await loginWithGoogle();
       await ensureSignupVoucher().catch(() => {});
+      await mergeGuestDataForCurrentUser();
       navigate(localePath('/account'));
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {

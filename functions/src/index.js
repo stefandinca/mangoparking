@@ -22,7 +22,7 @@
 //   NETOPIA_ENV          — 'sandbox' or 'live' (defaults to sandbox)
 //   NETOPIA_API_KEY      — currently unused; reserved for the v3 REST API
 
-import { onRequest } from 'firebase-functions/v2/https';
+import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -354,5 +354,110 @@ export const netopiaCallback = onRequest(
       processedAt: new Date().toISOString(),
     });
     return res.status(200).send(crcSuccess());
+  }
+);
+
+// ── mergeGuestData (callable) ───────────────────────────────────────────
+// On signup / first login post-launch the client invokes this to reconcile
+// any prior guest activity tied to the user's email:
+//   - tokenBalances/plate_X   → merged into tokenBalances/{uid}, plate doc deleted
+//   - tokenTransactions       → customerId stamped on those linked to the merged plates
+//   - bookings                → customerId stamped on guest bookings whose contact.email matches
+//
+// Idempotent: a second invocation finds nothing to merge and returns zero counts.
+// Safe-by-default: matches purely on email and customerId == null. We never touch
+// data already linked to another user.
+export const mergeGuestData = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated');
+    }
+    const uid = request.auth.uid;
+    const email = (request.auth.token?.email || '').toLowerCase();
+    if (!email) {
+      return { mergedBalance: 0, mergedTransactions: 0, mergedBookings: 0 };
+    }
+
+    const db = getFirestore();
+
+    // 1. Plate-keyed balances belonging to this email
+    const balanceSnap = await db.collection('tokenBalances')
+      .where('email', '==', email)
+      .get();
+    const guestDocs = balanceSnap.docs.filter((d) => d.id.startsWith('plate_'));
+
+    let totalBalance = 0;
+    let totalPurchased = 0;
+    const allPlates = [];
+
+    for (const doc of guestDocs) {
+      const data = doc.data();
+      totalBalance += Number(data.balance) || 0;
+      totalPurchased += Number(data.totalPurchased) || 0;
+      if (Array.isArray(data.plates)) allPlates.push(...data.plates);
+    }
+    const uniquePlates = [...new Set(allPlates)];
+
+    // 2. Transfer + delete (atomic). Skip when nothing to merge.
+    if (guestDocs.length > 0) {
+      await db.runTransaction(async (tx) => {
+        const userRef = db.collection('tokenBalances').doc(uid);
+        const userSnap = await tx.get(userRef);
+        if (userSnap.exists) {
+          const existing = userSnap.data();
+          const mergedPlates = [...new Set([...(existing.plates || []), ...uniquePlates])];
+          tx.update(userRef, {
+            balance: FieldValue.increment(totalBalance),
+            totalPurchased: FieldValue.increment(totalPurchased),
+            plates: mergedPlates,
+          });
+        } else {
+          tx.set(userRef, {
+            balance: totalBalance,
+            totalPurchased,
+            plates: uniquePlates,
+            email,
+          });
+        }
+        for (const doc of guestDocs) {
+          tx.delete(doc.ref);
+        }
+      });
+    }
+
+    // 3. Stamp customerId on the merged plates' transactions (only those still null)
+    let mergedTransactions = 0;
+    for (const plate of uniquePlates) {
+      const txnsSnap = await db.collection('tokenTransactions')
+        .where('licensePlate', '==', plate)
+        .get();
+      const orphans = txnsSnap.docs.filter((d) => !d.data().customerId);
+      if (orphans.length === 0) continue;
+      const batch = db.batch();
+      for (const o of orphans) {
+        batch.update(o.ref, { customerId: uid });
+      }
+      await batch.commit();
+      mergedTransactions += orphans.length;
+    }
+
+    // 4. Stamp customerId on guest bookings whose contact.email matches
+    const bookingsSnap = await db.collection('bookings')
+      .where('contact.email', '==', email)
+      .get();
+    const guestBookings = bookingsSnap.docs.filter((d) => !d.data().customerId);
+    let mergedBookings = 0;
+    if (guestBookings.length > 0) {
+      const batch = db.batch();
+      for (const b of guestBookings) {
+        batch.update(b.ref, { customerId: uid });
+      }
+      await batch.commit();
+      mergedBookings = guestBookings.length;
+    }
+
+    console.log(`mergeGuestData: uid=${uid} email=${email} balance=${totalBalance} txns=${mergedTransactions} bookings=${mergedBookings}`);
+    return { mergedBalance: totalBalance, mergedTransactions, mergedBookings };
   }
 );

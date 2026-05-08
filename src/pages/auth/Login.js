@@ -3,6 +3,7 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { loginWithEmail, loginWithGoogle } from '../../firebase/auth.js';
 import { ensureSignupVoucher } from '../../services/voucherService.js';
+import { mergeGuestDataForCurrentUser } from '../../services/userMergeService.js';
 import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { html } from '../../utils/dom.js';
@@ -124,6 +125,9 @@ export default function Login(container) {
       // already have one. Lets pre-feature accounts also receive it on
       // their first login after the feature ships.
       await ensureSignupVoucher().catch(() => {});
+      // Reconcile any prior guest activity tied to this email — runs
+      // best-effort, login still succeeds if it fails.
+      await mergeGuestDataForCurrentUser();
       navigate(localePath('/account'));
     } catch (err) {
       showError(err.code);
@@ -139,6 +143,7 @@ export default function Login(container) {
     try {
       await loginWithGoogle();
       await ensureSignupVoucher().catch(() => {});
+      await mergeGuestDataForCurrentUser();
       navigate(localePath('/account'));
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {
