@@ -1,0 +1,50 @@
+# Mango Parking — Apache rewrite rules for Plesk hosting.
+#
+# Vite copies this whole `public/` folder into `dist/` at build time, so this
+# file ships at the docroot.
+#
+# What it solves:
+#   - Direct deep-links (e.g. /booking/return?orderId=…) served by the
+#     prerendered HTML when present, otherwise by /index.html (SPA fallback)
+#   - Avoids the redirect dance through 404.html for client-side routes
+#   - Preserves query strings so Netopia's return URL still gets ?orderId
+#
+# Note: this requires Apache with mod_rewrite enabled. Plesk usually has it on
+# by default. If your stack is nginx, this file is ignored — translate the
+# rules into a server block instead.
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # 1. If the request maps to a real file on disk, serve it.
+  #    (assets/*.js, *.css, /robots.txt, /sitemap.xml, /images/*, etc.)
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+
+  # 2. If the request maps to a directory containing index.html, serve that
+  #    index.html directly. This preserves the query string (QSA) and
+  #    avoids Apache's default 301-redirect-add-trailing-slash dance,
+  #    which silently drops query strings on some Plesk configurations.
+  #    Covers prerendered routes: /pricing, /booking/long-term,
+  #    /booking/return, /en/booking/credits, etc.
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteCond %{REQUEST_FILENAME}/index.html -f
+  RewriteRule ^(.*?)/?$ /$1/index.html [L,QSA]
+
+  # 3. Anything else → SPA fallback at the root index.html.
+  #    The router reads window.location.pathname client-side and renders
+  #    the matching component.
+  RewriteRule ^ /index.html [L,QSA]
+</IfModule>
+
+# Long-cache the fingerprinted asset bundles. They have content hashes in
+# the filename (e.g. main-DEFYKf-7.js), so a new deploy invalidates by name.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|woff2?|ttf|otf|svg|png|jpg|jpeg|webp|avif|ico)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # HTML must NOT be long-cached or users get stale shells after a deploy.
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
