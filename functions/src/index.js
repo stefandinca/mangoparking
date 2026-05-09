@@ -390,12 +390,16 @@ export const mergeGuestData = onCall(
     let totalBalance = 0;
     let totalPurchased = 0;
     const allPlates = [];
+    let guestPhone = '';
+    let guestDisplayName = '';
 
     for (const doc of guestDocs) {
       const data = doc.data();
       totalBalance += Number(data.balance) || 0;
       totalPurchased += Number(data.totalPurchased) || 0;
       if (Array.isArray(data.plates)) allPlates.push(...data.plates);
+      if (!guestPhone && data.phone) guestPhone = data.phone;
+      if (!guestDisplayName && data.displayName) guestDisplayName = data.displayName;
     }
     const uniquePlates = [...new Set(allPlates)];
 
@@ -442,7 +446,9 @@ export const mergeGuestData = onCall(
       mergedTransactions += orphans.length;
     }
 
-    // 4. Stamp customerId on guest bookings whose contact.email matches
+    // 4. Stamp customerId on guest bookings whose contact.email matches.
+    //    Also pull phone/name out of the most recent guest booking as a
+    //    fallback if the plate-keyed balances didn't carry them.
     const bookingsSnap = await db.collection('bookings')
       .where('contact.email', '==', email)
       .get();
@@ -452,12 +458,56 @@ export const mergeGuestData = onCall(
       const batch = db.batch();
       for (const b of guestBookings) {
         batch.update(b.ref, { customerId: uid });
+        const c = b.data().contact || {};
+        if (!guestPhone && c.phone) guestPhone = c.phone;
+        if (!guestDisplayName && c.name) guestDisplayName = c.name;
       }
       await batch.commit();
       mergedBookings = guestBookings.length;
     }
 
-    console.log(`mergeGuestData: uid=${uid} email=${email} balance=${totalBalance} txns=${mergedTransactions} bookings=${mergedBookings}`);
-    return { mergedBalance: totalBalance, mergedTransactions, mergedBookings };
+    // 5. Patch users/{uid} with merged plates as vehicles + fill in any
+    //    blanks (phone, displayName) from the guest data. Existing values
+    //    on the profile are preserved — we never overwrite what the user
+    //    has already set.
+    const userRef = db.collection('users').doc(uid);
+    await db.runTransaction(async (tx) => {
+      const userSnap = await tx.get(userRef);
+      const existing = userSnap.exists ? userSnap.data() : {};
+      const existingVehicles = Array.isArray(existing.vehicles) ? existing.vehicles : [];
+      const existingPlates = new Set(
+        existingVehicles
+          .map((v) => String(v.plate || '').toUpperCase().replace(/[\s-]/g, ''))
+      );
+      const newVehicles = uniquePlates
+        .filter((p) => !existingPlates.has(String(p).toUpperCase().replace(/[\s-]/g, '')))
+        .map((p) => ({ plate: p, make: '', model: '' }));
+
+      const patch = {};
+      if (newVehicles.length > 0) {
+        patch.vehicles = [...existingVehicles, ...newVehicles];
+      }
+      if (!existing.phone && guestPhone) patch.phone = guestPhone;
+      if (!existing.displayName && guestDisplayName) patch.displayName = guestDisplayName;
+      // email lives in the auth token; we don't touch users.email here.
+
+      if (Object.keys(patch).length > 0) {
+        if (userSnap.exists) {
+          tx.update(userRef, patch);
+        } else {
+          // New users created via Google sign-in sometimes hit this branch
+          // before the auth helper has materialised the users/{uid} doc.
+          tx.set(userRef, { ...patch, role: 'customer', email });
+        }
+      }
+    });
+
+    console.log(`mergeGuestData: uid=${uid} email=${email} balance=${totalBalance} txns=${mergedTransactions} bookings=${mergedBookings} plates=${uniquePlates.length}`);
+    return {
+      mergedBalance: totalBalance,
+      mergedTransactions,
+      mergedBookings,
+      mergedPlates: uniquePlates.length,
+    };
   }
 );
