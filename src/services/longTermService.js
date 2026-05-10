@@ -1,5 +1,6 @@
 import { getDocument, setDocument, addDocument, updateDocument, getCollection, where, orderBy, limit } from '../firebase/db.js';
 import { auditLog } from './auditService.js';
+import { generateBookingCode } from '../utils/bookingCode.js';
 
 // ── Long-term rate tiers (admin configurable) ──
 // Shape: { tiers: [{ minDays: n, maxDays: n|null, perDay: n }, ...] }
@@ -71,8 +72,10 @@ function normalizePlate(plate) {
   return String(plate || '').toUpperCase().replace(/[\s-]/g, '');
 }
 
-export async function createLongTermBooking({ customerId, licensePlate, startDate, endDate, days, totalPrice, contact, paymentId }) {
+export async function createLongTermBooking({ customerId, licensePlate, startDate, endDate, days, totalPrice, contact, paymentId, paymentMethod, paymentStatus }) {
+  const code = generateBookingCode('longTerm');
   const id = await addDocument('bookings', {
+    code,
     type: 'longTerm',
     customerId: customerId || null,
     licensePlate: normalizePlate(licensePlate),
@@ -80,20 +83,26 @@ export async function createLongTermBooking({ customerId, licensePlate, startDat
     basePrice: totalPrice,
     latePrice: 0,
     totalPrice,
-    status: paymentId ? 'upcoming' : 'upcoming',
+    status: 'upcoming',
     contact: contact || {},
     paymentId: paymentId || null,
+    paymentMethod: paymentMethod || 'online',
+    paymentStatus: paymentStatus || (paymentId ? 'paid' : 'unpaid'),
+    paidAt: paymentStatus === 'paid' ? new Date().toISOString() : null,
+    paidBy: null,
     createdAt: new Date().toISOString(),
     completedAt: null,
     source: 'web',
   });
-  await auditLog('booking_created', 'booking', id, null, { type: 'longTerm', days, totalPrice });
-  return id;
+  await auditLog('booking_created', 'booking', id, null, { code, type: 'longTerm', days, totalPrice });
+  return { id, code };
 }
 
 export async function createCreditBooking({ customerId, licensePlate, plannedEndDate }) {
   const nowIso = new Date().toISOString();
+  const code = generateBookingCode('credit');
   const id = await addDocument('bookings', {
+    code,
     type: 'credit',
     customerId: customerId || null,
     licensePlate: normalizePlate(licensePlate),
@@ -106,12 +115,16 @@ export async function createCreditBooking({ customerId, licensePlate, plannedEnd
     status: 'active',
     contact: {},
     paymentId: null,
+    paymentMethod: 'credit',
+    paymentStatus: 'paid',
+    paidAt: nowIso,
+    paidBy: null,
     createdAt: nowIso,
     completedAt: null,
     source: 'admin',
   });
-  await auditLog('booking_created', 'booking', id, null, { type: 'credit', licensePlate });
-  return id;
+  await auditLog('booking_created', 'booking', id, null, { code, type: 'credit', licensePlate });
+  return { id, code };
 }
 
 export async function completeBooking(bookingId, { latePrice = 0, notes = null } = {}) {

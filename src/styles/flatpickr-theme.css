@@ -1,0 +1,154 @@
+/* Mango Parking theme for flatpickr.
+ *
+ * Pulls colors from the Tailwind v4 palette tokens declared in style.css
+ * (--color-mango, --color-blueberry, etc.) so the picker stays in sync if
+ * the palette is retuned. We use `!important` sparingly — only where
+ * flatpickr's own inline rules would otherwise win.
+ */
+
+.flatpickr-calendar {
+  background: #ffffff !important;
+  border: 1px solid var(--color-frost-deep) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 18px 50px rgba(15, 45, 102, 0.18) !important;
+  font-family: var(--font-body) !important;
+  padding: 8px !important;
+  overflow: hidden;
+}
+
+.flatpickr-months {
+  padding-top: 4px;
+}
+
+.flatpickr-months .flatpickr-month {
+  color: var(--color-blueberry-deep);
+  height: 40px;
+}
+
+.flatpickr-current-month {
+  font-family: var(--font-heading) !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+  padding-top: 6px !important;
+}
+
+.flatpickr-current-month .cur-month,
+.flatpickr-current-month input.cur-year {
+  color: var(--color-blueberry-deep) !important;
+}
+
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+  color: var(--color-charcoal) !important;
+  fill: var(--color-charcoal) !important;
+  padding: 8px !important;
+  border-radius: 999px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.flatpickr-months .flatpickr-prev-month:hover,
+.flatpickr-months .flatpickr-next-month:hover {
+  background: rgba(253, 187, 48, 0.15);
+  color: var(--color-mango) !important;
+  fill: var(--color-mango) !important;
+}
+
+.flatpickr-weekdays {
+  background: transparent;
+}
+
+.flatpickr-weekday {
+  color: var(--color-charcoal) !important;
+  opacity: 0.55;
+  font-weight: 600 !important;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.flatpickr-day {
+  color: var(--color-charcoal);
+  border-radius: 12px !important;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.flatpickr-day:hover,
+.flatpickr-day:focus {
+  background: rgba(253, 187, 48, 0.2) !important;
+  border-color: transparent !important;
+  color: var(--color-charcoal) !important;
+}
+
+.flatpickr-day.today {
+  border: 2px solid var(--color-blueberry) !important;
+  color: var(--color-blueberry-deep);
+  font-weight: 700;
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: var(--color-blueberry) !important;
+  border-color: var(--color-blueberry) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(30, 91, 214, 0.3);
+}
+
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay {
+  color: rgba(26, 26, 26, 0.25) !important;
+}
+
+/* Time picker (24h, no AM/PM) */
+.flatpickr-time {
+  border-top: 1px solid var(--color-frost-deep) !important;
+  padding-top: 8px !important;
+  margin-top: 4px;
+}
+
+.flatpickr-time input {
+  font-family: var(--font-mono) !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+  color: var(--color-blueberry-deep) !important;
+}
+
+.flatpickr-time .flatpickr-time-separator {
+  color: var(--color-charcoal) !important;
+  font-weight: 700;
+}
+
+.flatpickr-time input:hover,
+.flatpickr-time input:focus {
+  background: rgba(30, 91, 214, 0.08) !important;
+}
+
+.flatpickr-time .numInputWrapper:hover .arrowUp,
+.flatpickr-time .numInputWrapper:hover .arrowDown {
+  border-color: var(--color-blueberry);
+}
+
+/* Match the trigger input to the rest of the form fields. flatpickr
+ * creates an `altInput` next to the original hidden input — we style it
+ * exactly like a normal text field. */
+.flatpickr-alt-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--color-frost-deep);
+  background: #ffffff;
+  font-size: 15px;
+  color: var(--color-charcoal);
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.flatpickr-alt-input:focus,
+.flatpickr-alt-input.active {
+  outline: none;
+  border-color: var(--color-blueberry);
+  box-shadow: 0 0 0 3px rgba(30, 91, 214, 0.12);
+}

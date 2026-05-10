@@ -145,16 +145,5 @@ body {
   color: var(--color-blueberry);
 }
 
-/* ===== Flatpickr overrides ===== */
-.flatpickr-calendar {
-  border-radius: 16px !important;
-  border: 1px solid var(--color-frost-deep) !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08) !important;
-  font-family: var(--font-body) !important;
-}
-
-.flatpickr-day.selected {
-  background: var(--color-mango) !important;
-  border-color: var(--color-mango) !important;
-  color: var(--color-charcoal) !important;
-}
+/* Flatpickr theming lives in src/styles/flatpickr-theme.css, imported by
+ * the FormDateTime component so it's only loaded on pages that need it. */

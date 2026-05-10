@@ -3,6 +3,7 @@ import { initRouter } from './router/index.js';
 import { detectLocale, setLocale } from './i18n/index.js';
 import { seedDatabase } from './seed.js';
 import { loginWithGoogle, onAuthChange } from './firebase/auth.js';
+import { mountWhatsAppFab } from './components/core/WhatsAppFab.js';
 
 // Expose seed function globally for console use
 window.seedDatabase = seedDatabase;
@@ -46,4 +47,7 @@ if (params.get('seed') === 'true') {
 
   // Initialize router
   initRouter();
+
+  // Site-wide WhatsApp floating button (hidden on /admin/*).
+  mountWhatsAppFab();
 }

@@ -362,6 +362,12 @@ export default {
     amenitiesTitle: 'Facilități',
   },
 
+  // Floating WhatsApp button (site-wide)
+  whatsapp: {
+    label: 'Contactați-ne pe WhatsApp',
+    message: 'Bună! Aș dori informații despre parcarea Mango.',
+  },
+
   // Contact page
   contact: {
     pageTitle: 'Contact',
@@ -770,11 +776,25 @@ export default {
     title: 'Date de facturare',
     typePF: 'Persoană fizică',
     typePJ: 'Persoană juridică',
+    idType: {
+      label: 'Tip act de identitate',
+      cnp: 'CNP',
+      ci: 'Serie CI',
+      passport: 'Pașaport',
+    },
+    firstName: 'Prenume',
+    lastName: 'Nume',
+    personalAddress: 'Adresa de domiciliu',
     companyName: 'Denumire firmă',
     cui: 'CUI',
+    cuiAutofilled: 'Datele firmei au fost completate automat din registrul ANAF.',
     regCom: 'Nr. Reg. Com. (opțional)',
     companyAddress: 'Adresa firmei',
     errors: {
+      idNumber: 'Număr de identificare invalid.',
+      firstName: 'Introdu prenumele.',
+      lastName: 'Introdu numele.',
+      personalAddress: 'Introdu adresa de domiciliu.',
       companyName: 'Introdu denumirea firmei.',
       cui: 'CUI invalid (ex: RO12345678).',
       regCom: 'Nr. Reg. Com. invalid (ex: J40/123/2020).',
@@ -835,7 +855,7 @@ export default {
       tagline: 'Parchezi zilnic, pleci în aceeași zi',
       description: 'Pentru navetiști. Cumperi un pachet de credite — 1 credit = 1 zi de parcare (Luni–Vineri, 06:00–20:00).',
       features: ['Luni–Vineri, 06:00–20:00', 'Credite flexibile — folosești oricând', 'Nu expiră', 'Microbuz gratuit'],
-      cta: 'Cumpără credite',
+      cta: 'Rezervă parcare navetiști',
     },
   },
 

@@ -361,6 +361,12 @@ export default {
     amenitiesTitle: 'Amenities',
   },
 
+  // Floating WhatsApp button (site-wide)
+  whatsapp: {
+    label: 'Contact us on WhatsApp',
+    message: 'Hi! I\'d like more info about Mango Parking.',
+  },
+
   // Contact page
   contact: {
     pageTitle: 'Contact',
@@ -769,11 +775,25 @@ export default {
     title: 'Billing details',
     typePF: 'Individual',
     typePJ: 'Company',
+    idType: {
+      label: 'ID document type',
+      cnp: 'CNP',
+      ci: 'ID card series',
+      passport: 'Passport',
+    },
+    firstName: 'First name',
+    lastName: 'Last name',
+    personalAddress: 'Home address',
     companyName: 'Company name',
     cui: 'CUI / VAT',
+    cuiAutofilled: 'Company details auto-filled from the ANAF registry.',
     regCom: 'Trade reg. nr. (optional)',
     companyAddress: 'Company address',
     errors: {
+      idNumber: 'Invalid identification number.',
+      firstName: 'Enter the first name.',
+      lastName: 'Enter the last name.',
+      personalAddress: 'Enter the home address.',
       companyName: 'Enter the company name.',
       cui: 'Invalid CUI (e.g. RO12345678).',
       regCom: 'Invalid trade registry number (e.g. J40/123/2020).',
@@ -834,7 +854,7 @@ export default {
       tagline: 'You park during the day and leave same-day',
       description: 'For commuters. Buy a credit pack — 1 credit = 1 day of parking (Mon–Fri, 6 AM – 8 PM).',
       features: ['Mon–Fri, 6 AM – 8 PM', 'Flexible credits — use anytime', 'Never expire', 'Free shuttle'],
-      cta: 'Buy Credits',
+      cta: 'Reserve commuter parking',
     },
   },
 

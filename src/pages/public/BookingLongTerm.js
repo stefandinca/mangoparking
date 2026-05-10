@@ -7,6 +7,7 @@ import { getLongTermRates, calculateLongTermCost } from '../../services/longTerm
 import { startNetopiaPayment } from '../../services/netopiaService.js';
 import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
+import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getMyVoucher } from '../../services/voucherService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, required } from '../../utils/validators.js';
@@ -28,17 +29,20 @@ function durationHours(dropoffMs, pickupMs) {
   return Math.round(ms / 3_600_000);
 }
 
-// Render a Date as "YYYY-MM-DDTHH:MM" in local time (the format that
-// <input type="datetime-local"> expects/produces).
+// Render a Date as "YYYY-MM-DD HH:MM" in local time. Matches the format
+// flatpickr writes into the hidden input via FormDateTime (dateFormat
+// 'Y-m-d H:i'), so values flow through `form.dropoffAt.value` unchanged.
 function toLocalDatetimeValue(d) {
   const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Convert "YYYY-MM-DDTHH:MM" (local) → ISO with timezone offset (UTC).
+// Convert flatpickr's "YYYY-MM-DD HH:MM" (local) → full ISO with offset.
+// Also tolerates the legacy "YYYY-MM-DDTHH:MM" shape for safety.
 function localDatetimeToIso(localValue) {
   if (!localValue) return null;
-  const d = new Date(localValue);
+  const normalized = String(localValue).replace(' ', 'T');
+  const d = new Date(normalized);
   return Number.isFinite(d.getTime()) ? d.toISOString() : null;
 }
 
@@ -84,11 +88,11 @@ export default function BookingLongTerm(container) {
             <div class="grid sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.dropoffAt')} *</label>
-                <input type="datetime-local" name="dropoffAt" required min="${toLocalDatetimeValue(minDropoff)}" value="${toLocalDatetimeValue(tomorrow10)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true })}
               </div>
               <div>
                 <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.pickupAt')} *</label>
-                <input type="datetime-local" name="pickupAt" required min="${toLocalDatetimeValue(tomorrow10)}" value="${toLocalDatetimeValue(dayAfter10)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                ${dateTimeFieldHtml({ name: 'pickupAt', value: toLocalDatetimeValue(dayAfter10), min: toLocalDatetimeValue(tomorrow10), required: true })}
               </div>
             </div>
             <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>
@@ -278,6 +282,9 @@ export default function BookingLongTerm(container) {
 
   // Wire the PF/PJ toggle.
   wireBillingToggle(form);
+
+  // Branded date/time pickers (flatpickr, 24h, click-anywhere opens).
+  wireDateTime(form);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
