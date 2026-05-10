@@ -78,10 +78,17 @@ service cloud.firestore {
     }
 
     // Pending orders - public read by orderId (for /booking/return polling).
-    // The Netopia callback (admin SDK) is the only writer; clients never write.
+    // The Netopia callback (admin SDK) is the canonical writer for the
+    // initial create + Netopia confirmation. Staff may flip a small
+    // whitelist of fields when marking a pay-at-pickup order paid at the
+    // lot; the admin SDK still owns money-bearing state via callable
+    // functions. Customers and unauthenticated clients still cannot write.
     match /pendingOrders/{id} {
       allow read: if true;
-      allow write: if false;
+      allow create, delete: if false;
+      allow update: if isStaff()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['paymentStatus', 'paidAt', 'paidBy', 'status']);
     }
 
     // Bookings - customer reads own, staff reads all

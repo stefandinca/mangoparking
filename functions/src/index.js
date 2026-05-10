@@ -61,6 +61,19 @@ function balanceDocId({ customerId, licensePlate }) {
   return customerId || `plate_${normalizePlate(licensePlate)}`;
 }
 
+// Reservation codes — mirror of src/utils/bookingCode.js. Kept inline so
+// the function bundle doesn't depend on the client tree. Ambiguous chars
+// I/O/0/1 removed so the code reads cleanly over the phone.
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateBookingCode(type) {
+  const prefix = type === 'longTerm' ? 'LT' : type === 'credit' ? 'CR' : 'MNG';
+  let suffix = '';
+  for (let i = 0; i < 5; i++) {
+    suffix += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return `${prefix}-${suffix}`;
+}
+
 async function creditTokens({ packId, quantity, customerData }) {
   const db = getFirestore();
   const docId = balanceDocId(customerData);
@@ -105,7 +118,9 @@ async function creditTokens({ packId, quantity, customerData }) {
 
 async function createBookingFromOrder(orderId, order) {
   const db = getFirestore();
+  const nowIso = new Date().toISOString();
   const bookingRef = await db.collection('bookings').add({
+    code: generateBookingCode('longTerm'),
     type: 'longTerm',
     customerId: order.customerData.customerId || null,
     licensePlate: normalizePlate(order.customerData.licensePlate),
@@ -127,7 +142,11 @@ async function createBookingFromOrder(orderId, order) {
     },
     billing: order.customerData.billing || { type: 'PF' },
     paymentId: orderId,
-    createdAt: new Date().toISOString(),
+    paymentMethod: order.paymentMethod || 'online',
+    paymentStatus: 'paid',
+    paidAt: nowIso,
+    paidBy: 'netopia',
+    createdAt: nowIso,
     completedAt: null,
     source: 'web',
   });
@@ -201,6 +220,9 @@ export const createPayment = onRequest(
     }
 
     // Persist pending order so the IPN callback can replay it by orderId.
+    // paymentMethod defaults to 'online' for the existing Netopia path; the
+    // pay-at-pickup branch (Phase D) flips this to 'pay-at-pickup' and skips
+    // the Netopia handoff entirely.
     await getFirestore().collection('pendingOrders').doc(orderId).set({
       orderType,
       ...body,
@@ -208,6 +230,10 @@ export const createPayment = onRequest(
       voucherId,           // null when no voucher applied
       voucherAmount,       // 0 when no voucher applied
       status: 'pending',
+      paymentMethod: body.paymentMethod || 'online',
+      paymentStatus: 'unpaid',
+      paidAt: null,
+      paidBy: null,
       createdAt: new Date().toISOString(),
     });
 
@@ -299,13 +325,16 @@ export const netopiaCallback = onRequest(
     // action = 'confirmed' or 'confirmed_pending' on success, 'canceled' / 'credit' on others.
     if ((action === 'confirmed' || action === 'paid') && errorCode === '0') {
       try {
+        const nowIso = new Date().toISOString();
         if (pending.orderType === 'longTerm') {
           const bookingId = await createBookingFromOrder(orderId, pending);
           await orderRef.update({
             status: 'paid',
             bookingId,
             netopiaAction: action,
-            paidAt: new Date().toISOString(),
+            paymentStatus: 'paid',
+            paidAt: nowIso,
+            paidBy: 'netopia',
           });
         } else {
           const balanceDocId = await creditTokens({
@@ -317,7 +346,9 @@ export const netopiaCallback = onRequest(
             status: 'paid',
             balanceDocId,
             netopiaAction: action,
-            paidAt: new Date().toISOString(),
+            paymentStatus: 'paid',
+            paidAt: nowIso,
+            paidBy: 'netopia',
           });
         }
         // Consume the applied voucher (if any) — flip status to 'redeemed'.

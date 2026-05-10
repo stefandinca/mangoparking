@@ -35,7 +35,7 @@
       "source": "functions",
       "codebase": "default",
       "ignore": ["node_modules", ".git", "*.log", ".env*"],
-      "runtime": "nodejs20"
+      "runtime": "nodejs22"
     }
   ],
   "emulators": {
