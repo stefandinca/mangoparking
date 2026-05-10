@@ -127,6 +127,11 @@ export const routes = [
     guards: ['auth', 'admin'],
   },
   {
+    path: '/admin/checkins',
+    component: () => import('../pages/admin/AdminCheckIns.js'),
+    guards: ['auth', 'admin'],
+  },
+  {
     path: '/admin/bookings',
     component: () => import('../pages/admin/AdminBookings.js'),
     guards: ['auth', 'admin'],

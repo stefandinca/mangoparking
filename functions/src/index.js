@@ -74,7 +74,7 @@ function generateBookingCode(type) {
   return `${prefix}-${suffix}`;
 }
 
-async function creditTokens({ packId, quantity, customerData }) {
+async function creditTokens({ packId, quantity, customerData, source = 'netopia', paidBy = null, grantedBy = null }) {
   const db = getFirestore();
   const docId = balanceDocId(customerData);
   const plate = normalizePlate(customerData.licensePlate);
@@ -109,7 +109,9 @@ async function creditTokens({ packId, quantity, customerData }) {
     quantity,
     packId: packId || null,
     timestamp: new Date().toISOString(),
-    source: 'netopia',
+    source,
+    paidBy,
+    grantedBy,
     billing: customerData.billing || { type: 'PF' },
   });
 
@@ -540,5 +542,141 @@ export const mergeGuestData = onCall(
       mergedBookings,
       mergedPlates: uniquePlates.length,
     };
+  }
+);
+
+// ── Admin auth gate ─────────────────────────────────────────────────────
+// Read users/{uid}.role — admin or staff may invoke staff-gated callables.
+async function assertStaff(request) {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be authenticated');
+  }
+  const uid = request.auth.uid;
+  const snap = await getFirestore().collection('users').doc(uid).get();
+  const role = snap.exists ? snap.data().role : null;
+  if (role !== 'admin' && role !== 'staff') {
+    throw new HttpsError('permission-denied', 'Staff or admin only');
+  }
+  return { uid, role };
+}
+
+// ── adminMarkOrderPaid (callable) ───────────────────────────────────────
+// Admin/staff flips a pay-at-pickup pendingOrders doc to paid. Idempotent.
+// For credit orders, credits the tokens at the same time. For longTerm
+// orders, also creates the bookings doc if one doesn't already exist
+// (the pay-at-pickup flow may persist the booking immediately or defer
+// to this step — we handle both shapes).
+export const adminMarkOrderPaid = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertStaff(request);
+    const { orderId, paidBy } = request.data || {};
+    if (!orderId) throw new HttpsError('invalid-argument', 'Missing orderId');
+    if (!['cash', 'card'].includes(paidBy)) {
+      throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
+    }
+
+    const db = getFirestore();
+    const orderRef = db.collection('pendingOrders').doc(orderId);
+    const snap = await orderRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Order not found');
+
+    const pending = snap.data();
+    if (pending.paymentStatus === 'paid' || pending.status === 'paid') {
+      // Idempotent — already paid, just confirm.
+      return { ok: true, alreadyPaid: true };
+    }
+
+    const nowIso = new Date().toISOString();
+    const paymentMark = {
+      paymentStatus: 'paid',
+      paidAt: nowIso,
+      paidBy: paidBy === 'cash' ? 'admin-cash' : 'admin-card',
+      status: 'paid',
+    };
+
+    if (pending.orderType === 'credits') {
+      const docId = await creditTokens({
+        packId: pending.packId,
+        quantity: pending.quantity,
+        customerData: pending.customerData,
+      });
+      await orderRef.update({ ...paymentMark, balanceDocId: docId });
+    } else if (pending.orderType === 'longTerm') {
+      // If the booking was pre-created at order time (pay-at-pickup
+      // longTerm path), flip its payment fields. Otherwise create it now.
+      const bookingId = pending.bookingId || await createBookingFromOrder(orderId, pending);
+      await db.collection('bookings').doc(bookingId).update({
+        paymentStatus: 'paid',
+        paidAt: nowIso,
+        paidBy: paymentMark.paidBy,
+      });
+      await orderRef.update({ ...paymentMark, bookingId });
+    } else {
+      throw new HttpsError('invalid-argument', `Unknown orderType: ${pending.orderType}`);
+    }
+
+    await db.collection('auditLog').add({
+      action: 'order_marked_paid',
+      entityType: 'pendingOrder',
+      entityId: orderId,
+      actorUid: uid,
+      payload: { paidBy: paymentMark.paidBy, orderType: pending.orderType },
+      timestamp: nowIso,
+    });
+
+    return { ok: true };
+  }
+);
+
+// ── grantCreditsForCash (callable) ──────────────────────────────────────
+// Admin/staff grants tokens directly to a plate (or registered customer)
+// after collecting cash/card at the lot. No Netopia involvement. Reuses
+// the same creditTokens path as the IPN callback so the resulting docs
+// are shape-identical to an online purchase (with source='admin-cash').
+export const grantCreditsForCash = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertStaff(request);
+    const {
+      plate, quantity, packId,
+      payerEmail, payerName, payerPhone,
+      paidBy = 'cash',
+    } = request.data || {};
+    if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new HttpsError('invalid-argument', 'quantity must be a positive number');
+    }
+    if (!['cash', 'card'].includes(paidBy)) {
+      throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
+    }
+
+    const adminPaidBy = paidBy === 'cash' ? 'admin-cash' : 'admin-card';
+    const docId = await creditTokens({
+      packId: packId || null,
+      quantity: qty,
+      customerData: {
+        licensePlate: plate,
+        email: payerEmail || '',
+        name: payerName || '',
+        phone: payerPhone || '',
+      },
+      source: 'admin-cash',
+      paidBy: adminPaidBy,
+      grantedBy: uid,
+    });
+
+    const nowIso = new Date().toISOString();
+    await getFirestore().collection('auditLog').add({
+      action: 'admin_credits_granted',
+      entityType: 'tokenBalance',
+      entityId: docId,
+      actorUid: uid,
+      payload: { plate, quantity: qty, packId, paidBy, payerEmail },
+      timestamp: nowIso,
+    });
+
+    return { ok: true, balanceDocId: docId };
   }
 );
