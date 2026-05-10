@@ -182,12 +182,15 @@ export const createPayment = onRequest(
     }
 
     const orderId = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const paymentMethod = body.paymentMethod === 'pay-at-pickup' ? 'pay-at-pickup' : 'online';
 
-    // Compute amount (RON) per funnel.
+    // Compute amount (RON) per funnel. Stored prices are the ONLINE
+    // (post-discount) amount; pay-at-pickup loses the discount, so we
+    // gross up to the "original" anchor price.
     let amount;
     let details;
     if (orderType === 'longTerm') {
-      amount = body.totalPrice;
+      amount = Number(body.totalPrice);
       details = `Mango Parking — parcare pe termen lung (${body.days} zile)`;
     } else {
       amount = Number(body.packPrice || body.totalPrice || 0);
@@ -197,12 +200,22 @@ export const createPayment = onRequest(
       return res.status(400).json({ error: 'Missing or invalid amount' });
     }
 
-    // Voucher application — only honored for authenticated customers; voucher
-    // doc ID equals the user's uid. Reject silently (don't apply) if anything
-    // is off; the IPN consumption code is the source of truth and re-checks.
+    if (paymentMethod === 'pay-at-pickup') {
+      // Look up the live online-discount percent and undo it to land on
+      // the cash/card price the customer owes at the lot.
+      const settingsSnap = await getFirestore().collection('settings').doc('global').get();
+      const discountPct = Number(settingsSnap.exists ? settingsSnap.data().onlineDiscountPercent : 10);
+      if (Number.isFinite(discountPct) && discountPct > 0 && discountPct < 100) {
+        amount = Math.round(amount / (1 - discountPct / 100));
+      }
+    }
+
+    // Voucher application — only honored for authenticated customers AND
+    // online payments. Pay-at-pickup orders skip vouchers entirely;
+    // discounts there happen at the till, not in this flow.
     let voucherAmount = 0;
     let voucherId = null;
-    if (body.voucherId && cd.customerId && body.voucherId === cd.customerId) {
+    if (paymentMethod === 'online' && body.voucherId && cd.customerId && body.voucherId === cd.customerId) {
       try {
         const v = await getFirestore().collection('vouchers').doc(body.voucherId).get();
         if (v.exists) {
@@ -221,23 +234,50 @@ export const createPayment = onRequest(
       }
     }
 
-    // Persist pending order so the IPN callback can replay it by orderId.
-    // paymentMethod defaults to 'online' for the existing Netopia path; the
-    // pay-at-pickup branch (Phase D) flips this to 'pay-at-pickup' and skips
-    // the Netopia handoff entirely.
-    await getFirestore().collection('pendingOrders').doc(orderId).set({
+    // Persist pending order. The IPN callback replays it for online
+    // orders; adminMarkOrderPaid replays it for pay-at-pickup orders.
+    const pendingDoc = {
       orderType,
       ...body,
       amount,
       voucherId,           // null when no voucher applied
       voucherAmount,       // 0 when no voucher applied
       status: 'pending',
-      paymentMethod: body.paymentMethod || 'online',
+      paymentMethod,
       paymentStatus: 'unpaid',
       paidAt: null,
       paidBy: null,
       createdAt: new Date().toISOString(),
-    });
+    };
+
+    // For pay-at-pickup longTerm bookings, create the booking doc now so
+    // the customer's reservation is confirmed at the lot. Credits aren't
+    // credited until cash is collected (admin flips status via the
+    // adminMarkOrderPaid callable).
+    if (paymentMethod === 'pay-at-pickup' && orderType === 'longTerm') {
+      const bookingId = await createBookingFromOrder(orderId, { ...body, paymentMethod });
+      // createBookingFromOrder stamps paymentStatus='paid' by default (it
+      // was designed for the IPN happy path). Override here.
+      await getFirestore().collection('bookings').doc(bookingId).update({
+        paymentStatus: 'unpaid',
+        paidAt: null,
+        paidBy: null,
+      });
+      pendingDoc.bookingId = bookingId;
+    }
+
+    await getFirestore().collection('pendingOrders').doc(orderId).set(pendingDoc);
+
+    // Pay-at-pickup short-circuit: no Netopia handoff, just tell the
+    // client to navigate to the confirmation page. The return page sees
+    // paymentMethod=pay-at-pickup and shows the lot-payment copy.
+    if (paymentMethod === 'pay-at-pickup') {
+      return res.json({
+        orderId,
+        paymentMethod,
+        redirectUrl: `${SITE_URL}/booking/return?orderId=${orderId}`,
+      });
+    }
 
     const [firstName, ...rest] = (cd.name || 'Customer').trim().split(/\s+/);
     const lastName = rest.join(' ') || firstName;

@@ -80,7 +80,19 @@ export default function BookingReturn(container) {
       unsubscribe?.();
       return;
     }
-    // status === 'pending' — keep showing the spinner.
+    // Pay-at-pickup: status stays 'pending' until staff marks paid at the
+    // lot. Show the "register confirmed, pay on arrival" view immediately
+    // instead of spinning. We keep the subscription open so the same tab
+    // flips to success when staff acts (e.g., the customer keeps the page
+    // open while paying at the kiosk).
+    if (order.paymentMethod === 'pay-at-pickup') {
+      terminal = true;
+      clearTimeout(watchdog);
+      statusEl.innerHTML = renderPickup(order, orderId);
+      // Don't unsubscribe — let the success state replace this when paid.
+      return;
+    }
+    // status === 'pending' (online, waiting for IPN) — keep the spinner.
   });
 
   container.appendChild(page);
@@ -160,6 +172,36 @@ function renderSignupCTA(order) {
         </a>
       </div>
     </div>
+  `;
+}
+
+// Pay-at-pickup confirmation. The reservation is recorded (longTerm
+// booking is already in the DB; credit pack is held in pendingOrders);
+// the customer simply pays cash or card at the lot. We nudge them to
+// pay online for the discount if they change their mind.
+function renderPickup(order, orderId) {
+  const isLongTerm = order.orderType === 'longTerm';
+  const detail = isLongTerm
+    ? `${order.days} ${t('longTerm.days')} · ${order.amount} ${t('common.lei')}`
+    : `${order.quantity} ${t('credit.plural')} · ${order.amount} ${t('common.lei')}`;
+  return `
+    <div class="w-16 h-16 rounded-full bg-blueberry/10 flex items-center justify-center mx-auto mb-6">
+      <svg class="w-8 h-8 text-blueberry" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <h1 class="font-heading text-2xl md:text-3xl font-bold text-blueberry-deep mb-2">${t('return.titlePickup')}</h1>
+    <p class="text-dim text-[15px] mb-6">${t('return.subtitlePickup')}</p>
+    <div class="bg-frost rounded-2xl px-6 py-4 inline-block mb-6">
+      <p class="text-[12px] font-mono uppercase tracking-wider text-dim mb-1">${t('return.orderRef')}</p>
+      <p class="font-mono font-semibold text-[15px] mb-2">${orderId}</p>
+      <p class="font-mono font-semibold text-[15px]">${detail}</p>
+    </div>
+    <div class="mt-2 p-5 rounded-2xl bg-mango/10 border-2 border-mango/30 text-left mb-6">
+      <p class="font-heading font-semibold text-blueberry-deep mb-1">${t('return.payOnlineNudgeTitle')}</p>
+      <p class="text-charcoal/70 text-[14px]">${t('return.payOnlineNudge')}</p>
+    </div>
+    <a href="${localePath('/')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
   `;
 }
 

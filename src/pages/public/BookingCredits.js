@@ -35,6 +35,7 @@ export default async function Booking(container) {
   let confirmed = false;
   let resultBalance = 0;
   let processing = false;
+  let paymentMethod = 'online';   // 'online' | 'pay-at-pickup'
 
   // Find best value (highest qty pack)
   const bestPack = packs.reduce((best, p) => (!best || p.quantity > best.quantity) ? p : best, null);
@@ -194,25 +195,32 @@ export default async function Booking(container) {
         <!-- Billing (PF/PJ) -->
         ${billingFieldsHtml(profile?.billing)}
 
+        <!-- Payment method -->
+        <div class="card-solid rounded-2xl p-6" data-paymethod-block>
+          <h3 class="font-heading font-semibold text-lg mb-4">${t('payment.method.title')}</h3>
+          <div class="grid sm:grid-cols-2 gap-3" data-paymethod-toggle>
+            <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-mango bg-mango/5 cursor-pointer transition-colors">
+              <input type="radio" name="paymentMethod" value="online" class="accent-mango w-4 h-4 mt-0.5" checked>
+              <div class="min-w-0">
+                <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.online')}</p>
+                <p class="text-[13px] text-leaf font-medium mt-0.5">${t('payment.method.onlineHint')}</p>
+              </div>
+            </label>
+            <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-frost-deep cursor-pointer transition-colors">
+              <input type="radio" name="paymentMethod" value="pay-at-pickup" class="accent-mango w-4 h-4 mt-0.5">
+              <div class="min-w-0">
+                <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.pickup')}</p>
+                <p class="text-[13px] text-dim mt-0.5">${t('payment.method.pickupHint')}</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <!-- Summary -->
         <div class="card-solid rounded-2xl p-6" data-summary>
           <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.summary')}</h3>
           <div data-price-summary>
-            ${(() => {
-              if (!selectedPack) return `<p class="text-dim/60">${t('credit.selectPack')}</p>`;
-              const orig = originalFromOnline(selectedPack.price, discount);
-              const showAnchor = orig != null && orig !== selectedPack.price;
-              const voucherActive = voucher && voucher.status === 'unused' && selectedPack.price > voucher.amount;
-              return `
-                <div class="flex justify-between items-center mb-1"><span>${selectedPack.quantity} ${t('credit.plural')}</span>
-                  <div class="text-right">
-                    ${showAnchor ? `<div class="font-mono text-[13px] text-dim line-through leading-none">${orig} lei</div>` : ''}
-                    <div class="font-mono font-semibold">${selectedPack.price} lei</div>
-                    ${showAnchor ? `<div class="text-[10px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</div>` : ''}
-                  </div>
-                </div>
-                ${voucherActive ? `<p class="text-[13px] text-mango mt-2">${t('voucher.applied', { amount: voucher.amount })}</p>` : ''}`;
-            })()}
+            <p class="text-dim/60">${t('credit.selectPack')}</p>
           </div>
         </div>
 
@@ -227,13 +235,24 @@ export default async function Booking(container) {
     const summary = pageEl.querySelector('[data-price-summary]');
     if (!summary) return;
     const qty = getSelectedQty();
-    const price = getSelectedPrice();
-    if (qty > 0) {
-      summary.innerHTML = `
-        <div class="flex justify-between mb-2"><span>${qty} ${t('credit.plural')}</span><span class="font-mono font-semibold">${price} lei</span></div>
-      `;
-    } else {
+    const onlinePrice = getSelectedPrice();
+    if (qty <= 0) {
       summary.innerHTML = `<p class="text-dim/60">${t('credit.selectPack')}</p>`;
+    } else {
+      const orig = originalFromOnline(onlinePrice, discount);
+      const isPickup = paymentMethod === 'pay-at-pickup';
+      const displayPrice = isPickup && orig ? orig : onlinePrice;
+      const showAnchor = !isPickup && orig != null && orig !== onlinePrice;
+      const voucherActive = !isPickup && voucher && voucher.status === 'unused' && onlinePrice > voucher.amount;
+      summary.innerHTML = `
+        <div class="flex justify-between items-center mb-1"><span>${qty} ${t('credit.plural')}</span>
+          <div class="text-right">
+            ${showAnchor ? `<div class="font-mono text-[13px] text-dim line-through leading-none">${orig} lei</div>` : ''}
+            <div class="font-mono font-semibold">${displayPrice} lei</div>
+            ${showAnchor ? `<div class="text-[10px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</div>` : ''}
+          </div>
+        </div>
+        ${voucherActive ? `<p class="text-[13px] text-mango mt-2">${t('voucher.applied', { amount: voucher.amount })}</p>` : ''}`;
     }
     const btn = pageEl.querySelector('[type="submit"]');
     if (btn) btn.disabled = qty <= 0;
@@ -318,6 +337,22 @@ export default async function Booking(container) {
     // Wire PF/PJ toggle for the billing block (idempotent — safe across re-renders).
     wireBillingToggle(form);
 
+    // Payment-method toggle — repaints active card and re-renders the summary.
+    const paymethodWrap = pageEl.querySelector('[data-paymethod-toggle]');
+    if (paymethodWrap) {
+      paymethodWrap.addEventListener('change', (e) => {
+        if (!e.target.matches('input[name="paymentMethod"]')) return;
+        paymentMethod = e.target.value === 'pay-at-pickup' ? 'pay-at-pickup' : 'online';
+        paymethodWrap.querySelectorAll('label').forEach((lbl) => {
+          const inp = lbl.querySelector('input');
+          lbl.classList.toggle('border-mango', inp.checked);
+          lbl.classList.toggle('bg-mango/5', inp.checked);
+          lbl.classList.toggle('border-frost-deep', !inp.checked);
+        });
+        updateSummary(pageEl);
+      });
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (processing) return;
@@ -392,10 +427,13 @@ export default async function Booking(container) {
       try {
         await startNetopiaPayment({
           orderType: 'credits',
+          paymentMethod,
           packId,
           quantity: qty,
+          // Always send the ONLINE price; the function grosses up to the
+          // original anchor when paymentMethod is pay-at-pickup.
           packPrice: getSelectedPrice(),
-          voucherId: voucherIdToSend,
+          voucherId: paymentMethod === 'online' ? voucherIdToSend : null,
           customerData: {
             customerId: user?.uid || null,
             licensePlate,

@@ -892,6 +892,11 @@ export default {
     subtitleProcessing: 'Confirming with Netopia. This usually takes a few seconds.',
     titleSuccess: 'Payment confirmed!',
     subtitleSuccess: 'Your order is complete — confirmation emailed.',
+    titlePickup: 'Reservation registered — pay on arrival',
+    subtitlePickup: 'See you at the lot. Payment is cash or card, taken at arrival before check-in.',
+    orderRef: 'Order reference',
+    payOnlineNudgeTitle: 'Pay online and save',
+    payOnlineNudge: 'Change your mind? You can pay online any time before arrival and the online discount applies automatically.',
     titleFailure: 'Payment was not completed',
     subtitleFailure: 'The transaction was cancelled or refused. No charge was made.',
     titleSlow: 'Still processing…',
@@ -902,6 +907,17 @@ export default {
     viewBookings: 'View my bookings',
     viewBalance: 'View my balance',
     missingOrderId: 'Missing order reference. If you completed a payment and need help, contact us.',
+  },
+
+  // Payment method (online vs pay-at-pickup)
+  payment: {
+    method: {
+      title: 'Payment method',
+      online: 'Pay online now',
+      onlineHint: 'Discount applied automatically.',
+      pickup: 'Pay on arrival (cash or card)',
+      pickupHint: 'Paid at the lot. Full price, no discount.',
+    },
   },
 
   // Admin: rates + booking records

@@ -69,6 +69,7 @@ export default function BookingLongTerm(container) {
   let discount = 0;
   let voucher = null;  // user's unused signup voucher, if any
   let quote = { days: 1, perDay: 0, total: 0, hours: 24 };
+  let paymentMethod = 'online';   // 'online' | 'pay-at-pickup'
 
   const page = html`<div>
     <div data-navbar></div>
@@ -131,6 +132,27 @@ export default function BookingLongTerm(container) {
           <!-- Billing (PF/PJ) -->
           <div class="md:col-span-2">
             ${billingFieldsHtml(profile?.billing)}
+          </div>
+
+          <!-- Payment method -->
+          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-paymethod-block>
+            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('payment.method.title')}</h3>
+            <div class="grid sm:grid-cols-2 gap-3" data-paymethod-toggle>
+              <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-mango bg-mango/5 cursor-pointer transition-colors">
+                <input type="radio" name="paymentMethod" value="online" class="accent-mango w-4 h-4 mt-0.5" checked>
+                <div class="min-w-0">
+                  <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.online')}</p>
+                  <p class="text-[13px] text-leaf font-medium mt-0.5" data-paymethod-online-hint>${t('payment.method.onlineHint')}</p>
+                </div>
+              </label>
+              <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-frost-deep cursor-pointer transition-colors">
+                <input type="radio" name="paymentMethod" value="pay-at-pickup" class="accent-mango w-4 h-4 mt-0.5">
+                <div class="min-w-0">
+                  <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.pickup')}</p>
+                  <p class="text-[13px] text-dim mt-0.5">${t('payment.method.pickupHint')}</p>
+                </div>
+              </label>
+            </div>
           </div>
 
           <!-- Contact -->
@@ -219,13 +241,20 @@ export default function BookingLongTerm(container) {
     const days = billingDays(dropoffMs, pickupMs);
     const hours = durationHours(dropoffMs, pickupMs);
     quote = { ...calculateLongTermCost(days, rates), hours };
-    totalEl.textContent = quote.total || '—';
-    daysEl.textContent = quote.days || '—';
-    perdayEl.textContent = quote.perDay || '—';
-    hoursLineEl.textContent = hours > 0 ? t('longTerm.durationHours', { hours }) : '—';
-    // Strikethrough anchor + discount badge — only when discount is configured.
     const original = originalFromOnline(quote.total, discount);
-    if (original != null && original !== quote.total) {
+    const isPickup = paymentMethod === 'pay-at-pickup';
+    const displayTotal = isPickup && original ? original : quote.total;
+    const displayPerDay = isPickup && original && quote.days
+      ? Math.round(original / quote.days)
+      : quote.perDay;
+    totalEl.textContent = displayTotal || '—';
+    daysEl.textContent = quote.days || '—';
+    perdayEl.textContent = displayPerDay || '—';
+    hoursLineEl.textContent = hours > 0 ? t('longTerm.durationHours', { hours }) : '—';
+    // Strikethrough anchor + discount badge — only on the online branch.
+    // For pay-at-pickup the displayed total IS the original, so there's
+    // nothing left to strike through.
+    if (!isPickup && original != null && original !== quote.total) {
       originalEl.textContent = `${original} lei`;
       originalEl.classList.remove('hidden');
       discountBadgeEl.textContent = t('discount.online', { percent: discount });
@@ -235,9 +264,9 @@ export default function BookingLongTerm(container) {
       discountBadgeEl.classList.add('hidden');
     }
     // Voucher line — visible only if user has an unused voucher AND order
-    // total is strictly above voucher amount (we never apply if it would
-    // zero/negative the Netopia charge).
-    if (voucher && voucher.status === 'unused' && quote.total > voucher.amount) {
+    // total is strictly above voucher amount AND online payment. Voucher
+    // application via the IPN callback only fires on online orders.
+    if (!isPickup && voucher && voucher.status === 'unused' && quote.total > voucher.amount) {
       voucherLineEl.textContent = t('voucher.applied', { amount: voucher.amount });
       voucherLineEl.classList.remove('hidden');
     } else {
@@ -285,6 +314,22 @@ export default function BookingLongTerm(container) {
 
   // Branded date/time pickers (flatpickr, 24h, click-anywhere opens).
   wireDateTime(form);
+
+  // Payment-method toggle — repaints active card and recomputes price.
+  const paymethodWrap = page.querySelector('[data-paymethod-toggle]');
+  if (paymethodWrap) {
+    paymethodWrap.addEventListener('change', (e) => {
+      if (!e.target.matches('input[name="paymentMethod"]')) return;
+      paymentMethod = e.target.value === 'pay-at-pickup' ? 'pay-at-pickup' : 'online';
+      paymethodWrap.querySelectorAll('label').forEach((lbl) => {
+        const inp = lbl.querySelector('input');
+        lbl.classList.toggle('border-mango', inp.checked);
+        lbl.classList.toggle('bg-mango/5', inp.checked);
+        lbl.classList.toggle('border-frost-deep', !inp.checked);
+      });
+      recompute();
+    });
+  }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -351,6 +396,7 @@ export default function BookingLongTerm(container) {
     try {
       await startNetopiaPayment({
         orderType: 'longTerm',
+        paymentMethod,
         // Backward compat: keep date-only fields populated so older admin
         // displays + the existing function path still work. New canonical
         // fields are dropoffAt/pickupAt.
@@ -359,8 +405,10 @@ export default function BookingLongTerm(container) {
         dropoffAt: dropoffIso,
         pickupAt: pickupIso,
         days,
+        // Always send the ONLINE total (server grosses up for pay-at-pickup).
         totalPrice: quote.total,
-        voucherId: voucherIdToSend,
+        // Voucher only applies to the online branch.
+        voucherId: paymentMethod === 'online' ? voucherIdToSend : null,
         customerData: {
           customerId: user?.uid || null,
           licensePlate,

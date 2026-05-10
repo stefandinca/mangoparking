@@ -893,6 +893,11 @@ export default {
     subtitleProcessing: 'Confirmăm cu Netopia. Durează de obicei câteva secunde.',
     titleSuccess: 'Plată confirmată!',
     subtitleSuccess: 'Comanda este finalizată — am trimis confirmarea pe email.',
+    titlePickup: 'Rezervare înregistrată — plătești la sosire',
+    subtitlePickup: 'Te așteptăm la parcare. Plata se face cash sau card direct la sosire, înainte de check-in.',
+    orderRef: 'Referință comandă',
+    payOnlineNudgeTitle: 'Plătește online și economisești',
+    payOnlineNudge: 'Dacă te răzgândești, poți plăti online până la sosire și primești reducerea online aplicată automat la suma datorată.',
     titleFailure: 'Plata nu s-a finalizat',
     subtitleFailure: 'Tranzacția a fost anulată sau refuzată. Nu s-a făcut nicio debitare.',
     titleSlow: 'Încă procesăm…',
@@ -903,6 +908,17 @@ export default {
     viewBookings: 'Vezi rezervările mele',
     viewBalance: 'Vezi soldul meu',
     missingOrderId: 'Lipsește referința comenzii. Dacă ai finalizat o plată și ai nevoie de ajutor, contactează-ne.',
+  },
+
+  // Payment method (online vs pay-at-pickup)
+  payment: {
+    method: {
+      title: 'Metodă de plată',
+      online: 'Plătesc online acum',
+      onlineHint: 'Reducere automată pe loc.',
+      pickup: 'Plătesc la sosire (cash sau card)',
+      pickupHint: 'Plata se face direct la parcare. Tarif fără reducere.',
+    },
   },
 
   // Admin: rates + booking records
