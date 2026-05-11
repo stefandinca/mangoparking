@@ -1,0 +1,62 @@
+<!-- subject: Drop-off tomorrow at Mango Parking — {{ params.code }} -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drop-off reminder</title>
+</head>
+<body style="margin:0;padding:0;background:#FFF8E8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1A1A1A;line-height:1.5;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FFF8E8;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(15,45,102,.08);">
+
+<tr><td align="center" style="padding:28px 32px;border-bottom:1px solid #EDE3CC;">
+<img src="https://mangoparking.ro/images/logo.png" alt="Mango Parking" width="56" style="display:block;border:0;">
+</td></tr>
+
+<tr><td style="padding:32px;">
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">See you tomorrow, {{ params.firstName }}!</h1>
+<p style="margin:0 0 14px;font-size:15px;">A friendly reminder that your reservation starts in 24 hours. Here's what you need:</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
+<tr><td style="padding:20px;">
+<p style="margin:0 0 4px;font-size:11px;color:#1E5BD6;font-weight:700;letter-spacing:.05em;text-transform:uppercase;">Reservation code</p>
+<p style="margin:0 0 16px;font-family:'JetBrains Mono',Consolas,monospace;font-size:22px;font-weight:700;color:#1A1A1A;line-height:1;">{{ params.code }}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<tr>
+<td style="padding:6px 0;font-size:14px;color:#666;width:50%;">Vehicle</td>
+<td style="padding:6px 0;font-size:14px;color:#1A1A1A;font-family:'JetBrains Mono',Consolas,monospace;font-weight:600;text-align:right;">{{ params.plate }}</td>
+</tr>
+<tr>
+<td style="padding:6px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">Drop-off</td>
+<td style="padding:6px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.dropoffAt }}</td>
+</tr>
+</table>
+</td></tr>
+</table>
+
+<h2 style="margin:24px 0 8px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:16px;color:#0F2D66;">How to find us</h2>
+<p style="margin:0 0 8px;font-size:14px;color:#666;">📍 <strong>Strada Radarului 1, Corbeanca, Ilfov county</strong></p>
+<p style="margin:0 0 14px;font-size:14px;color:#666;">5 km from Henri Coandă Airport. Our shuttle leaves the lot every 15 minutes for the terminal.</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+<tr><td style="background:#1E5BD6;border-radius:12px;">
+<a href="https://maps.google.com/maps?q=Strada+Radarului+1,+Corbeanca" style="display:inline-block;padding:12px 24px;color:#fff;font-weight:600;text-decoration:none;font-size:14px;">Open map</a>
+</td></tr>
+</table>
+
+<p style="margin:0;font-size:13px;color:#999;">Running late? No problem — your spot is held. For larger changes, message us on WhatsApp.</p>
+</td></tr>
+
+<tr><td style="padding:20px 32px;background:#FFF8E8;border-top:1px solid #EDE3CC;font-size:12px;color:#666;line-height:1.6;">
+<p style="margin:0 0 6px;">Mango Parking · Strada Radarului 1, Corbeanca, Ilfov county</p>
+<p style="margin:0 0 6px;">+40 769 064 721 · <a href="mailto:rezervari@mangoparking.ro" style="color:#1E5BD6;text-decoration:none;">rezervari@mangoparking.ro</a></p>
+<p style="margin:0;color:#999;">TRIO SERVICES COMPACT SRL · CUI RO32705476 · J04/79/2014</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

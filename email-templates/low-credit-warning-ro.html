@@ -1,0 +1,48 @@
+<!-- subject: Mai ai doar {{ params.balanceRemaining }} credite — reîncarcă acum -->
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Credite în scădere</title>
+</head>
+<body style="margin:0;padding:0;background:#FFF8E8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1A1A1A;line-height:1.5;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FFF8E8;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(15,45,102,.08);">
+
+<tr><td align="center" style="padding:28px 32px;border-bottom:1px solid #EDE3CC;">
+<img src="https://mangoparking.ro/images/logo.png" alt="Mango Parking" width="56" style="display:block;border:0;">
+</td></tr>
+
+<tr><td style="padding:32px;">
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Mai ai doar {{ params.balanceRemaining }} credite</h1>
+<p style="margin:0 0 14px;font-size:15px;">Salut, {{ params.firstName }}. Soldul tău de credite navetiști a scăzut sub pragul de avertizare. Reîncarcă acum ca să nu rămâi blocat în dimineața de mâine.</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
+<tr><td style="padding:20px;">
+<p style="margin:0 0 6px;font-size:11px;color:#1E5BD6;font-weight:700;letter-spacing:.05em;text-transform:uppercase;">Sold curent</p>
+<p style="margin:0;font-family:'JetBrains Mono',Consolas,monospace;font-size:32px;font-weight:700;color:#1A1A1A;line-height:1;">{{ params.balanceRemaining }}<span style="font-size:15px;color:#666;font-weight:400;"> credite</span></p>
+</td></tr>
+</table>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
+<tr><td style="background:#FDBB30;border-radius:12px;">
+<a href="{{ params.buyMoreLink }}" style="display:inline-block;padding:14px 28px;color:#1A1A1A;font-weight:600;text-decoration:none;font-size:15px;">Cumpără credite noi</a>
+</td></tr>
+</table>
+
+<p style="margin:0;font-size:14px;color:#666;">Creditele nu expiră niciodată — cumperi cât ai nevoie și folosești când vrei.</p>
+</td></tr>
+
+<tr><td style="padding:20px 32px;background:#FFF8E8;border-top:1px solid #EDE3CC;font-size:12px;color:#666;line-height:1.6;">
+<p style="margin:0 0 6px;">Mango Parking · Strada Radarului nr. 1, Corbeanca, jud. Ilfov</p>
+<p style="margin:0 0 6px;">+40 769 064 721 · <a href="mailto:rezervari@mangoparking.ro" style="color:#1E5BD6;text-decoration:none;">rezervari@mangoparking.ro</a></p>
+<p style="margin:0;color:#999;">TRIO SERVICES COMPACT SRL · CUI RO32705476 · J04/79/2014</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
