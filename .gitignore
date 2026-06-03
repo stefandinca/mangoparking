@@ -17,3 +17,9 @@ netopia*keys*.txt
 *.key
 *.cer
 secrets/
+
+# i18n analysis scratch dumps — throwaway, not product
+en_keys.txt
+ro_keys.txt
+used_keys.txt
+locale_params.json

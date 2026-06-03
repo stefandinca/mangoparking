@@ -28,8 +28,12 @@ export async function getAuditLog(limitCount = 50) {
       id: e.id,
       timestamp: e.timestamp,
       action: e.action,
+      entityType: e.entityType || '',
+      entityId: e.entityId || '',
       entity: (e.entityType || '') + ' ' + (e.entityId || ''),
       user: e.userEmail || e.userId || 'unknown',
+      oldValueObj: e.oldValue || null,
+      newValueObj: e.newValue || e.payload || null,
       details: e.oldValue && e.newValue
         ? JSON.stringify(e.oldValue) + ' → ' + JSON.stringify(e.newValue)
         : e.newValue ? JSON.stringify(e.newValue) : '',

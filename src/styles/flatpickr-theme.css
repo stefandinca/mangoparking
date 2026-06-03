@@ -152,3 +152,67 @@
   border-color: var(--color-blueberry);
   box-shadow: 0 0 0 3px rgba(30, 91, 214, 0.12);
 }
+
+/* In-picker "Next step / Done" button — injected via FormDateTime's
+ * onReady hook. Solves the "tap outside to confirm" mobile UX gap and
+ * gives the wizard chaining an explicit affordance. Mirrors the
+ * blueberry primary button style used elsewhere on the booking form. */
+.flatpickr-mp-confirm {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 8px 8px 4px;
+  padding: 12px 18px;
+  background: var(--color-blueberry);
+  color: #ffffff;
+  border: 0;
+  border-radius: 12px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.flatpickr-mp-confirm:hover,
+.flatpickr-mp-confirm:focus {
+  background: var(--color-blueberry-hover);
+  outline: none;
+}
+.flatpickr-mp-confirm:active {
+  background: var(--color-blueberry-deep);
+}
+
+/* Mobile sizing — disableMobile keeps the themed picker on phones, so
+ * we need to make sure it fits a 375px viewport without horizontal scroll
+ * and that the day cells stay tappable. */
+@media (max-width: 480px) {
+  .flatpickr-calendar {
+    width: calc(100vw - 24px) !important;
+    max-width: 360px !important;
+    padding: 6px !important;
+  }
+  .flatpickr-calendar .flatpickr-rContainer,
+  .flatpickr-calendar .flatpickr-days,
+  .flatpickr-calendar .dayContainer {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .flatpickr-day {
+    max-width: none !important;
+    height: 38px;
+    line-height: 38px;
+    font-size: 14px;
+  }
+  .flatpickr-time input {
+    font-size: 18px !important;
+  }
+  /* On mobile the confirm button should feel like a primary CTA — a
+   * little taller, more padding, larger tap target. */
+  .flatpickr-mp-confirm {
+    padding: 14px 20px;
+    font-size: 16px;
+    border-radius: 14px;
+    margin-top: 10px;
+  }
+}

@@ -2,7 +2,6 @@ import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { registerWithEmail, loginWithGoogle } from '../../firebase/auth.js';
-import { ensureSignupVoucher } from '../../services/voucherService.js';
 import { mergeGuestDataForCurrentUser } from '../../services/userMergeService.js';
 import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
@@ -136,7 +135,6 @@ export default function Register(container) {
     btn.textContent = '...';
     try {
       await registerWithEmail(email, password, displayName);
-      await ensureSignupVoucher().catch(() => {});
       // Reconcile any prior guest purchases tied to this email — the
       // sign-up CTA on the thank-you page is the main entry point so
       // this is where the payoff happens.
@@ -156,7 +154,6 @@ export default function Register(container) {
     clearError();
     try {
       await loginWithGoogle();
-      await ensureSignupVoucher().catch(() => {});
       await mergeGuestDataForCurrentUser();
       navigate(localePath('/account'));
     } catch (err) {

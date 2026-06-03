@@ -129,7 +129,7 @@ export default async function AdminReports(container) {
                 <tr class="border-b border-frost-deep">
                   <th class="text-left text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-6 py-3">${t('admin.category')}</th>
                   <th class="text-right text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-6 py-3">${t('admin.revenueLei')}</th>
-                  <th class="text-right text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-6 py-3">${t('admin.transactions')}</th>
+                  <th class="text-right text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-6 py-3">${t('admin.transactionsCount')}</th>
                   <th class="text-right text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-6 py-3">${t('admin.avgValue')}</th>
                 </tr>
               </thead>

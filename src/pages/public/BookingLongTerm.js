@@ -1,14 +1,16 @@
 import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
-import { html, delegate, setFieldError, clearErrorOnInput } from '../../utils/dom.js';
+import { html, setFieldError, clearErrorOnInput } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
+import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
 import { startNetopiaPayment } from '../../services/netopiaService.js';
 import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getMyVoucher } from '../../services/voucherService.js';
+import { previewVoucher, normalizeCode } from '../../services/promoVoucherService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
@@ -66,8 +68,11 @@ export default function BookingLongTerm(container) {
   const minDropoff = new Date(); // can't drop off in the past
 
   let rates = null;
+  let seasonalPeriods = [];
+  let activePeriod = null;        // matched period for the current drop-off date, if any
   let discount = 0;
-  let voucher = null;  // user's unused signup voucher, if any
+  let voucher = null;  // legacy signup voucher (existing balances only — new sign-ups don't get one)
+  let promoVoucher = null;  // { code, name, type, value, discountAmount } when a promo code is active
   let quote = { days: 1, perDay: 0, total: 0, hours: 24 };
   let paymentMethod = 'online';   // 'online' | 'pay-at-pickup'
 
@@ -84,25 +89,37 @@ export default function BookingLongTerm(container) {
 
         <form data-long-form class="grid md:grid-cols-2 gap-6">
           <!-- Drop-off / Pick-up date+time -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2">
+          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-step="dates">
             <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.dropoffAt')} / ${t('longTerm.pickupAt')}</h3>
             <div class="grid sm:grid-cols-2 gap-4">
               <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.dropoffAt')} *</label>
-                ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true })}
+                <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
+                  <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">1</span>
+                  ${t('longTerm.dropoffAt')} *
+                </label>
+                ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true, stepToNext: 'pickupAt' })}
               </div>
               <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.pickupAt')} *</label>
+                <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
+                  <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">2</span>
+                  ${t('longTerm.pickupAt')} *
+                </label>
                 ${dateTimeFieldHtml({ name: 'pickupAt', value: toLocalDatetimeValue(dayAfter10), min: toLocalDatetimeValue(tomorrow10), required: true })}
               </div>
             </div>
             <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>
             <p class="text-[12px] text-dim mt-1">${t('longTerm.tierNote')}</p>
+            <div class="flex justify-end mt-5">
+              <button type="button" data-next-step="vehicle" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+            </div>
           </div>
 
           <!-- Price tiers -->
           <div class="card-solid rounded-3xl p-6 md:col-span-2">
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('rates.longTermRates')}</h3>
+            <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+              <h3 class="font-heading font-bold text-lg text-blueberry-deep">${t('rates.longTermRates')}</h3>
+              <span class="hidden text-[12px] uppercase tracking-wider font-mono font-semibold text-mango bg-mango/10 px-3 py-1 rounded-full" data-seasonal-badge></span>
+            </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" data-tiers>
               <!-- populated after getLongTermRates() resolves -->
             </div>
@@ -123,19 +140,25 @@ export default function BookingLongTerm(container) {
           </div>
 
           <!-- Vehicle -->
-          <div class="card-solid rounded-3xl p-6">
+          <div class="card-solid rounded-3xl p-6" data-step="vehicle">
             <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.vehicleInfo')}</h3>
             <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
-            <input type="text" name="licensePlate" required placeholder="B 123 ABC" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
+            <input type="text" name="licensePlate" required placeholder="B 123 ABC" value="${profile?.vehicles?.[0]?.plate || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
+            <div class="flex justify-end mt-5">
+              <button type="button" data-next-step="billing" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+            </div>
           </div>
 
           <!-- Billing (PF/PJ) -->
-          <div class="md:col-span-2">
+          <div class="md:col-span-2" data-step="billing">
             ${billingFieldsHtml(profile?.billing)}
+            <div class="flex justify-end mt-5">
+              <button type="button" data-next-step="paymethod" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+            </div>
           </div>
 
           <!-- Payment method -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-paymethod-block>
+          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-paymethod-block data-step="paymethod">
             <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('payment.method.title')}</h3>
             <div class="grid sm:grid-cols-2 gap-3" data-paymethod-toggle>
               <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-mango bg-mango/5 cursor-pointer transition-colors">
@@ -153,10 +176,13 @@ export default function BookingLongTerm(container) {
                 </div>
               </label>
             </div>
+            <div class="flex justify-end mt-5">
+              <button type="button" data-next-step="contact" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+            </div>
           </div>
 
           <!-- Contact -->
-          <div class="card-solid rounded-3xl p-6">
+          <div class="card-solid rounded-3xl p-6" data-step="contact">
             <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.contactInfo')}</h3>
             <div class="space-y-3">
               <div>
@@ -172,11 +198,35 @@ export default function BookingLongTerm(container) {
                 <input type="tel" name="phone" value="${profile?.phone || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
               </div>
             </div>
+            <div class="flex justify-end mt-5">
+              <button type="button" data-next-step="terms" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+            </div>
           </div>
 
-          <!-- Pay -->
-          <div class="md:col-span-2 flex justify-end">
-            <button type="submit" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
+          <!-- Voucher code -->
+          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-voucher-block>
+            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-3">${t('voucher.codeTitle')}</h3>
+            <div class="flex flex-col sm:flex-row gap-2" data-voucher-input-wrap>
+              <input type="text" name="voucherCode" placeholder="${t('voucher.codePlaceholder')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono uppercase focus:outline-none focus:border-blueberry">
+              <button type="button" data-apply-voucher class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-3 rounded-xl transition-colors">${t('voucher.apply')}</button>
+            </div>
+            <div class="hidden mt-3 flex items-center justify-between gap-3 bg-leaf/5 border border-leaf/30 rounded-xl px-4 py-3" data-voucher-applied>
+              <div class="min-w-0">
+                <p class="text-[14px] font-semibold text-leaf" data-voucher-applied-name>—</p>
+                <p class="text-[12px] text-charcoal/70" data-voucher-applied-detail>—</p>
+              </div>
+              <button type="button" data-remove-voucher class="text-[13px] text-red-500 hover:underline font-semibold shrink-0">${t('voucher.remove')}</button>
+            </div>
+            <p class="hidden mt-2 text-[13px] text-red-500" data-voucher-error></p>
+          </div>
+
+          <!-- Terms agreement + pay -->
+          <div class="md:col-span-2 flex flex-col items-end gap-4" data-step="terms">
+            <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer max-w-full">
+              <input type="checkbox" name="acceptTerms" required class="accent-mango w-4 h-4 mt-1 shrink-0">
+              <span>${t('legal.acceptTerms')}</span>
+            </label>
+            <button type="submit" data-pay-btn class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
           </div>
         </form>
 
@@ -207,11 +257,26 @@ export default function BookingLongTerm(container) {
   const discountBadgeEl = page.querySelector('[data-quote-discount-badge]');
   const voucherLineEl = page.querySelector('[data-voucher-line]');
   const tiersEl = page.querySelector('[data-tiers]');
+  const seasonalBadgeEl = page.querySelector('[data-seasonal-badge]');
+
+  // Returns the tier set currently in effect — seasonal override if the
+  // PICK-UP date falls inside an active period, otherwise the default
+  // rates. Pick-up wins so bookings that straddle a boundary always
+  // price at the higher-demand period the customer is leaving on.
+  function effectiveRates() {
+    if (!rates) return { tiers: [], period: null };
+    const pickupLocal = form?.pickupAt?.value;
+    const pickupDay = pickupLocal ? String(pickupLocal).slice(0, 10) : null;
+    const eff = getEffectiveRates(seasonalPeriods, pickupDay, rates);
+    activePeriod = eff.period;
+    return eff;
+  }
 
   function renderTiers() {
-    if (!rates?.tiers?.length) return;
+    const eff = effectiveRates();
+    if (!eff.tiers.length) return;
     const label = locale === 'ro' ? 'zile' : 'days';
-    tiersEl.innerHTML = rates.tiers.map(tier => {
+    tiersEl.innerHTML = eff.tiers.map(tier => {
       const rangeLabel = tier.maxDays
         ? `${tier.minDays}–${tier.maxDays} ${label}`
         : `${tier.minDays}+ ${label}`;
@@ -221,6 +286,16 @@ export default function BookingLongTerm(container) {
           <p class="font-heading font-bold text-2xl text-blueberry-deep mt-1">${tier.perDay} <span class="text-[12px] font-normal text-dim">${t('longTerm.perDay')}</span></p>
         </div>`;
     }).join('');
+
+    // Seasonal banner — only when a period is in effect for the drop-off.
+    if (seasonalBadgeEl) {
+      if (activePeriod) {
+        seasonalBadgeEl.textContent = t('seasonal.appliedBadge', { name: activePeriod.name });
+        seasonalBadgeEl.classList.remove('hidden');
+      } else {
+        seasonalBadgeEl.classList.add('hidden');
+      }
+    }
   }
 
   function highlightActiveTier() {
@@ -240,14 +315,29 @@ export default function BookingLongTerm(container) {
     const pickupMs = new Date(form.pickupAt.value).getTime();
     const days = billingDays(dropoffMs, pickupMs);
     const hours = durationHours(dropoffMs, pickupMs);
-    quote = { ...calculateLongTermCost(days, rates), hours };
+    // Re-derive the effective tier set on every recompute — drop-off
+    // moving across a seasonal-period boundary should swap pricing live.
+    // renderTiers() also calls effectiveRates(); calling here too keeps
+    // the quote in sync with what's displayed.
+    const eff = effectiveRates();
+    const ratesForQuote = eff.tiers.length ? { tiers: eff.tiers } : rates;
+    quote = { ...calculateLongTermCost(days, ratesForQuote), hours };
+    // Re-render tier cards so the active badge + numbers stay in sync.
+    renderTiers();
     const original = originalFromOnline(quote.total, discount);
     const isPickup = paymentMethod === 'pay-at-pickup';
     const displayTotal = isPickup && original ? original : quote.total;
     const displayPerDay = isPickup && original && quote.days
       ? Math.round(original / quote.days)
       : quote.perDay;
-    totalEl.textContent = displayTotal || '—';
+    // Promo voucher application — only on online payments. The displayed
+    // total subtracts the discount; the voucher amount is also passed
+    // into createPayment which re-validates server-side.
+    let finalTotal = displayTotal;
+    if (!isPickup && promoVoucher?.discountAmount) {
+      finalTotal = Math.max(1, displayTotal - promoVoucher.discountAmount);
+    }
+    totalEl.textContent = finalTotal || '—';
     daysEl.textContent = quote.days || '—';
     perdayEl.textContent = displayPerDay || '—';
     hoursLineEl.textContent = hours > 0 ? t('longTerm.durationHours', { hours }) : '—';
@@ -292,10 +382,12 @@ export default function BookingLongTerm(container) {
     getLongTermRates().catch(() => FALLBACK_RATES),
     getOnlineDiscountPercent().catch(() => 0),
     getMyVoucher().catch(() => null),
-  ]).then(([r, d, v]) => {
+    listSeasonalPeriods().catch(() => []),
+  ]).then(([r, d, v, periods]) => {
     rates = r && r.tiers?.length ? r : FALLBACK_RATES;
     discount = d || 0;
     voucher = v;
+    seasonalPeriods = periods || [];
     renderTiers();
     recompute();
   });
@@ -303,6 +395,20 @@ export default function BookingLongTerm(container) {
   ['dropoffAt', 'pickupAt'].forEach(name => {
     form[name].addEventListener('change', recompute);
     form[name].addEventListener('input', recompute);
+  });
+
+  // Keep pickup ≥ dropoff: when dropoff changes, bump the pickup picker's
+  // minDate so users can't accidentally pick an end date before the start.
+  // The picker also auto-opens after dropoff closes (step-through wizard).
+  form.dropoffAt.addEventListener('change', () => {
+    const pickupFp = form.pickupAt.__fpInstance;
+    if (!pickupFp || !form.dropoffAt.value) return;
+    pickupFp.set('minDate', form.dropoffAt.value);
+    // If the existing pickup is now before the new dropoff, clear it so
+    // the user re-picks rather than submitting an invalid range.
+    if (form.pickupAt.value && form.pickupAt.value < form.dropoffAt.value) {
+      pickupFp.clear();
+    }
   });
 
   // Clear red field-error state as the user edits.
@@ -315,8 +421,11 @@ export default function BookingLongTerm(container) {
   // Branded date/time pickers (flatpickr, 24h, click-anywhere opens).
   wireDateTime(form);
 
-  // Payment-method toggle — repaints active card and recomputes price.
+  // Payment-method toggle — repaints active card, swaps the submit-button
+  // copy ("Plătește cu Netopia" vs "Confirmă rezervarea") so users don't
+  // see Netopia branding on a pay-at-pickup order, and recomputes price.
   const paymethodWrap = page.querySelector('[data-paymethod-toggle]');
+  const payBtn = page.querySelector('[data-pay-btn]');
   if (paymethodWrap) {
     paymethodWrap.addEventListener('change', (e) => {
       if (!e.target.matches('input[name="paymentMethod"]')) return;
@@ -327,9 +436,172 @@ export default function BookingLongTerm(container) {
         lbl.classList.toggle('bg-mango/5', inp.checked);
         lbl.classList.toggle('border-frost-deep', !inp.checked);
       });
+      if (payBtn) {
+        payBtn.textContent = paymentMethod === 'pay-at-pickup'
+          ? t('longTerm.payNowPickup')
+          : t('longTerm.payNow');
+      }
       recompute();
     });
   }
+
+  // Promo voucher: apply / remove. Preview via the validateVoucherCode
+  // callable so the customer sees the discount before paying; the same
+  // validation runs again server-side at pay time.
+  const voucherBlock = page.querySelector('[data-voucher-block]');
+  const voucherInputWrap = page.querySelector('[data-voucher-input-wrap]');
+  const voucherAppliedEl = page.querySelector('[data-voucher-applied]');
+  const voucherAppliedName = page.querySelector('[data-voucher-applied-name]');
+  const voucherAppliedDetail = page.querySelector('[data-voucher-applied-detail]');
+  const voucherErrorEl = page.querySelector('[data-voucher-error]');
+  const voucherInput = page.querySelector('input[name="voucherCode"]');
+  const applyBtn = page.querySelector('[data-apply-voucher]');
+  const removeBtn = page.querySelector('[data-remove-voucher]');
+
+  function setVoucherError(msg) {
+    if (!voucherErrorEl) return;
+    if (msg) {
+      voucherErrorEl.textContent = msg;
+      voucherErrorEl.classList.remove('hidden');
+    } else {
+      voucherErrorEl.classList.add('hidden');
+    }
+  }
+
+  function renderAppliedVoucher() {
+    if (!promoVoucher) {
+      voucherInputWrap.classList.remove('hidden');
+      voucherAppliedEl.classList.add('hidden');
+      return;
+    }
+    voucherInputWrap.classList.add('hidden');
+    voucherAppliedEl.classList.remove('hidden');
+    voucherAppliedName.textContent = `${promoVoucher.name} (${promoVoucher.code})`;
+    const detail = promoVoucher.type === 'percent'
+      ? t('voucher.appliedPercent', { value: promoVoucher.value, amount: promoVoucher.discountAmount })
+      : t('voucher.appliedFixed', { amount: promoVoucher.discountAmount });
+    voucherAppliedDetail.textContent = detail;
+  }
+
+  function voucherEligibleBase() {
+    // The server expects the ONLINE base (before pay-at-pickup gross-up).
+    return Number(quote?.total) || 0;
+  }
+
+  if (applyBtn) {
+    applyBtn.addEventListener('click', async () => {
+      setVoucherError('');
+      const code = normalizeCode(voucherInput.value);
+      if (!code) { setVoucherError(t('voucher.errorEmpty')); return; }
+      const plate = form.licensePlate.value.trim();
+      if (!plate) { setVoucherError(t('voucher.errorNeedPlate')); return; }
+      const base = voucherEligibleBase();
+      if (!base) { setVoucherError(t('voucher.errorNoBase')); return; }
+      applyBtn.disabled = true;
+      applyBtn.textContent = t('common.loading');
+      try {
+        const res = await previewVoucher({ code, plate, baseAmount: base, orderType: 'longTerm' });
+        if (res?.ok) {
+          promoVoucher = {
+            code: res.voucherCode,
+            name: res.name,
+            type: res.type,
+            value: res.value,
+            discountAmount: res.discountAmount,
+          };
+          renderAppliedVoucher();
+          recompute();
+          showToast(t('voucher.appliedToast'), 'success');
+        } else {
+          setVoucherError(t(`voucher.error.${res?.error || 'unknown'}`));
+        }
+      } catch (err) {
+        console.error('previewVoucher', err);
+        setVoucherError(err?.message || t('common.error'));
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.textContent = t('voucher.apply');
+      }
+    });
+  }
+
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      promoVoucher = null;
+      voucherInput.value = '';
+      setVoucherError('');
+      renderAppliedVoucher();
+      recompute();
+    });
+  }
+
+  // "Next step" buttons — validate the current card, scroll to the next
+  // one, focus its first input. Mirrors submit-time validation so users
+  // catch errors as they go rather than only at pay-time. Datetime pickers
+  // count as "valid" once flatpickr has a parseable value in the hidden
+  // input; full cross-field rules (pickup > dropoff, min duration) still
+  // run at submit.
+  function validateStep(step) {
+    if (step === 'dates') {
+      const dropoffIso = localDatetimeToIso(form.dropoffAt.value);
+      const pickupIso = localDatetimeToIso(form.pickupAt.value);
+      setFieldError(form.dropoffAt, !dropoffIso);
+      setFieldError(form.pickupAt, !pickupIso);
+      if (!dropoffIso || !pickupIso) { showToast(t('longTerm.invalidDates'), 'error'); return false; }
+      const dropMs = new Date(dropoffIso).getTime();
+      const pickMs = new Date(pickupIso).getTime();
+      if (pickMs <= dropMs) { setFieldError(form.pickupAt, true); showToast(t('longTerm.invalidDates'), 'error'); return false; }
+      if (pickMs - dropMs < 60 * 60 * 1000) { setFieldError(form.pickupAt, true); showToast(t('longTerm.minDuration'), 'error'); return false; }
+      return true;
+    }
+    if (step === 'vehicle') {
+      const ok = isValidLicensePlate(form.licensePlate.value.trim());
+      setFieldError(form.licensePlate, !ok);
+      if (!ok) { showToast(t('common.error'), 'error'); return false; }
+      return true;
+    }
+    if (step === 'billing') {
+      const billing = readBilling(form);
+      if (billing.error) { showToast(billing.error, 'error'); return false; }
+      return true;
+    }
+    if (step === 'paymethod') {
+      // Radio has a default; nothing to block on.
+      return true;
+    }
+    if (step === 'contact') {
+      const nameOk = required(form.name.value.trim());
+      const emailOk = isValidEmail(form.email.value.trim());
+      setFieldError(form.name, !nameOk);
+      setFieldError(form.email, !emailOk);
+      if (!nameOk || !emailOk) { showToast(t('common.error'), 'error'); return false; }
+      return true;
+    }
+    return true;
+  }
+
+  function focusFirstField(stepEl) {
+    if (!stepEl) return;
+    const field = stepEl.querySelector('input:not([type=hidden]):not([type=radio]), select, textarea');
+    if (field && typeof field.focus === 'function') {
+      // Slight delay so the smooth scroll has started before the focus
+      // tries to jump back to the field on mobile keyboards.
+      setTimeout(() => field.focus({ preventScroll: true }), 350);
+    }
+  }
+
+  page.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-next-step]');
+    if (!btn) return;
+    const currentCard = btn.closest('[data-step]');
+    const currentStep = currentCard?.dataset.step;
+    if (currentStep && !validateStep(currentStep)) return;
+    const nextStep = btn.dataset.nextStep;
+    const target = page.querySelector(`[data-step="${nextStep}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    focusFirstField(target);
+  });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -373,6 +645,13 @@ export default function BookingLongTerm(container) {
       setFieldError(input, !ok);
       if (!ok) hasError = true;
     }
+    // Terms agreement is the legal gate — browsers also enforce `required`
+    // on the checkbox, but we double-check here so users get a specific
+    // toast instead of the browser's tooltip if they tab past it.
+    if (!form.acceptTerms?.checked) {
+      showToast(t('legal.acceptTermsRequired'), 'error');
+      return;
+    }
     if (hasError) {
       showToast(t('common.error'), 'error');
       return;
@@ -389,9 +668,11 @@ export default function BookingLongTerm(container) {
     btn.textContent = t('longTerm.processing');
 
     // Apply voucher only if it would still leave a positive Netopia charge.
-    const voucherIdToSend = (voucher && voucher.status === 'unused' && quote.total > voucher.amount)
+    // Promo (new system) wins over signup (legacy) — they can't combine.
+    const voucherIdToSend = (!promoVoucher && voucher && voucher.status === 'unused' && quote.total > voucher.amount)
       ? voucher.userId
       : null;
+    const voucherCodeToSend = promoVoucher && paymentMethod === 'online' ? promoVoucher.code : null;
 
     try {
       await startNetopiaPayment({
@@ -409,6 +690,7 @@ export default function BookingLongTerm(container) {
         totalPrice: quote.total,
         // Voucher only applies to the online branch.
         voucherId: paymentMethod === 'online' ? voucherIdToSend : null,
+        voucherCode: voucherCodeToSend,
         customerData: {
           customerId: user?.uid || null,
           licensePlate,

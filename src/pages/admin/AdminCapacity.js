@@ -2,6 +2,7 @@ import { html, delegate } from '../../utils/dom.js';
 import { t, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getAllSpots, updateSpotStatus, subscribeCapacity } from '../../services/capacityService.js';
+import { getCollection, where } from '../../firebase/db.js';
 import { TOTAL_CAPACITY } from '../../utils/constants.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 
@@ -23,8 +24,23 @@ const ZONE_META = [
 export default async function AdminCapacity(container) {
   updateMeta({ title: 'Capacity — Admin — Mango Parking', description: 'Manage parking spot capacity.' });
 
-  // Fetch real spots from Firestore
-  const allSpots = await getAllSpots().catch(() => []);
+  // Fetch real spots + the data needed to label occupied/reserved tiles
+  // with the occupying plate. Three sources: longterm bookings with a
+  // spotId (status in [upcoming, active] — upcoming = reserved, active
+  // = checked in) and activeCheckIns (credit sessions).
+  const [allSpots, scheduledBookings, activeCheckIns] = await Promise.all([
+    getAllSpots().catch(() => []),
+    getCollection('bookings', where('status', 'in', ['upcoming', 'active'])).catch(() => []),
+    getCollection('activeCheckIns').catch(() => []),
+  ]);
+
+  const plateBySpot = {};
+  for (const b of scheduledBookings) {
+    if (b.spotId) plateBySpot[b.spotId] = b.licensePlate || '';
+  }
+  for (const ck of activeCheckIns) {
+    if (ck.spotId && !plateBySpot[ck.spotId]) plateBySpot[ck.spotId] = ck.licensePlate || '';
+  }
 
   // Group by zone (extract zone letter from spot id like "A-01")
   const spotData = {};
@@ -102,17 +118,23 @@ export default async function AdminCapacity(container) {
                 <h2 class="font-heading font-bold text-lg text-charcoal">${t(zone.labelKey)}</h2>
                 <span class="text-[13px] font-mono text-dim">${zoneSpots.length} ${t('admin.spots')}</span>
               </div>
-              <div class="grid grid-cols-10 sm:grid-cols-15 gap-1.5" data-zone="${zone.name}">
-                ${zoneSpots.map(spot => `
+              <div class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2" data-zone="${zone.name}">
+                ${zoneSpots.map(spot => {
+                  const plate = plateBySpot[spot.id] || '';
+                  const title = `${spot.id} — ${spot.status || 'available'}${plate ? ` — ${plate}` : ''}`;
+                  return `
                   <button
-                    class="w-full aspect-square rounded-md ${SPOT_COLORS[spot.status] || SPOT_COLORS.available} transition-colors duration-150 cursor-pointer relative group"
+                    class="w-full aspect-square rounded-lg ${SPOT_COLORS[spot.status] || SPOT_COLORS.available} transition-colors duration-150 cursor-pointer relative group flex flex-col items-center justify-center px-1"
                     data-spot="${spot.id}"
                     data-spot-status="${spot.status || 'available'}"
-                    title="${spot.id} — ${spot.status || 'available'}"
+                    data-plate="${plate}"
+                    title="${title}"
                   >
-                    <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-charcoal text-white text-[11px] font-mono px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">${spot.id}</span>
+                    <span class="font-mono text-[9px] text-white/70 leading-none pointer-events-none">${spot.id}</span>
+                    ${plate ? `<span class="font-mono font-bold text-[11px] sm:text-[12px] text-white leading-tight pointer-events-none mt-1 break-all text-center">${plate}</span>` : ''}
                   </button>
-                `).join('')}
+                `;
+                }).join('')}
               </div>
             </div>`;
           }).join('')}
@@ -168,7 +190,9 @@ export default async function AdminCapacity(container) {
     }
   });
 
-  // Real-time capacity subscription
+  // Real-time capacity subscription. Aggregates the spots collection
+  // (no drift) and writes both the headline live numbers AND the legend
+  // counters, so they stay in lockstep with the tile colors below.
   const unsubCapacity = subscribeCapacity((cap) => {
     const liveTotal = page.querySelector('[data-live-total]');
     const liveOccupied = page.querySelector('[data-live-occupied]');
@@ -177,7 +201,22 @@ export default async function AdminCapacity(container) {
     if (liveTotal) liveTotal.textContent = cap.total;
     if (liveOccupied) liveOccupied.textContent = cap.occupied;
     if (liveAvailable) liveAvailable.textContent = cap.available;
-    if (liveBar) liveBar.style.width = (cap.total > 0 ? Math.round((cap.occupied / cap.total) * 100) : 0) + '%';
+    if (liveBar) {
+      // Bar visualizes everything that isn't bookable — occupied + reserved.
+      const usedPct = cap.total > 0
+        ? Math.round(((cap.occupied + cap.reserved) / cap.total) * 100)
+        : 0;
+      liveBar.style.width = usedPct + '%';
+    }
+    // Legend counters — were previously refreshed only on tile clicks.
+    const setCount = (sel, n) => {
+      const el = page.querySelector(sel);
+      if (el) el.textContent = n;
+    };
+    setCount('[data-count-available]', cap.available);
+    setCount('[data-count-occupied]', cap.occupied);
+    setCount('[data-count-reserved]', cap.reserved);
+    setCount('[data-count-maintenance]', cap.maintenance);
   });
 
   // Wire mobile admin nav

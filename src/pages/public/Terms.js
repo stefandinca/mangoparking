@@ -13,6 +13,7 @@ export default function Terms(container) {
   });
 
   renderLegalPage(container, {
+    slug: 'terms',
     title: t('legal.termsTitle'),
     intro: t('legal.termsIntro'),
     sections: [

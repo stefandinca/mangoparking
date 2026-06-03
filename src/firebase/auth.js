@@ -15,6 +15,17 @@ let currentUser = null;
 let userProfile = null;
 const authListeners = [];
 
+// Resolves after the FIRST onAuthStateChanged callback finishes — at
+// that point we know whether the user is signed in AND have loaded their
+// users/{uid} profile (so role guards have what they need).
+//
+// The router awaits this before its initial route dispatch so a hard
+// refresh of an authed page doesn't briefly redirect to /login while
+// Firebase rehydrates the persisted session (which takes 200–500 ms).
+let _authReadyResolve;
+export const authReady = new Promise((resolve) => { _authReadyResolve = resolve; });
+let _authReadyDone = false;
+
 // Listen to auth state
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
@@ -41,6 +52,10 @@ onAuthStateChanged(auth, async (user) => {
     userProfile = null;
   }
   authListeners.forEach((fn) => fn(currentUser, userProfile));
+  if (!_authReadyDone) {
+    _authReadyDone = true;
+    _authReadyResolve();
+  }
 });
 
 export function getCurrentUser() {
@@ -86,6 +101,15 @@ export async function loginWithGoogle() {
 }
 
 export async function logout() {
+  // Clear the module-level cache synchronously so the next render (Navbar,
+  // route guards) sees a logged-out state without waiting for the async
+  // onAuthStateChanged callback to propagate. Without this, callers that
+  // do `await logout(); navigate('/')` race the listener and the post-
+  // logout page sometimes still paints with the previous user — only a
+  // manual refresh fixes it.
+  currentUser = null;
+  userProfile = null;
+  authListeners.forEach((fn) => fn(null, null));
   return signOut(auth);
 }
 
@@ -93,6 +117,10 @@ export function isAdmin() {
   return userProfile?.role === 'admin';
 }
 
+// Backwards-compat helper. Returns true for admin + agent (and legacy
+// 'staff', which is now treated as agent) + driver. Use the permission
+// helpers in utils/permissions.js for new code instead.
 export function isStaff() {
-  return userProfile?.role === 'admin' || userProfile?.role === 'staff';
+  const r = userProfile?.role;
+  return r === 'admin' || r === 'agent' || r === 'staff' || r === 'driver';
 }

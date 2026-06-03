@@ -1,467 +1,696 @@
-// Unified shuttle-driver / admin check-in dashboard.
+// Admin Check-in / Check-out — v1.7 redesign.
 //
-// Three live sections on one page:
-//   1. Currently parked  — longTerm bookings with status='active' AND
-//                           activeCheckIns/* (credit sessions)
-//   2. Expected today    — longTerm bookings with status='upcoming' whose
-//                           startDate is within the next 24h; paid flag.
-//   3. Pending payment   — pendingOrders awaiting cash/card at the lot
-//                           (paymentMethod='pay-at-pickup' + paymentStatus='unpaid').
+// Three tabs, each scoped to a specific workflow:
+//   1. Check-in — upcoming bookings whose drop-off falls inside the
+//      selected window (today / this week / this month). Per-row
+//      action: Check-in. Plus Cancel reservation (admin/agent) and
+//      Collect payment (when unpaid).
+//   2. Check-out — active bookings whose pick-up falls inside the
+//      selected window. Per-row action: Check-out.
+//   3. Overdue — all active bookings past their pick-up by ≥2 hours.
+//      Rows expand on click to show full booking details + actions
+//      (Check-out now / Charge overstay / Cancel reservation).
 //
-// All three subscribe to Firestore in real time so a second admin tab
-// auto-refreshes when an action is taken from another device.
+// Top of page: a Walk-in CTA that opens the shared create-transaction
+// modal (lifted from AdminTransactions), and a quick plate-lookup bar
+// for the fast path when an agent knows the plate.
+//
+// No-show is detected automatically by the `markNoShows` scheduled
+// function. No manual UI for it — rows simply drop off the Check-in
+// tab when their status flips.
 
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
-import { html, qs, delegate } from '../../utils/dom.js';
+import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { subscribeCollection, where } from '../../firebase/db.js';
+import { subscribeCollection, getCollection, where } from '../../firebase/db.js';
 import { showToast } from '../../components/core/Toast.js';
-import { openModal } from '../../components/core/Modal.js';
+import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { checkInBooking, checkOutBooking } from '../../services/bookingService.js';
-import { useToken, checkOut as creditCheckOut } from '../../services/tokenService.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
-import { formatTime } from '../../utils/date.js';
-import { isValidLicensePlate } from '../../utils/validators.js';
+import { getUserProfile } from '../../firebase/auth.js';
+import { hasPermission, PERM } from '../../utils/permissions.js';
+import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
+import flatpickr from 'flatpickr';
+import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
 const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
-const grantCreditsForCashFn = httpsCallable(functions, 'grantCreditsForCash');
+const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
 
-// Format an ISO timestamp as "HH:MM" today, "ieri HH:MM" yesterday, "DD/MM HH:MM" older.
-function fmtMoment(iso, locale) {
+const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+
+// ── Date helpers ────────────────────────────────────────────────────────
+
+function fmtDateTime(iso, locale) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today.getTime() - 86_400_000);
-  const startOfD = new Date(d); startOfD.setHours(0, 0, 0, 0);
-  const time = formatTime(d, locale);
-  if (startOfD.getTime() === today.getTime()) return time;
-  if (startOfD.getTime() === yesterday.getTime()) return `${locale === 'ro' ? 'ieri' : 'yesterday'} ${time}`;
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${time}`;
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(locale === 'en' ? 'en-GB' : 'ro-RO', {
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
 }
 
-function plateBadge(plate) {
-  return `<span class="font-mono font-bold text-[15px] tracking-wider">${plate || '—'}</span>`;
+function bucharestDate(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/Bucharest',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(d);
+  } catch { return null; }
 }
 
-function typeBadge(type) {
-  if (type === 'longTerm') return `<span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blueberry/10 text-blueberry">${t('checkins.typeLongTerm')}</span>`;
-  if (type === 'credit') return `<span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-mango/15 text-charcoal">${t('checkins.typeCredit')}</span>`;
-  return `<span class="text-[11px] uppercase tracking-wider text-dim">${type || '—'}</span>`;
-}
-
-function paidBadge(status) {
-  if (status === 'paid' || status === undefined) {
-    // Treat missing field as paid (legacy docs before paymentStatus existed)
-    return `<span class="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-leaf/10 text-leaf">●&nbsp;${t('checkins.paid')}</span>`;
+// Returns [startISO, endISO] for the active window. Accepts either a
+// preset name ('today' | 'week' | 'month') or a custom range tuple
+// already in `[YYYY-MM-DD, YYYY-MM-DD]` form (inclusive on both ends —
+// the end day is expanded to next-day-midnight so isInWindow's strict
+// `< end` keeps the last day inside the bucket).
+function windowRange(window) {
+  const fmt = (d) => d.toISOString();
+  if (Array.isArray(window) && window.length === 2 && window[0] && window[1]) {
+    const start = new Date(window[0] + 'T00:00:00');
+    const end = new Date(window[1] + 'T00:00:00');
+    end.setDate(end.getDate() + 1);
+    return [fmt(start), fmt(end)];
   }
-  return `<span class="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-danger/10 text-danger">●&nbsp;${t('checkins.unpaid')}</span>`;
+  const now = new Date();
+  if (window === 'week') {
+    const start = new Date(now);
+    const day = start.getDay() || 7; // Mon=1..Sun=7
+    start.setDate(start.getDate() - day + 1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    return [fmt(start), fmt(end)];
+  }
+  if (window === 'month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+    return [fmt(start), fmt(end)];
+  }
+  // today
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  return [fmt(start), fmt(end)];
 }
 
-export default function AdminCheckIns(container) {
-  const locale = getLocale();
-  updateMeta({ title: `${t('checkins.pageTitle')} — Admin`, lang: locale });
+function isInWindow(iso, [startIso, endIso]) {
+  if (!iso) return false;
+  return iso >= startIso && iso < endIso;
+}
 
-  // ── Live state ──────────────────────────────────────────────────────
-  let bookings = [];          // bookings.status in ['upcoming', 'active']
-  let activeCheckIns = [];    // activeCheckIns/*
-  let pendingOrders = [];     // pendingOrders pay-at-pickup unpaid
+// URL window param: presets stay as their key, custom range serializes
+// as 'YYYY-MM-DD..YYYY-MM-DD'. Anything else falls back to 'today'.
+function parseWindowParam(raw) {
+  if (['today', 'week', 'month'].includes(raw)) return raw;
+  const m = String(raw || '').match(/^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/);
+  if (m) return [m[1], m[2]];
+  return 'today';
+}
+function encodeWindow(w) {
+  if (Array.isArray(w)) return `${w[0]}..${w[1]}`;
+  return w;
+}
 
-  // ── Initial scaffold ────────────────────────────────────────────────
-  const page = AdminLayout('/admin/checkins', `
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-      <div>
-        <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('checkins.pageTitle')}</h1>
-        <p class="text-dim text-[15px] mt-1">${t('checkins.pageSubtitle')}</p>
-      </div>
-      <div class="flex gap-2 shrink-0">
-        <button data-action="walkin" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-4 py-2.5 rounded-xl transition-colors">${t('checkins.walkInBtn')}</button>
-        <button data-action="grant" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-4 py-2.5 rounded-xl transition-colors">${t('checkins.grantBtn')}</button>
+// Lowercased plate/name/code/email match. Returns true on empty query so
+// the filter is identity when search isn't in use.
+function matchesSearch(b, q) {
+  if (!q) return true;
+  const haystacks = [
+    b.licensePlate,
+    b.code,
+    b.contact?.name,
+    b.contact?.email,
+    b.id,
+  ];
+  return haystacks.some((h) => h && String(h).toLowerCase().includes(q));
+}
+
+function isOverdue(booking) {
+  if (booking.status !== 'active') return false;
+  if (!booking.pickupAt && !booking.endDate) return false;
+  const pickup = booking.pickupAt || booking.endDate;
+  return Date.now() > new Date(pickup).getTime() + OVERDUE_THRESHOLD_MS;
+}
+
+function hoursOver(booking) {
+  const pickup = booking.pickupAt || booking.endDate;
+  if (!pickup) return 0;
+  const diffMs = Date.now() - new Date(pickup).getTime();
+  return Math.max(0, Math.floor(diffMs / 3_600_000));
+}
+
+// ── Badges ──────────────────────────────────────────────────────────────
+
+function paymentStatusBadge(b) {
+  const status = b.paymentStatus || 'paid';
+  const paidBy = b.paidBy || '';
+  const labelMap = {
+    paid: t('checkins.payPaid'),
+    unpaid: t('checkins.payUnpaid'),
+    'refund-pending': t('checkins.payRefundPending'),
+    refunded: t('checkins.payRefunded'),
+  };
+  const styleMap = {
+    paid: 'bg-leaf/10 text-leaf',
+    unpaid: 'bg-red-100 text-red-600',
+    'refund-pending': 'bg-mango/10 text-mango',
+    refunded: 'bg-gray-100 text-dim',
+  };
+  const cls = styleMap[status] || styleMap.paid;
+  const label = labelMap[status] || status;
+  const partnerChip = (paidBy === 'broker' || paidBy === 'partner')
+    ? `<span class="ml-1 text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-blueberry/10 text-blueberry">${paidBy}</span>`
+    : '';
+  return `<span class="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls}">${label}${partnerChip}</span>`;
+}
+
+// ── Row builders ────────────────────────────────────────────────────────
+
+function tabPill(key, activeKey, label, count) {
+  const isActive = key === activeKey;
+  const cls = isActive
+    ? 'bg-blueberry text-white'
+    : 'bg-frost text-charcoal/70 hover:bg-frost-deep';
+  return `<button type="button" data-tab="${key}" class="px-4 py-2 rounded-xl text-[14px] font-semibold transition-colors ${cls}">${label}<span class="ml-1.5 text-[11px] opacity-75">${count}</span></button>`;
+}
+
+function windowPill(key, activeKey, label) {
+  const isActive = key === activeKey;
+  const cls = isActive
+    ? 'bg-mango text-charcoal'
+    : 'bg-white text-charcoal/70 hover:bg-frost';
+  return `<button type="button" data-window="${key}" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${cls}">${label}</button>`;
+}
+
+function actionButton({ key, label, variant = 'neutral', dataAttrs = '' }) {
+  const styles = {
+    neutral: 'bg-frost hover:bg-frost-deep text-charcoal/80',
+    primary: 'bg-leaf hover:bg-leaf/90 text-white',
+    warning: 'bg-mango hover:bg-mango-hover text-charcoal',
+    danger:  'bg-red-100 hover:bg-red-200 text-red-700',
+  };
+  return `<button type="button" data-action="${key}" ${dataAttrs} class="${styles[variant] || styles.neutral} font-semibold text-[12px] px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">${label}</button>`;
+}
+
+function rowHtml(b, { tab, locale, canCancel }) {
+  const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+  const dropoff = b.dropoffAt || b.startDate;
+  const pickup = b.pickupAt || b.endDate;
+  const name = b.contact?.name || b.contact?.email || '—';
+  const plate = b.licensePlate || '—';
+  const unpaid = b.paymentStatus === 'unpaid';
+  const cancellable = ['upcoming', 'active'].includes(b.status)
+    && b.paymentStatus !== 'refund-pending'
+    && b.paymentStatus !== 'refunded';
+
+  const actions = [];
+  if (tab === 'checkin') {
+    actions.push(actionButton({ key: 'checkin', label: t('checkins.actionCheckIn'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
+  } else if (tab === 'checkout') {
+    actions.push(actionButton({ key: 'checkout', label: t('checkins.actionCheckOut'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
+  }
+  if (unpaid) {
+    actions.push(actionButton({ key: 'collect', label: t('checkins.actionCollect'), variant: 'warning', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-order="${escapeHtml(b.paymentId || '')}"` }));
+  }
+  if (canCancel && cancellable) {
+    actions.push(actionButton({ key: 'cancel', label: t('checkins.actionCancelReservation'), variant: 'danger', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(code)}"` }));
+  }
+
+  const statusCell = tab === 'checkin'
+    ? `<span class="text-[12px] text-dim">${t('checkins.statusWaiting')}</span>`
+    : `<span class="text-[12px] uppercase tracking-wider font-mono font-semibold text-leaf">${t('checkins.statusActive')}</span>`;
+
+  return `
+    <tr class="border-t border-frost-deep" data-row data-booking-id="${escapeHtml(b.id)}">
+      <td class="px-4 py-3 align-top">
+        <div class="text-[13px] font-mono">${fmtDateTime(dropoff, locale)}</div>
+        <div class="text-[12px] text-dim font-mono mt-0.5">→ ${fmtDateTime(pickup, locale)}</div>
+      </td>
+      <td class="px-4 py-3 align-top text-[13px]">
+        <div class="font-medium">${escapeHtml(name)}</div>
+        <div class="text-[11px] text-dim truncate" title="${escapeHtml(b.contact?.email || '')}">${escapeHtml(b.contact?.email || '')}</div>
+      </td>
+      <td class="px-4 py-3 align-top text-[13px] font-mono">${escapeHtml(plate)}</td>
+      <td class="px-4 py-3 align-top">${paymentStatusBadge(b)}</td>
+      <td class="px-4 py-3 align-top">${statusCell}</td>
+      <td class="px-4 py-3 align-top text-right">
+        <div class="inline-flex flex-wrap gap-1.5 justify-end">${actions.join('')}</div>
+      </td>
+    </tr>
+  `;
+}
+
+function overdueRowHtml(b, { locale, canCancel }) {
+  const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+  const overHrs = hoursOver(b);
+  const severity = overHrs >= 24 ? 'red' : overHrs >= 4 ? 'orange' : 'mango';
+  const sevClass = severity === 'red'
+    ? 'text-red-600 bg-red-100'
+    : severity === 'orange'
+      ? 'text-orange-600 bg-orange-100'
+      : 'text-mango bg-mango/10';
+
+  const cancellable = b.paymentStatus !== 'refund-pending' && b.paymentStatus !== 'refunded';
+  const actions = [
+    actionButton({ key: 'checkout', label: t('checkins.actionCheckOut'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }),
+    actionButton({ key: 'overstay', label: t('checkins.actionChargeOverstay'), variant: 'warning', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }),
+  ];
+  if (canCancel && cancellable) {
+    actions.push(actionButton({ key: 'cancel', label: t('checkins.actionCancelReservation'), variant: 'danger', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(code)}"` }));
+  }
+
+  const detail = (label, value) => `
+    <div class="flex justify-between gap-3 py-1 border-b border-frost-deep/60 last:border-0">
+      <span class="text-[12px] text-dim font-mono uppercase tracking-wider">${label}</span>
+      <span class="text-[13px] text-charcoal text-right">${value}</span>
+    </div>
+  `;
+
+  return `
+    <div class="card-solid rounded-2xl overflow-hidden mb-3" data-overdue-row data-booking-id="${escapeHtml(b.id)}">
+      <button type="button" data-overdue-toggle class="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-frost transition-colors text-left">
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+          <span class="font-mono text-[14px] font-bold text-blueberry-deep">${escapeHtml(code)}</span>
+          <span class="font-mono text-[14px] text-charcoal">${escapeHtml(b.licensePlate || '—')}</span>
+          <span class="text-[13px] text-charcoal/70 truncate">${escapeHtml(b.contact?.name || b.contact?.email || '—')}</span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <span class="text-[11px] uppercase tracking-wider font-mono font-semibold px-2 py-0.5 rounded-full ${sevClass}">+${overHrs}h</span>
+          ${paymentStatusBadge(b)}
+          <svg data-overdue-chevron class="w-4 h-4 text-dim transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+        </div>
+      </button>
+      <div class="hidden border-t border-frost-deep px-4 py-4 bg-frost/30" data-overdue-body>
+        <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1 mb-4">
+          ${detail(t('checkins.detailDropoff'), fmtDateTime(b.dropoffAt || b.startDate, locale))}
+          ${detail(t('checkins.detailPickup'), fmtDateTime(b.pickupAt || b.endDate, locale))}
+          ${detail(t('checkins.detailDays'), String(b.days || '—'))}
+          ${detail(t('checkins.detailTotal'), `${Number(b.totalPrice || 0)} ${t('common.lei')}`)}
+          ${detail(t('checkins.detailEmail'), escapeHtml(b.contact?.email || '—'))}
+          ${detail(t('checkins.detailPhone'), escapeHtml(b.contact?.phone || '—'))}
+          ${detail(t('checkins.detailSpot'), escapeHtml(b.spotId || '—'))}
+          ${detail(t('checkins.detailPaidBy'), escapeHtml(b.paidBy || '—'))}
+        </div>
+        <div class="flex flex-wrap gap-2 justify-end">${actions.join('')}</div>
       </div>
     </div>
+  `;
+}
 
-    <!-- Section 1: currently parked -->
-    <section class="mb-8">
-      <h2 class="font-heading font-bold text-lg text-charcoal mb-3 flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-leaf animate-pulse"></span>
-        ${t('checkins.activeNow')}
-        <span data-active-count class="text-dim text-[14px] font-medium">(0)</span>
-      </h2>
-      <div data-active-grid class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-    </section>
+// ── Page entry ──────────────────────────────────────────────────────────
 
-    <!-- Section 2: expected today -->
-    <section class="mb-8">
-      <h2 class="font-heading font-bold text-lg text-charcoal mb-3 flex items-center gap-2">
-        ${t('checkins.expectedToday')}
-        <span data-expected-count class="text-dim text-[14px] font-medium">(0)</span>
-      </h2>
-      <div data-expected-grid class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-    </section>
+export default async function AdminCheckIns(container) {
+  const locale = getLocale();
+  updateMeta({ title: `${t('checkins.pageTitle')} — Admin — Mango Parking`, description: t('checkins.subtitle'), lang: locale });
 
-    <!-- Section 3: pending payment -->
-    <section>
-      <h2 class="font-heading font-bold text-lg text-charcoal mb-3 flex items-center gap-2">
-        ${t('checkins.pendingPayment')}
-        <span data-pending-count class="text-dim text-[14px] font-medium">(0)</span>
-      </h2>
-      <div data-pending-grid class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-    </section>
+  const profile = getUserProfile();
+  const role = profile?.role || 'customer';
+  const canCancel = hasPermission(role, PERM.REFUNDS);
+
+  // Initial state from URL — preserves tab, window, and search across
+  // reloads. Window can be 'today' | 'week' | 'month' or a custom
+  // 'YYYY-MM-DD..YYYY-MM-DD' range string.
+  const params = new URLSearchParams(window.location.search);
+  let activeTab = params.get('tab') || 'checkin';
+  if (!['checkin', 'checkout', 'overdue'].includes(activeTab)) activeTab = 'checkin';
+  const rawWindow = params.get('window') || 'today';
+  let activeWindow = parseWindowParam(rawWindow);
+  let searchQuery = (params.get('q') || '').trim().toLowerCase();
+
+  // Pull users once for the walk-in modal (matches the AdminTransactions pattern).
+  const users = await getCollection('users').catch(() => []);
+
+  // Live booking data — single subscription, filtered client-side per tab.
+  let bookings = [];
+  let unsub = null;
+
+  const page = AdminLayout('/admin/checkins', `
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('checkins.pageTitle')}</h1>
+        <p class="text-dim text-[15px] mt-1">${t('checkins.subtitle')}</p>
+      </div>
+      <button type="button" data-walkin class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors shadow-sm">${t('checkins.walkInCta')}</button>
+    </div>
+
+    <div class="card-solid rounded-2xl p-3 mb-4 flex items-center gap-2">
+      <svg class="w-5 h-5 text-dim shrink-0 ml-1" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+      <input type="text" data-search value="${escapeHtml(searchQuery)}" placeholder="${t('checkins.searchPlaceholder')}" class="flex-1 min-w-0 px-2 py-2 bg-transparent text-[15px] focus:outline-none placeholder:text-dim/70">
+      <button type="button" data-search-clear class="${searchQuery ? '' : 'hidden'} text-dim hover:text-charcoal p-1.5 rounded-lg hover:bg-frost transition-colors" aria-label="${t('checkins.searchClear')}">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="flex flex-wrap gap-2 mb-4" data-tabs></div>
+    <div class="flex flex-wrap items-center gap-2 mb-4" data-window-bar></div>
+    <div data-tab-body></div>
   `);
 
-  container.appendChild(page);
   initAdminNav(page);
+  container.appendChild(page);
 
-  // ── Row renderers ───────────────────────────────────────────────────
-  function activeRow(row) {
-    const { kind, code, plate, type, checkinAt, key } = row;
-    return `
-      <div class="card-solid rounded-2xl p-4 flex flex-col gap-2" data-row data-kind="${kind}" data-key="${key}" data-plate="${plate || ''}">
-        <div class="flex items-center justify-between gap-2">
-          ${plateBadge(plate)}
-          ${typeBadge(type)}
-        </div>
-        ${code ? `<p class="text-[12px] font-mono text-dim">${code}</p>` : ''}
-        <p class="text-[13px] text-charcoal/70">${t('checkins.checkedInAt')} <span class="font-medium">${fmtMoment(checkinAt, locale)}</span></p>
-        <button data-action="checkout" class="mt-1 bg-blueberry-deep hover:bg-blueberry-hover text-white font-semibold text-[13px] px-3 py-2 rounded-lg transition-colors">${t('checkins.checkOut')}</button>
-      </div>
-    `;
+  const tabsEl = page.querySelector('[data-tabs]');
+  const windowBarEl = page.querySelector('[data-window-bar]');
+  const bodyEl = page.querySelector('[data-tab-body]');
+
+  function setUrl() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', activeTab);
+    if (activeTab === 'overdue') url.searchParams.delete('window');
+    else url.searchParams.set('window', encodeWindow(activeWindow));
+    if (searchQuery) url.searchParams.set('q', searchQuery);
+    else url.searchParams.delete('q');
+    window.history.replaceState({}, '', url.toString());
   }
 
-  function expectedRow(b) {
-    const paid = b.paymentStatus !== 'unpaid';
-    return `
-      <div class="card-solid rounded-2xl p-4 flex flex-col gap-2" data-row data-kind="booking" data-key="${b.id}" data-plate="${b.licensePlate}">
-        <div class="flex items-center justify-between gap-2">
-          ${plateBadge(b.licensePlate)}
-          ${typeBadge(b.type)}
-        </div>
-        ${b.code ? `<p class="text-[12px] font-mono text-dim">${b.code}</p>` : ''}
-        <p class="text-[13px] text-charcoal/70">${t('checkins.expectedAt')} <span class="font-medium">${fmtMoment(b.dropoffAt || b.startDate, locale)}</span></p>
-        <div class="flex items-center justify-between gap-2 mt-1">
-          ${paidBadge(b.paymentStatus)}
-          ${paid
-            ? `<button data-action="checkin" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[13px] px-3 py-1.5 rounded-lg transition-colors">${t('checkins.checkIn')}</button>`
-            : `<button data-action="markpaid" data-order-id="${b.paymentId || ''}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[13px] px-3 py-1.5 rounded-lg transition-colors">${t('checkins.markPaid')}</button>`
+  function counts() {
+    const range = windowRange(activeWindow);
+    const q = searchQuery;
+    const checkin = bookings.filter((b) => b.status === 'upcoming' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
+    const checkout = bookings.filter((b) => b.status === 'active' && isInWindow(b.pickupAt || b.endDate, range) && matchesSearch(b, q)).length;
+    const overdue = bookings.filter((b) => isOverdue(b) && matchesSearch(b, q)).length;
+    return { checkin, checkout, overdue };
+  }
+
+  function renderTabs() {
+    const { checkin, checkout, overdue } = counts();
+    tabsEl.innerHTML = [
+      tabPill('checkin', activeTab, t('checkins.tabCheckIn'), checkin),
+      tabPill('checkout', activeTab, t('checkins.tabCheckOut'), checkout),
+      tabPill('overdue', activeTab, t('checkins.tabOverdue'), overdue),
+    ].join('');
+  }
+
+  function renderWindowBar() {
+    if (activeTab === 'overdue') {
+      windowBarEl.innerHTML = `<p class="text-[13px] text-dim">${t('checkins.overdueSubtitle')}</p>`;
+      return;
+    }
+    // Preset highlight is "off" whenever activeWindow is a custom range —
+    // calendar value carries the active state in that case.
+    const presetActive = Array.isArray(activeWindow) ? null : activeWindow;
+    const rangeValue = Array.isArray(activeWindow)
+      ? `${activeWindow[0]} to ${activeWindow[1]}`
+      : '';
+    windowBarEl.innerHTML = `
+      <span class="text-[12px] uppercase tracking-wider text-dim font-mono mr-1">${t('checkins.windowLabel')}</span>
+      ${windowPill('today', presetActive, t('checkins.windowToday'))}
+      ${windowPill('week', presetActive, t('checkins.windowWeek'))}
+      ${windowPill('month', presetActive, t('checkins.windowMonth'))}
+      <span class="text-[12px] text-dim mx-1">${t('checkins.windowOr')}</span>
+      <input type="text" data-range-picker value="${escapeHtml(rangeValue)}" placeholder="${t('checkins.windowCustom')}"
+        class="px-3 py-1.5 rounded-lg border border-frost-deep bg-white text-[13px] font-mono cursor-pointer hover:bg-frost transition-colors min-w-[180px] focus:outline-none focus:border-blueberry">
+    `;
+    // (Re-)mount flatpickr range picker.
+    const rangeInput = windowBarEl.querySelector('[data-range-picker]');
+    if (rangeInput) {
+      if (rangeInput._fp) { try { rangeInput._fp.destroy(); } catch {} }
+      const fp = flatpickr(rangeInput, {
+        mode: 'range',
+        dateFormat: 'Y-m-d',
+        altInput: true,
+        altFormat: locale === 'en' ? 'M j, Y' : 'j M Y',
+        altInputClass: 'flatpickr-alt-input px-3 py-1.5 rounded-lg border border-frost-deep bg-white text-[13px] font-mono cursor-pointer hover:bg-frost transition-colors min-w-[180px] focus:outline-none focus:border-blueberry',
+        locale: locale === 'ro' ? Romanian : 'default',
+        clickOpens: true,
+        allowInput: false,
+        defaultDate: Array.isArray(activeWindow) ? activeWindow : null,
+        onClose: (dates) => {
+          if (dates.length === 2) {
+            const fmt = (d) => {
+              const pad = (n) => String(n).padStart(2, '0');
+              return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            };
+            activeWindow = [fmt(dates[0]), fmt(dates[1])];
+            setUrl();
+            rerender();
           }
-        </div>
-      </div>
-    `;
+        },
+      });
+      rangeInput._fp = fp;
+    }
   }
 
-  function pendingOrderRow(o) {
-    const plate = o.customerData?.licensePlate || '—';
+  function renderTable(rows) {
+    if (!rows.length) {
+      return `<div class="card-solid rounded-2xl p-10 text-center text-dim">${t('checkins.emptyTab')}</div>`;
+    }
     return `
-      <div class="card-solid rounded-2xl p-4 flex flex-col gap-2" data-row data-kind="pendingOrder" data-key="${o.id}" data-plate="${plate}">
-        <div class="flex items-center justify-between gap-2">
-          ${plateBadge(plate)}
-          <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-mango/15 text-charcoal">${o.quantity || '?'} ${t('checkins.credits')}</span>
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-frost">
+              <tr class="text-left text-[12px] font-mono uppercase tracking-wider text-dim">
+                <th class="px-4 py-3 font-medium">${t('checkins.colTimes')}</th>
+                <th class="px-4 py-3 font-medium">${t('checkins.colCustomer')}</th>
+                <th class="px-4 py-3 font-medium">${t('checkins.colPlate')}</th>
+                <th class="px-4 py-3 font-medium">${t('checkins.colPayment')}</th>
+                <th class="px-4 py-3 font-medium">${t('checkins.colStatus')}</th>
+                <th class="px-4 py-3 font-medium text-right">${t('checkins.colActions')}</th>
+              </tr>
+            </thead>
+            <tbody>${rows.join('')}</tbody>
+          </table>
         </div>
-        <p class="text-[13px] text-charcoal/70">${o.customerData?.name || '—'} · ${o.customerData?.email || ''}</p>
-        <p class="text-[12px] text-dim">${o.amount ? `${o.amount} lei` : ''}</p>
-        <button data-action="markpaid" data-order-id="${o.id}" class="mt-1 bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[13px] px-3 py-2 rounded-lg transition-colors">${t('checkins.markPaid')}</button>
       </div>
     `;
   }
 
-  // ── Section re-renders ──────────────────────────────────────────────
-  function renderActive() {
-    // Compose unified list: long-term active bookings + credit-type active
-    // bookings + activeCheckIns/* (credit sessions without a booking doc).
-    const activeRows = [];
-
-    for (const b of bookings) {
-      if (b.status !== 'active') continue;
-      activeRows.push({
-        kind: 'booking',
-        key: b.id,
-        code: b.code,
-        plate: b.licensePlate,
-        type: b.type,
-        checkinAt: b.checkinTimestamp || b.startDate,
-      });
+  function renderBody() {
+    const q = searchQuery;
+    if (activeTab === 'checkin') {
+      const range = windowRange(activeWindow);
+      const rows = bookings
+        .filter((b) => b.status === 'upcoming' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q))
+        .sort((a, b) => String(a.dropoffAt || a.startDate || '').localeCompare(String(b.dropoffAt || b.startDate || '')))
+        .map((b) => rowHtml(b, { tab: 'checkin', locale, canCancel }));
+      bodyEl.innerHTML = renderTable(rows);
+      return;
     }
-    // activeCheckIns may reference a booking via balanceDocId; we render
-    // them as standalone rows since the dashboard's main signal is the
-    // plate itself (not which doc represents the session).
-    for (const ck of activeCheckIns) {
-      // Skip if a credit-type booking already covers the same plate to
-      // avoid duplicates.
-      if (activeRows.some((r) => r.plate === ck.licensePlate)) continue;
-      activeRows.push({
-        kind: 'activeCheckIn',
-        key: ck.id,
-        code: null,
-        plate: ck.licensePlate,
-        type: 'credit',
-        checkinAt: ck.checkinTime,
-      });
+    if (activeTab === 'checkout') {
+      const range = windowRange(activeWindow);
+      const rows = bookings
+        .filter((b) => b.status === 'active' && isInWindow(b.pickupAt || b.endDate, range) && matchesSearch(b, q))
+        .sort((a, b) => String(a.pickupAt || a.endDate || '').localeCompare(String(b.pickupAt || b.endDate || '')))
+        .map((b) => rowHtml(b, { tab: 'checkout', locale, canCancel }));
+      bodyEl.innerHTML = renderTable(rows);
+      return;
     }
-    // Sort: newest check-in first.
-    activeRows.sort((a, b) => (b.checkinAt || '').localeCompare(a.checkinAt || ''));
-
-    const grid = qs('[data-active-grid]', page);
-    grid.innerHTML = activeRows.length === 0
-      ? `<p class="col-span-full text-center text-dim py-6">${t('checkins.noneActive')}</p>`
-      : activeRows.map(activeRow).join('');
-    qs('[data-active-count]', page).textContent = `(${activeRows.length})`;
+    // overdue
+    const rows = bookings
+      .filter((b) => isOverdue(b) && matchesSearch(b, q))
+      .sort((a, b) => hoursOver(b) - hoursOver(a))
+      .map((b) => overdueRowHtml(b, { locale, canCancel }));
+    if (!rows.length) {
+      bodyEl.innerHTML = `<div class="card-solid rounded-2xl p-10 text-center text-dim">${t('checkins.overdueEmpty')}</div>`;
+      return;
+    }
+    bodyEl.innerHTML = rows.join('');
   }
 
-  function renderExpected() {
-    // 24h window ahead, status='upcoming'.
-    const windowMs = 24 * 60 * 60 * 1000;
-    const now = Date.now();
-    const expected = bookings
-      .filter((b) => b.status === 'upcoming')
-      .filter((b) => {
-        const ts = new Date(b.dropoffAt || b.startDate).getTime();
-        return Number.isFinite(ts) && ts >= now - windowMs && ts <= now + windowMs;
-      })
-      .sort((a, b) => (a.dropoffAt || a.startDate || '').localeCompare(b.dropoffAt || b.startDate || ''));
-
-    const grid = qs('[data-expected-grid]', page);
-    grid.innerHTML = expected.length === 0
-      ? `<p class="col-span-full text-center text-dim py-6">${t('checkins.noneExpected')}</p>`
-      : expected.map(expectedRow).join('');
-    qs('[data-expected-count]', page).textContent = `(${expected.length})`;
+  function rerender() {
+    renderTabs();
+    renderWindowBar();
+    renderBody();
   }
 
-  function renderPending() {
-    const grid = qs('[data-pending-grid]', page);
-    grid.innerHTML = pendingOrders.length === 0
-      ? `<p class="col-span-full text-center text-dim py-6">${t('checkins.nonePending')}</p>`
-      : pendingOrders.map(pendingOrderRow).join('');
-    qs('[data-pending-count]', page).textContent = `(${pendingOrders.length})`;
-  }
+  // ── Subscriptions ──
+  // Subscribe once to all bookings; filter per tab in memory. The
+  // collection is small at our scale (thousands of rows tops).
+  unsub = subscribeCollection('bookings', (rows) => {
+    bookings = rows;
+    rerender();
+  });
 
-  // ── Subscriptions ───────────────────────────────────────────────────
-  const unsubs = [];
+  // Tear down subscription on navigation away.
+  window.addEventListener('popstate', () => { if (unsub) unsub(); });
 
-  // bookings: status in [upcoming, active]. Firestore doesn't allow
-  // 'in' with 2 values cheaply for live subscriptions in our wrapper,
-  // so subscribe broadly and filter client-side. Volume is tiny.
-  unsubs.push(subscribeCollection('bookings', (rows) => {
-    bookings = rows.filter((b) => b.status === 'upcoming' || b.status === 'active');
-    renderActive();
-    renderExpected();
-  }));
+  setUrl();
+  rerender();
 
-  unsubs.push(subscribeCollection('activeCheckIns', (rows) => {
-    activeCheckIns = rows;
-    renderActive();
-  }));
+  // ── Tab switcher ──
+  delegate(page, 'click', '[data-tab]', (_e, btn) => {
+    activeTab = btn.dataset.tab;
+    setUrl();
+    rerender();
+  });
 
-  unsubs.push(subscribeCollection('pendingOrders', (rows) => {
-    pendingOrders = rows.filter(
-      (o) => o.paymentMethod === 'pay-at-pickup' && o.paymentStatus !== 'paid' && o.status !== 'paid'
-    );
-    renderPending();
-  }, where('paymentMethod', '==', 'pay-at-pickup')));
+  // ── Window selector ──
+  // Picking a preset pill (Today/Week/Month) clears any custom range.
+  // The flatpickr range input has its own onClose handler that flips
+  // activeWindow back to a tuple.
+  delegate(page, 'click', '[data-window]', (_e, btn) => {
+    activeWindow = btn.dataset.window;
+    setUrl();
+    rerender();
+  });
 
-  // Empty paint while data loads.
-  renderActive();
-  renderExpected();
-  renderPending();
+  // ── Overdue accordion ──
+  delegate(page, 'click', '[data-overdue-toggle]', (_e, btn) => {
+    const wrap = btn.closest('[data-overdue-row]');
+    const body = wrap.querySelector('[data-overdue-body]');
+    const chev = btn.querySelector('[data-overdue-chevron]');
+    body.classList.toggle('hidden');
+    chev?.classList.toggle('rotate-180');
+  });
 
-  // ── Action handlers ─────────────────────────────────────────────────
-  delegate(page, 'click', '[data-action]', async (e, target) => {
-    const action = target.dataset.action;
-    const row = target.closest('[data-row]');
-    if (action === 'walkin') return openWalkInDialog();
-    if (action === 'grant') return openGrantDialog();
-    if (!row) return;
+  // ── Walk-in CTA ──
+  delegate(page, 'click', '[data-walkin]', () => {
+    openCreateTransactionModal(users, (result) => {
+      const checkedIn = !!result?.checkedIn;
+      if (checkedIn) {
+        activeTab = 'checkout';
+        setUrl();
+      }
+      // Subscription will refresh the list within seconds; force one
+      // pass of rerender so the UI is responsive immediately.
+      rerender();
+    });
+  });
 
-    const kind = row.dataset.kind;
-    const key = row.dataset.key;
-    const plate = row.dataset.plate;
+  // ── Row actions ──
+  delegate(page, 'click', '[data-action]', async (_e, btn) => {
+    const action = btn.dataset.action;
+    const bookingId = btn.dataset.booking;
+    if (!bookingId) return;
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (!booking) return;
+    btn.disabled = true;
 
-    target.disabled = true;
     try {
       if (action === 'checkin') {
-        // Long-term booking check-in. No spot assignment yet (left manual
-        // via /admin/capacity); the row flips to "active" in real time.
-        await checkInBooking(key, null);
+        await checkInBooking(bookingId);
         showToast(t('checkins.toastCheckedIn'), 'success');
       } else if (action === 'checkout') {
-        if (kind === 'booking') {
-          await checkOutBooking(key);
-        } else if (kind === 'activeCheckIn') {
-          await creditCheckOut(plate);
-        }
+        await checkOutBooking(bookingId);
         showToast(t('checkins.toastCheckedOut'), 'success');
-      } else if (action === 'markpaid') {
-        const orderId = target.dataset.orderId;
+      } else if (action === 'collect') {
+        const orderId = btn.dataset.order || booking.paymentId;
         if (!orderId) {
           showToast(t('checkins.errorNoOrderId'), 'error');
           return;
         }
-        await openMarkPaidDialog(orderId);
+        await openCollectPaymentDialog({ orderId, booking });
+      } else if (action === 'cancel') {
+        const code = btn.dataset.code || bookingId.slice(0, 5);
+        const ok = await confirmModal(t('checkins.cancelConfirm', { code }), {
+          danger: true, confirmText: t('checkins.actionCancelReservation'),
+        });
+        if (!ok) return;
+        await cancelBookingFn({ bookingId });
+        showToast(t('checkins.toastCancelled'), 'success');
+      } else if (action === 'overstay') {
+        showToast(t('checkins.overstayPlaceholder'), 'info');
       }
     } catch (err) {
-      console.error('Check-in dashboard action failed:', err);
+      console.error(action, err);
       showToast(err?.message || t('common.error'), 'error');
     } finally {
-      target.disabled = false;
+      btn.disabled = false;
     }
   });
 
-  // ── Dialogs ─────────────────────────────────────────────────────────
-  function openMarkPaidDialog(orderId) {
-    return new Promise((resolve) => {
-      const body = html`<div class="space-y-4">
-        <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.markPaid')}</h3>
-        <p class="text-[14px] text-charcoal/80">${t('checkins.markPaidPrompt')}</p>
-        <div class="grid grid-cols-2 gap-2">
-          <button data-pay="cash" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[14px] py-3 rounded-xl transition-colors">${t('checkins.payCash')}</button>
-          <button data-pay="card" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-3 rounded-xl transition-colors">${t('checkins.payCard')}</button>
+  // ── Search filter ──
+  // Live filter across plate / customer name / email / booking code.
+  // Debounce keeps re-renders snappy on long lists.
+  const searchInput = page.querySelector('[data-search]');
+  const searchClearBtn = page.querySelector('[data-search-clear]');
+  let searchTimer = null;
+  searchInput?.addEventListener('input', (e) => {
+    const v = String(e.target.value || '').trim().toLowerCase();
+    searchQuery = v;
+    searchClearBtn?.classList.toggle('hidden', !v);
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { setUrl(); rerender(); }, 120);
+  });
+  searchClearBtn?.addEventListener('click', () => {
+    searchInput.value = '';
+    searchQuery = '';
+    searchClearBtn.classList.add('hidden');
+    setUrl();
+    rerender();
+  });
+}
+
+// ── Collect payment dialog ──────────────────────────────────────────────
+function openCollectPaymentDialog({ orderId, booking }) {
+  return new Promise((resolve) => {
+    const initialBilling = booking?.billing || {};
+    const form = html`<form class="space-y-3" data-collect-form>
+      <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.collectTitle')}</h3>
+      <p class="text-[13px] text-charcoal/70">${t('checkins.collectHint', { plate: booking?.licensePlate || '—', amount: Number(booking?.totalPrice || 0) })}</p>
+
+      <div class="grid sm:grid-cols-2 gap-2">
+        <input name="firstName" type="text" placeholder="${escapeHtml(t('billing.firstName'))} *" value="${escapeHtml(initialBilling.firstName || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
+        <input name="lastName" type="text" placeholder="${escapeHtml(t('billing.lastName'))} *" value="${escapeHtml(initialBilling.lastName || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
+      </div>
+      <input name="locality" type="text" placeholder="${escapeHtml(t('billing.locality'))} *" value="${escapeHtml(initialBilling.locality || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
+      <input name="address" type="text" placeholder="${escapeHtml(t('billing.personalAddress'))} *" value="${escapeHtml(initialBilling.address || initialBilling.personalAddress || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
+
+      <div>
+        <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('checkins.paidBy')}</label>
+        <div class="grid grid-cols-2 gap-2" data-paidby>
+          <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-mango bg-mango/5 cursor-pointer">
+            <input type="radio" name="paidBy" value="cash" checked class="accent-mango">
+            <span class="text-[14px] font-medium">${t('checkins.payCash')}</span>
+          </label>
+          <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-frost-deep cursor-pointer">
+            <input type="radio" name="paidBy" value="card" class="accent-mango">
+            <span class="text-[14px] font-medium">${t('checkins.payCard')}</span>
+          </label>
         </div>
-      </div>`;
-      const modal = openModal(body, { onClose: () => resolve() });
-      body.querySelectorAll('[data-pay]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const paidBy = btn.dataset.pay;
-          btn.disabled = true;
-          btn.textContent = t('common.loading');
-          try {
-            await adminMarkOrderPaidFn({ orderId, paidBy });
-            showToast(t('checkins.toastMarkedPaid'), 'success');
-            modal.close();
-            resolve();
-          } catch (err) {
-            console.error(err);
-            showToast(err?.message || t('common.error'), 'error');
-            btn.disabled = false;
-            btn.textContent = paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard');
-          }
-        });
+      </div>
+
+      <button type="submit" class="w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('checkins.confirmPayment')}</button>
+    </form>`;
+    const modal = openModal(form, { onClose: () => resolve() });
+
+    form.querySelector('[data-paidby]').addEventListener('change', (e) => {
+      if (!e.target.matches('input[name="paidBy"]')) return;
+      form.querySelectorAll('[data-paidby] label').forEach((lbl) => {
+        const inp = lbl.querySelector('input');
+        lbl.classList.toggle('border-mango', inp.checked);
+        lbl.classList.toggle('bg-mango/5', inp.checked);
+        lbl.classList.toggle('border-frost-deep', !inp.checked);
       });
     });
-  }
 
-  function openGrantDialog() {
-    const form = html`<form class="space-y-3" data-grant-form>
-      <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.grantTitle')}</h3>
-      <div>
-        <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldPlate')} *</label>
-        <input name="plate" required placeholder="B 123 ABC" autocomplete="off" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] uppercase font-mono focus:outline-none focus:border-blueberry">
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldQty')} *</label>
-          <input name="quantity" type="number" min="1" max="100" required value="1" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] font-mono focus:outline-none focus:border-blueberry">
-        </div>
-        <div>
-          <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldPaidBy')}</label>
-          <select name="paidBy" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-            <option value="cash">${t('checkins.payCash')}</option>
-            <option value="card">${t('checkins.payCard')}</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldPayerEmail')}</label>
-        <input name="payerEmail" type="email" placeholder="optional" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-      </div>
-      <div>
-        <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldPayerName')}</label>
-        <input name="payerName" placeholder="optional" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-      </div>
-      <button type="submit" class="w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-3 rounded-xl transition-colors mt-2">${t('checkins.grantSubmit')}</button>
-    </form>`;
-    const modal = openModal(form);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const fd = new FormData(form);
-      const plate = fd.get('plate').toUpperCase().trim();
-      if (!isValidLicensePlate(plate)) {
-        showToast(t('checkins.errorInvalidPlate'), 'error');
+      const firstName = form.firstName.value.trim();
+      const lastName = form.lastName.value.trim();
+      const locality = form.locality.value.trim();
+      const address = form.address.value.trim();
+      const paidBy = form.querySelector('input[name="paidBy"]:checked')?.value || 'cash';
+      if (!firstName || !lastName || !locality || !address) {
+        showToast(t('common.error'), 'error');
         return;
       }
-      const btn = form.querySelector('[type="submit"]');
-      btn.disabled = true;
-      btn.textContent = t('common.loading');
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = t('common.loading');
       try {
-        await grantCreditsForCashFn({
-          plate,
-          quantity: Number(fd.get('quantity')),
-          paidBy: fd.get('paidBy'),
-          payerEmail: fd.get('payerEmail') || '',
-          payerName: fd.get('payerName') || '',
+        await adminMarkOrderPaidFn({
+          orderId,
+          paidBy,
+          payerDetails: { firstName, lastName, locality, address },
         });
-        showToast(t('checkins.toastGranted'), 'success');
+        showToast(t('checkins.toastMarkedPaid'), 'success');
         modal.close();
+        resolve();
       } catch (err) {
-        console.error(err);
+        console.error('markPaid', err);
         showToast(err?.message || t('common.error'), 'error');
-        btn.disabled = false;
-        btn.textContent = t('checkins.grantSubmit');
+        submitBtn.disabled = false;
+        submitBtn.textContent = t('checkins.confirmPayment');
       }
     });
-  }
-
-  function openWalkInDialog() {
-    const form = html`<form class="space-y-3" data-walkin-form>
-      <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.walkInTitle')}</h3>
-      <p class="text-[13px] text-charcoal/70">${t('checkins.walkInHint')}</p>
-      <div>
-        <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldPlate')} *</label>
-        <input name="plate" required placeholder="B 123 ABC" autocomplete="off" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] uppercase font-mono focus:outline-none focus:border-blueberry">
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldQty')}</label>
-          <input name="quantity" type="number" min="1" max="100" value="1" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] font-mono focus:outline-none focus:border-blueberry">
-        </div>
-        <div>
-          <label class="block text-[13px] font-medium text-charcoal/70 mb-1">${t('checkins.fieldPaidBy')}</label>
-          <select name="paidBy" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-            <option value="cash">${t('checkins.payCash')}</option>
-            <option value="card">${t('checkins.payCard')}</option>
-          </select>
-        </div>
-      </div>
-      <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] py-3 rounded-xl transition-colors mt-2">${t('checkins.walkInSubmit')}</button>
-    </form>`;
-    const modal = openModal(form);
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const fd = new FormData(form);
-      const plate = fd.get('plate').toUpperCase().trim();
-      const quantity = Number(fd.get('quantity'));
-      if (!isValidLicensePlate(plate)) {
-        showToast(t('checkins.errorInvalidPlate'), 'error');
-        return;
-      }
-      const btn = form.querySelector('[type="submit"]');
-      btn.disabled = true;
-      btn.textContent = t('common.loading');
-      try {
-        // Step 1 — grant the credits (creates/updates tokenBalances/plate_X)
-        const result = await grantCreditsForCashFn({
-          plate,
-          quantity,
-          paidBy: fd.get('paidBy'),
-        });
-        const balanceDocId = result?.data?.balanceDocId;
-        if (!balanceDocId) throw new Error('Grant succeeded but no balance ID returned');
-        // Step 2 — use a token + create activeCheckIns/{plate}
-        await useToken(balanceDocId, plate);
-        showToast(t('checkins.toastWalkInDone'), 'success');
-        modal.close();
-      } catch (err) {
-        console.error(err);
-        showToast(err?.message || t('common.error'), 'error');
-        btn.disabled = false;
-        btn.textContent = t('checkins.walkInSubmit');
-      }
-    });
-  }
-
-  // ── Cleanup ─────────────────────────────────────────────────────────
-  return () => {
-    unsubs.forEach((u) => { try { u(); } catch { /* noop */ } });
-  };
+  });
 }

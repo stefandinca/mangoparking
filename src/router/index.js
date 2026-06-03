@@ -2,6 +2,7 @@ import { routes } from './routes.js';
 import { checkGuards } from './guards.js';
 import { detectLocale, setLocale, stripLocale, getLocale } from '../i18n/index.js';
 import { qs } from '../utils/dom.js';
+import { authReady } from '../firebase/auth.js';
 
 let currentCleanup = null;
 let currentPath = '';
@@ -9,7 +10,7 @@ let currentPath = '';
 /**
  * Initialize router
  */
-export function initRouter() {
+export async function initRouter() {
   // Handle browser back/forward
   window.addEventListener('popstate', () => {
     handleRoute(window.location.pathname);
@@ -22,16 +23,38 @@ export function initRouter() {
     const href = link.getAttribute('href');
     // Skip external links, hash links, and special links
     if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+    // Honor target="_blank" / target="_new" — letting the browser do its
+    // thing means legal-page links in the booking flow open in a new tab
+    // instead of replacing the in-progress booking page.
+    if (link.target && link.target !== '_self') return;
+    // Honor modifier-key new-tab gestures (ctrl/cmd-click, middle-click).
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
     e.preventDefault();
     navigate(href);
   });
 
-  // Handle redirect param (from 404.html)
+  // Block the initial dispatch until Firebase Auth has rehydrated the
+  // persisted session — otherwise guards see currentUser=null on hard
+  // refresh and bounce the user to /login. Subsequent in-app navigations
+  // skip this wait (the promise is already resolved).
+  const app = qs('#app');
+  if (app) {
+    app.innerHTML = '<div class="min-h-screen flex items-center justify-center"><div class="animate-pulse text-dim">Loading...</div></div>';
+  }
+  try {
+    await authReady;
+  } catch (_) { /* fall through — guards will run with whatever state we have */ }
+
+  // Handle redirect param (from 404.html). Reject protocol-relative or
+  // absolute external targets to close an open-redirect surface.
   const params = new URLSearchParams(window.location.search);
   const redirect = params.get('redirect');
-  if (redirect) {
-    window.history.replaceState(null, '', redirect);
-    handleRoute(redirect);
+  const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//')
+    ? redirect
+    : null;
+  if (safeRedirect) {
+    window.history.replaceState(null, '', safeRedirect);
+    handleRoute(safeRedirect);
   } else {
     handleRoute(window.location.pathname);
   }

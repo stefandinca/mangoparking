@@ -1,4 +1,20 @@
 /**
+ * Escape user-controlled strings before interpolating into innerHTML.
+ * Use this for any field that originates from another user (display name,
+ * email, customer name on a pendingOrder, etc.). Admin pages render these
+ * to other admins' browsers — without escaping, a customer who set their
+ * displayName to `<img onerror=…>` would execute script in the admin UI.
+ */
+export function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Create DOM element(s) from an HTML string.
  * Returns a single element or a DocumentFragment.
  */

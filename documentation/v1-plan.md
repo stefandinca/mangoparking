@@ -8,14 +8,78 @@ The work in `documentation/changes 10-05.md` falls into ~8 logical phases. They 
 
 ## Locked Decisions
 
-- **Email layer:** Brevo SMTP behind the official Firebase Trigger Email Firestore extension. Auth emails (password reset, email verification, admin invite) bypass Firebase Auth's built-in delivery — Cloud Functions use the Admin SDK to *generate* the action link, then send a fully branded Brevo template. One design system for every email.
+- **Email layer:** ~~Brevo SMTP behind the official Firebase Trigger Email Firestore extension.~~ **Revised mid-implementation to direct Brevo Transactional Email REST API** (`api.brevo.com/v3/smtp/email`) — the Trigger Email extension is SMTP-only and doesn't understand Brevo template IDs, which we need for the design-system approach. Auth emails (password reset, email verification, admin invite) bypass Firebase Auth's built-in delivery — Cloud Functions use the Admin SDK to *generate* the action link, then send a fully branded Brevo template. One design system for every email.
 - **Date/time picker:** theme the existing `flatpickr` dep (already in `package.json`); wrap in a thin component, apply mango/blueberry CSS, force 24h time, `clickOpens: true` so clicking anywhere on the field opens it.
 - **Reservation numbers:** per-type prefix — `LT-XXXXX` (long-term), `CR-XXXXX` (credit/commuter). 5-char alphanumeric, ambiguous chars excluded (no `I O 0 1`). Generated client-side, collision-checked.
 - **Online discount:** reuse existing `settings/global.onlineDiscountPercent` (already editable at `/admin/rates` via `src/services/discountService.js`). Pay-at-pickup orders pay the full rate; online-paid orders get the discount. No new setting.
 
 ---
 
-## Phase A — Foundations (~1.5 days)
+## Progress Snapshot — 2026-05-12 (afternoon update)
+
+All v1 code is now in place. Outstanding items are configuration / smoke-tests only:
+- Finish populating Brevo template IDs in `functions/src/emailTemplates.js` (18 still `null`).
+- After deploy, paste the new `repayOrder` Cloud Run URL into `.env.local` as `VITE_REPAY_ORDER_URL` (the default-guess in `constants.js` will work if the project hash matches).
+- Confirm scheduled jobs registered on first `firebase deploy --only functions` (Gen 2 Cloud Scheduler auto-provisions).
+- Rebuild + redeploy `dist/` to Plesk so `/pay`, `/auth/finish-signup`, `/admin/users` resolve.
+
+---
+
+## Progress Snapshot — 2026-05-12 (morning)
+
+Legend: ✅ done · 🟡 partial · ⏳ not started
+
+| Phase | Status | Notes |
+|---|---|---|
+| A1 — Brevo + email layer | 🟡 | Pivoted from Trigger Email extension to direct Brevo REST API (`functions/src/brevo.js`). `BREVO_API_KEY` secret set. Domain auth (SPF/DKIM/DMARC) on `mangoparking.ro` complete. **User is filling in remaining 18 template IDs in `functions/src/emailTemplates.js`** — `booking-longterm-confirm-ro=2` and `credit-purchase-ro=3` already set. |
+| A2 — Copy rename | ✅ | i18n keys updated in `ro.js`/`en.js`. |
+| A3 — WhatsApp FAB | ✅ | `src/components/core/WhatsAppFab.js`, mounted from `main.js`, hidden on `/admin/*` via `app-rendered` listener. |
+| B1 — Reservation-code generator | ✅ | `src/utils/bookingCode.js`; wired into longTermService + Cloud Functions inline copy. |
+| B2 — Payment method/status fields | ✅ | Added to `bookings` + `pendingOrders`. `firestore.rules` whitelist on `pendingOrders` deployed. |
+| B3 — Expanded BillingFields (PF + PJ) | ✅ | idType radio (CNP/CI/Passport), validators added to `src/utils/validators.js`, i18n keys done. |
+| B4 — CUI lookup | ✅ | Client wired with 600ms debounce → `services/cuiService.lookupCui()`. Server callable now lives in `functions/src/cui.js` with a 24h `lookupCache/cui_{n}` Firestore cache. |
+| C — Date/time picker | ✅ | `FormDateTime` + themed `flatpickr-theme.css`; replaced inputs in BookingLongTerm. |
+| D — Pay-at-pickup | ✅ | Client radios + server branch + admin "Mark paid" callable + `BookingReturn.renderPickup`. Self-service repay live at `/pay?orderId=…` → `repayOrder` HTTP function (`functions/src/index.js`). IPN now patches an existing `bookingId` instead of creating a duplicate. Confirmation email "pay now" link updated. |
+| E1 — signup-welcome | ✅ | `onUserCreated` trigger deployed. Idempotency via `users/{uid}.welcomeEmailSentAt` claim. |
+| E2 — booking-longterm-confirm | ✅ | `onBookingCreated` trigger. Recent fix: `createBookingFromOrder` now branches on `paymentMethod` for atomic write, so the `{% if params.paid == false %}` block renders correctly for pay-at-pickup. |
+| E3 — credit-purchase | ✅ | `onTokenTransactionCreated` filtered to `type === 'purchase'`. |
+| E4 — credit-used | ✅ | Same trigger, filtered to `type === 'use'`. |
+| E5 — low-credit-warning | ✅ | Same trigger; fires only when prev balance > 2 && new ≤ 2. |
+| E6 — password-reset | ✅ | `requestPasswordReset` callable + inline "Forgot password?" form on `Login.js`. |
+| E7 — admin-invite | ✅ | `adminSendInvite` callable mints `signInWithEmailLink`, stashes role in `pendingInvites/{email}`, sends Brevo `admin-invite-{locale}` template. Recipient lands on `/auth/finish-signup` (`FinishSignup.js`) which completes auth, calls `finishInviteSignup`, and prompts for a password via `updatePassword`. |
+| E8/E9/E10 — scheduled reminders | ✅ (code) | Live in `functions/src/scheduled.js`. Will be silent until the matching Brevo template IDs are set. |
+| F — Scheduled functions | ✅ | `daily24hReminders` (10:00 Bucharest, fires E8+E9), `commuter7PMCheck` (19:00, fires E10), `expireStaleHolds` (02:00, flips stale pay-at-pickup orders to `expired`). Idempotent via `reminderCheckinSentAt` / `reminderCheckoutSentAt` / `reminderCommuterSentAt` markers. |
+| G — Admin auth tools | ✅ | `/admin/users` page (`AdminUsers.js`) with Create + Invite modals; `adminCreateUser`, `adminSendInvite`, `finishInviteSignup` callables; `pendingInvites` collection w/ rule "admin-SDK only"; nav entry in `AdminLayout`; forgot-password link wired on `Login.js`; `grantCreditsForCash` already shipped with Phase H. |
+| H — Check-in dashboard | ✅ | `src/pages/admin/AdminCheckIns.js` at `/admin/checkins`, three sections live (Currently parked / Expected today / Pending payment), walk-in + mark-paid + grant-credits dialogs wired. |
+
+**Infra bumps along the way:**
+- Functions runtime → Node 22; `firebase-functions` → ^7.2.5.
+- v2 Firestore triggers explicitly pinned to `region: 'europe-west1'` (the global setting doesn't carry into individual trigger options).
+
+**Uncommitted work as of this snapshot:**
+- `functions/src/brevo.js` (new)
+- `functions/src/emails.js` (new — 3 triggers covering E1–E5)
+- `functions/src/emailTemplates.js` (active — user is editing IDs)
+- `functions/src/index.js` recent edits: `requestPasswordReset`, `adminMarkOrderPaid`, `grantCreditsForCash`, `assertStaff`, `createBookingFromOrder` pay-method fix, idempotency claims, logging
+- `documentation/v1-plan.md` (this update)
+
+**Resuming next session:**
+1. User finishes pasting Brevo template IDs into `functions/src/emailTemplates.js` (locations: 18 remaining `null` entries — most importantly `admin-invite-ro/en`, `password-reset-en`, the four reminder templates).
+2. `firebase deploy --only firestore:rules,functions` to publish: new `pendingInvites` + `lookupCache` rules, new callables (`adminCreateUser`, `adminSendInvite`, `finishInviteSignup`, `lookupCui`), `repayOrder` HTTP function, and the three scheduled jobs.
+3. Capture the new Cloud Run URL for `repayOrder` from the deploy output and set `VITE_REPAY_ORDER_URL` in `.env.local` (or accept the default-guess in `constants.js`).
+4. `npm run build:vite` and upload `dist/` to Plesk so the new client routes resolve.
+5. Smoke-test:
+   - Forgot-password link on `/login`
+   - Admin invites a fake email; finish-signup completes the round trip
+   - Pay-at-pickup booking → click "pay online" link in confirmation email → repay flow → IPN flips booking to paid (no duplicate)
+   - Trigger each scheduled function manually from Firebase Console to confirm regions/permissions
+   - BillingFields PJ: enter `14186770` → ANAF autofill fires
+
+The brand-new functions code + the createBookingFromOrder fix should land in a `feat(email): brevo wrapper + Phase E triggers (E1–E6) + atomic pay-method write` commit before resuming.
+
+---
+
+## Phase A — Foundations (~1.5 days) 🟡
 
 ### A1. Brevo + Trigger Email extension
 
@@ -42,7 +106,7 @@ Touchpoints (all in i18n locales — never edit page strings directly):
 
 ---
 
-## Phase B — Booking Data Model Evolution (~1 day)
+## Phase B — Booking Data Model Evolution (~1 day) 🟡 (B4 server pending)
 
 ### B1. Reservation-code generator
 
@@ -110,7 +174,7 @@ Touch `src/components/widgets/BillingFields.js`. New schema returned by the form
 
 ---
 
-## Phase C — Custom Date/Time Picker (~1 day)
+## Phase C — Custom Date/Time Picker (~1 day) ✅
 
 ### C1. FormDateTime component
 
@@ -140,7 +204,7 @@ Touch `src/components/widgets/BillingFields.js`. New schema returned by the form
 
 ---
 
-## Phase D — Pay-at-Pickup (~1 day)
+## Phase D — Pay-at-Pickup (~1 day) ✅ (`/pay/{orderId}` repay route still a stub)
 
 ### D1. Client option
 
@@ -183,7 +247,11 @@ Touch `src/components/widgets/BillingFields.js`. New schema returned by the form
 
 ---
 
-## Phase E — Email Triggers (~1.5 days)
+## Phase E — Email Triggers (~1.5 days) 🟡 (E1–E6 deployed; E7 with Phase G; E8–E10 with Phase F; awaiting full Brevo template IDs)
+
+**Implementation note:** Triggers do NOT write to a `mail` collection — they call `sendBrevoEmail()` directly via the Brevo REST API. The original `mail`-collection design was for the Trigger Email extension, which we abandoned.
+
+
 
 Every email is a Firestore-trigger Cloud Function in `functions/src/emails.js` (new file) that writes to the `mail` collection (Trigger Email extension picks it up). Templates by ID in `functions/src/emailTemplates.js`.
 
@@ -208,7 +276,7 @@ Implementation notes:
 
 ---
 
-## Phase F — Scheduled Functions (~0.5 day)
+## Phase F — Scheduled Functions (~0.5 day) ⏳
 
 `functions/src/scheduled.js` (new file). Gen 2 `onSchedule` imports — see `firebase-functions/v2/scheduler`. All in `europe-west1` matching existing `setGlobalOptions`.
 
@@ -220,7 +288,7 @@ No new infra config required — Gen 2 Cloud Scheduler is auto-provisioned by Fi
 
 ---
 
-## Phase G — Admin Auth Tools (~1 day)
+## Phase G — Admin Auth Tools (~1 day) ⏳ (G4 `grantCreditsForCash` callable already exists via Phase H wiring)
 
 ### G1. AdminCreateUser page
 
@@ -279,7 +347,7 @@ export const adminSendInvite = onCall({ ... }, async (request) => {
 
 ---
 
-## Phase H — Unified Admin Check-In Dashboard (~1.5 days)
+## Phase H — Unified Admin Check-In Dashboard (~1.5 days) ✅
 
 ### H1. Route + scaffolding
 

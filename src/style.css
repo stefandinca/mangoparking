@@ -147,3 +147,93 @@ body {
 
 /* Flatpickr theming lives in src/styles/flatpickr-theme.css, imported by
  * the FormDateTime component so it's only loaded on pages that need it. */
+
+/* ===== Rich text (admin/promotions Quill output) =====
+ * The promo body is authored in Quill and stored as HTML, rendered on the
+ * public /promotions page inside `.richtext`. The project has no Tailwind
+ * Typography plugin, so the bare tags Quill emits (h1/h2/h3, p, ul/ol, a,
+ * blockquote) need explicit styling. The `ql-align-*` / `ql-indent-*`
+ * classes and inline colour styles come straight from the editor. */
+.richtext > :first-child { margin-top: 0; }
+.richtext h1 {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.875rem;
+  line-height: 1.2;
+  color: var(--color-blueberry-deep);
+  margin: 2rem 0 0.75rem;
+}
+.richtext h2 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  color: var(--color-blueberry-deep);
+  margin: 1.75rem 0 0.5rem;
+}
+.richtext h3 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--color-blueberry-deep);
+  margin: 1.5rem 0 0.5rem;
+}
+.richtext p { margin: 0.85rem 0; line-height: 1.7; }
+/* Lists.
+ *  - Legacy markdown lists use native markers (list-disc / list-decimal).
+ *  - Quill emits every list as <ol> with per-item data-list="bullet|ordered"
+ *    (one list can mix both), so we draw those markers with a counter:
+ *    ordered items increment, bullets don't, keeping numbering continuous
+ *    across interspersed bullets — exactly how the editor displays it. */
+.richtext ul { list-style: disc; padding-left: 1.8rem; margin: 0.85rem 0; }
+.richtext ol { list-style: decimal; padding-left: 1.8rem; margin: 0.85rem 0; counter-reset: ql-num; }
+.richtext li { margin: 0.25rem 0; }
+.richtext li[data-list] { list-style: none; position: relative; }
+.richtext li[data-list]::before {
+  position: absolute;
+  left: -1.6em;
+  width: 1.4em;
+  text-align: right;
+}
+.richtext li[data-list="bullet"]::before { content: "\2022"; }
+.richtext li[data-list="ordered"] { counter-increment: ql-num; }
+.richtext li[data-list="ordered"]::before { content: counter(ql-num) "."; }
+.richtext a {
+  color: var(--color-blueberry);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.richtext a:hover { color: var(--color-blueberry-hover); }
+.richtext strong { font-weight: 700; }
+.richtext em { font-style: italic; }
+.richtext blockquote {
+  border-left: 4px solid var(--color-mango);
+  padding: 0.25rem 0 0.25rem 1rem;
+  margin: 1rem 0;
+  color: var(--color-dim);
+}
+/* Quill alignment + indentation classes (the editor emits these). Indent
+ * uses margin-left so a list item's marker shifts along with the item. */
+.richtext .ql-align-center { text-align: center; }
+.richtext .ql-align-right { text-align: right; }
+.richtext .ql-align-justify { text-align: justify; }
+.richtext .ql-indent-1 { margin-left: 3em; }
+.richtext .ql-indent-2 { margin-left: 6em; }
+.richtext .ql-indent-3 { margin-left: 9em; }
+.richtext .ql-indent-4 { margin-left: 12em; }
+
+/* ===== Cashbook printable report =====
+ * When the agent clicks "Print" on a cashbook report, hide everything
+ * except the report content so we get a clean one-page printout. The
+ * report element carries `data-cashbook-report`. */
+@media print {
+  body * { visibility: hidden !important; }
+  [data-cashbook-report], [data-cashbook-report] * { visibility: visible !important; }
+  [data-cashbook-report] {
+    position: absolute !important;
+    left: 0; top: 0;
+    width: 100%;
+    padding: 24px;
+    background: #ffffff !important;
+  }
+}

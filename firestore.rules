@@ -6,11 +6,21 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
-    function isAdmin() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
+    function isAdmin() {
+      return isAuthenticated() && userRole() == 'admin';
+    }
+    // Agent role (renamed from 'staff'). Both names are accepted for
+    // back-compat — legacy docs still carry role: 'staff'.
+    function isAgent() {
+      return isAuthenticated() && userRole() in ['admin', 'agent', 'staff'];
+    }
+    // Any backoffice user: admin, agent (or legacy staff), driver. Use for
+    // check-in/check-out operations that the shuttle driver also performs.
     function isStaff() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'staff'];
+      return isAuthenticated() && userRole() in ['admin', 'agent', 'staff', 'driver'];
     }
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
@@ -40,6 +50,45 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Seasonal pricing periods — public read so the booking page can apply
+    // them client-side. Admin-only writes; the overlap check is enforced
+    // in the admin UI (server-side price recomputation is a separate
+    // hygiene task — see v.1.4 plan for the Netopia v2 migration where
+    // we'll re-derive totals from authoritative rates).
+    match /seasonalPricing/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Promo vouchers:
+    //   • public vouchers are anonymously readable (Promotions page lists them)
+    //   • admins read everything (management UI)
+    //   • private vouchers are restricted to their assigned uids
+    // Admin-only writes for all of the above. Public branch first so it
+    // resolves without ever touching auth — list queries from anonymous
+    // users with where('visibility', '==', 'public') pass without
+    // evaluating the authed branches.
+    match /promoVouchers/{id} {
+      allow read: if resource.data.visibility == 'public'
+                  || isAdmin()
+                  || (isAuthenticated() && request.auth.uid in resource.data.assignedUserIds);
+      allow write: if isAdmin();
+    }
+
+    // Site content — admin-editable page bodies (currently just the
+    // Promotions page; structured so we can add more keyed entries).
+    match /siteContent/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Voucher redemption ledger — server-written only. Read by admin for
+    // audit + by the owning user to see their own redemption history.
+    match /voucherRedemptions/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
     // Token balances - owner/guest read+write, staff full access
     match /tokenBalances/{docId} {
       allow read: if isStaff() || (isAuthenticated() && docId == request.auth.uid) || docId.matches('plate_.*');
@@ -49,9 +98,13 @@ service cloud.firestore {
     }
 
     // Token transactions - append-only log
+    // Clients may not write `use` entries — those originate from
+    // admin/staff actions via the tokenService and bypass rules through
+    // the admin SDK on the server side; allowing clients to seed them
+    // would spam the `credit-used` email trigger.
     match /tokenTransactions/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
-      allow create: if true;
+      allow create: if request.resource.data.type != 'use';
       allow update, delete: if false;
     }
 
@@ -78,17 +131,14 @@ service cloud.firestore {
     }
 
     // Pending orders - public read by orderId (for /booking/return polling).
-    // The Netopia callback (admin SDK) is the canonical writer for the
-    // initial create + Netopia confirmation. Staff may flip a small
-    // whitelist of fields when marking a pay-at-pickup order paid at the
-    // lot; the admin SDK still owns money-bearing state via callable
-    // functions. Customers and unauthenticated clients still cannot write.
+    // All writes go through Cloud Functions (admin SDK) — there is no
+    // legitimate path for a client (even staff) to flip money-bearing
+    // fields directly. The adminMarkOrderPaid / adminMarkOrderUnpaid
+    // callables exist precisely to perform the side-effects (credit grant,
+    // booking patch, audit log) that a raw rule write would skip.
     match /pendingOrders/{id} {
       allow read: if true;
-      allow create, delete: if false;
-      allow update: if isStaff()
-                    && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['paymentStatus', 'paidAt', 'paidBy', 'status']);
+      allow create, update, delete: if false;
     }
 
     // Bookings - customer reads own, staff reads all
@@ -148,10 +198,53 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Reviews - public read
+    // Reviews - public read, staff/admin write. (Route guard already lets
+    // staff reach /admin/reviews, so requiring admin here was a mismatch
+    // that surfaced as "Missing or insufficient permissions" on create.)
     match /reviews/{id} {
       allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // Pending invites - admin SDK only (adminSendInvite / finishInviteSignup)
+    match /pendingInvites/{email} {
+      allow read, write: if false;
+    }
+
+    // ANAF CUI lookup cache - admin SDK only (lookupCui callable)
+    match /lookupCache/{key} {
+      allow read, write: if false;
+    }
+
+    // Legal pages — public read so the customer-facing /terms, /privacy,
+    // etc. routes can render admin-edited content. Writes are admin-only.
+    match /legalPages/{slug} {
+      allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Cash handovers — agent/admin read for the cashbook page (drivers
+    // intentionally excluded since they don't handle money). Writes go
+    // through the recordCashHandover callable (admin SDK), so the rule
+    // here blocks all client writes.
+    match /cashHandovers/{id} {
+      allow read: if isAgent();
+      allow create, update, delete: if false;
+    }
+
+    // Cash entries — per-payment ledger powering /admin/cashbook. Agents
+    // read their own; admins read everyone's. All writes are server-side
+    // (recordCashEntry helper, closeCashbook callable).
+    match /cashEntries/{id} {
+      allow read: if isAdmin() || (isAgent() && resource.data.agentUid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    // Closed cashbook reports — same access model: agents see their own,
+    // admins see all. Reports are immutable once generated.
+    match /cashbookReports/{id} {
+      allow read: if isAdmin() || (isAgent() && resource.data.agentUid == request.auth.uid);
+      allow create, update, delete: if false;
     }
   }
 }

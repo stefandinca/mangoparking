@@ -1,6 +1,7 @@
 import { addDocument, getCollection, getDocument, updateDocument, query, where, orderBy, limit } from '../firebase/db.js';
 import { getCurrentUser } from '../firebase/auth.js';
 import { auditLog } from './auditService.js';
+import { getAllSpots, updateSpotStatus } from './capacityService.js';
 
 /**
  * Generate a booking code (MNG-XXXXX)
@@ -63,17 +64,41 @@ export async function getAllBookings(limitCount = 200) {
 }
 
 /**
- * Check in a booking
+ * Check in a booking. If spotId is not provided, the first available spot
+ * is auto-picked (mirrors tokenService.useToken). The chosen spot is
+ * flipped to `occupied` via updateSpotStatus so the global occupiedSpots
+ * counter — read by AdminDashboard + AdminCapacity — stays in sync.
  */
-export async function checkInBooking(bookingId, spotId) {
+export async function checkInBooking(bookingId, spotId = null) {
   const old = await getDocument('bookings', bookingId);
   if (!old) throw new Error(`Booking ${bookingId} not found`);
+
+  let assignedSpot = spotId;
+  if (!assignedSpot && old.spotId) {
+    // Booking already has a reserved spot — flip that one to occupied
+    // rather than picking a new one. Avoids leaving stale "reserved"
+    // tiles on the capacity map.
+    assignedSpot = old.spotId;
+  }
+  if (!assignedSpot) {
+    const spots = await getAllSpots().catch(() => []);
+    const free = spots.find(s => s.status === 'available' || s.status === 'reserved');
+    assignedSpot = free?.id || null;
+  }
+
   await updateDocument('bookings', bookingId, {
     status: 'active',
-    spotId,
+    spotId: assignedSpot,
     checkinTimestamp: new Date().toISOString(),
   });
-  await auditLog('booking_checkin', 'booking', bookingId, { status: old.status }, { status: 'active', spotId });
+
+  if (assignedSpot) {
+    await updateSpotStatus(assignedSpot, 'occupied').catch((err) => {
+      console.warn('checkInBooking: spot status update failed', err?.message);
+    });
+  }
+
+  await auditLog('booking_checkin', 'booking', bookingId, { status: old.status }, { status: 'active', spotId: assignedSpot });
 }
 
 /**
@@ -85,9 +110,13 @@ export async function checkOutBooking(bookingId) {
   await updateDocument('bookings', bookingId, {
     status: 'completed',
     checkoutTimestamp: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
   });
   if (old.spotId) {
-    await updateDocument('spots', old.spotId, { status: 'available', currentBookingId: null });
+    // updateSpotStatus also decrements settings/global.occupiedSpots.
+    await updateSpotStatus(old.spotId, 'available').catch((err) => {
+      console.warn('checkOutBooking: spot status update failed', err?.message);
+    });
   }
   await auditLog('booking_checkout', 'booking', bookingId, { status: old.status }, { status: 'completed' });
 }
@@ -99,5 +128,11 @@ export async function cancelBooking(bookingId) {
   const old = await getDocument('bookings', bookingId);
   if (!old) throw new Error(`Booking ${bookingId} not found`);
   await updateDocument('bookings', bookingId, { status: 'cancelled' });
+  // Release any pre-reserved spot so it goes back to available immediately.
+  if (old.spotId) {
+    await updateSpotStatus(old.spotId, 'available').catch((err) => {
+      console.warn('cancelBooking: spot release failed', err?.message);
+    });
+  }
   await auditLog('booking_cancelled', 'booking', bookingId, { status: old.status }, { status: 'cancelled' });
 }

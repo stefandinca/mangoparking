@@ -8,6 +8,7 @@ import { startNetopiaPayment } from '../../services/netopiaService.js';
 import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
 import { getMyVoucher } from '../../services/voucherService.js';
+import { previewVoucher, normalizeCode } from '../../services/promoVoucherService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { getDocument, updateDocument } from '../../firebase/db.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
@@ -33,6 +34,7 @@ export default async function Booking(container) {
   let selectedPack = null;
   let customQty = 0;
   let confirmed = false;
+  let promoVoucher = null;  // { code, name, type, value, discountAmount } when applied
   let resultBalance = 0;
   let processing = false;
   let paymentMethod = 'online';   // 'online' | 'pay-at-pickup'
@@ -216,6 +218,23 @@ export default async function Booking(container) {
           </div>
         </div>
 
+        <!-- Voucher code -->
+        <div class="card-solid rounded-2xl p-6" data-voucher-block>
+          <h3 class="font-heading font-semibold text-lg mb-3">${t('voucher.codeTitle')}</h3>
+          <div class="flex flex-col sm:flex-row gap-2" data-voucher-input-wrap>
+            <input type="text" name="voucherCode" placeholder="${t('voucher.codePlaceholder')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono uppercase focus:outline-none focus:border-blueberry">
+            <button type="button" data-apply-voucher class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-3 rounded-xl transition-colors">${t('voucher.apply')}</button>
+          </div>
+          <div class="hidden mt-3 flex items-center justify-between gap-3 bg-leaf/5 border border-leaf/30 rounded-xl px-4 py-3" data-voucher-applied>
+            <div class="min-w-0">
+              <p class="text-[14px] font-semibold text-leaf" data-voucher-applied-name>—</p>
+              <p class="text-[12px] text-charcoal/70" data-voucher-applied-detail>—</p>
+            </div>
+            <button type="button" data-remove-voucher class="text-[13px] text-red-500 hover:underline font-semibold shrink-0">${t('voucher.remove')}</button>
+          </div>
+          <p class="hidden mt-2 text-[13px] text-red-500" data-voucher-error></p>
+        </div>
+
         <!-- Summary -->
         <div class="card-solid rounded-2xl p-6" data-summary>
           <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.summary')}</h3>
@@ -224,8 +243,15 @@ export default async function Booking(container) {
           </div>
         </div>
 
-        <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
-          ${processing ? t('credit.processing') : t('credit.payNow')}
+        <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
+          <input type="checkbox" name="acceptTerms" required class="accent-mango w-4 h-4 mt-1 shrink-0">
+          <span>${t('legal.acceptTerms')}</span>
+        </label>
+
+        <button type="submit" data-pay-btn class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
+          ${processing
+            ? t('credit.processing')
+            : (paymentMethod === 'pay-at-pickup' ? t('credit.payNowPickup') : t('credit.payNow'))}
         </button>
       </form>
     `;
@@ -243,7 +269,11 @@ export default async function Booking(container) {
       const isPickup = paymentMethod === 'pay-at-pickup';
       const displayPrice = isPickup && orig ? orig : onlinePrice;
       const showAnchor = !isPickup && orig != null && orig !== onlinePrice;
-      const voucherActive = !isPickup && voucher && voucher.status === 'unused' && onlinePrice > voucher.amount;
+      const voucherActive = !isPickup && voucher && voucher.status === 'unused' && onlinePrice > voucher.amount && !promoVoucher;
+      const promoActive = !isPickup && promoVoucher?.discountAmount > 0;
+      const promoLine = promoActive
+        ? `<p class="text-[13px] text-leaf mt-2">${t('voucher.summaryLine', { code: promoVoucher.code, amount: promoVoucher.discountAmount })}</p>`
+        : '';
       summary.innerHTML = `
         <div class="flex justify-between items-center mb-1"><span>${qty} ${t('credit.plural')}</span>
           <div class="text-right">
@@ -252,7 +282,8 @@ export default async function Booking(container) {
             ${showAnchor ? `<div class="text-[10px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</div>` : ''}
           </div>
         </div>
-        ${voucherActive ? `<p class="text-[13px] text-mango mt-2">${t('voucher.applied', { amount: voucher.amount })}</p>` : ''}`;
+        ${voucherActive ? `<p class="text-[13px] text-mango mt-2">${t('voucher.applied', { amount: voucher.amount })}</p>` : ''}
+        ${promoLine}`;
     }
     const btn = pageEl.querySelector('[type="submit"]');
     if (btn) btn.disabled = qty <= 0;
@@ -328,6 +359,86 @@ export default async function Booking(container) {
     const form = pageEl.querySelector('[data-purchase-form]');
     if (!form) return;
 
+    // Promo voucher apply / remove — see BookingLongTerm.js for the same
+    // pattern. Re-bound on every render (this page rebuilds the DOM
+    // on confirmation, vehicle toggle, etc.) so the handlers always
+    // attach to fresh nodes.
+    const voucherBlock = pageEl.querySelector('[data-voucher-block]');
+    if (voucherBlock) {
+      const voucherInputWrap = voucherBlock.querySelector('[data-voucher-input-wrap]');
+      const voucherAppliedEl = voucherBlock.querySelector('[data-voucher-applied]');
+      const voucherAppliedName = voucherBlock.querySelector('[data-voucher-applied-name]');
+      const voucherAppliedDetail = voucherBlock.querySelector('[data-voucher-applied-detail]');
+      const voucherErrorEl = voucherBlock.querySelector('[data-voucher-error]');
+      const voucherInput = voucherBlock.querySelector('input[name="voucherCode"]');
+      const applyBtn = voucherBlock.querySelector('[data-apply-voucher]');
+      const removeBtn = voucherBlock.querySelector('[data-remove-voucher]');
+
+      const setVoucherError = (msg) => {
+        if (!voucherErrorEl) return;
+        if (msg) { voucherErrorEl.textContent = msg; voucherErrorEl.classList.remove('hidden'); }
+        else voucherErrorEl.classList.add('hidden');
+      };
+      const renderApplied = () => {
+        if (!promoVoucher) {
+          voucherInputWrap.classList.remove('hidden');
+          voucherAppliedEl.classList.add('hidden');
+          return;
+        }
+        voucherInputWrap.classList.add('hidden');
+        voucherAppliedEl.classList.remove('hidden');
+        voucherAppliedName.textContent = `${promoVoucher.name} (${promoVoucher.code})`;
+        voucherAppliedDetail.textContent = promoVoucher.type === 'percent'
+          ? t('voucher.appliedPercent', { value: promoVoucher.value, amount: promoVoucher.discountAmount })
+          : t('voucher.appliedFixed', { amount: promoVoucher.discountAmount });
+      };
+      renderApplied();
+
+      applyBtn?.addEventListener('click', async () => {
+        setVoucherError('');
+        const code = normalizeCode(voucherInput.value);
+        if (!code) { setVoucherError(t('voucher.errorEmpty')); return; }
+        const plateInput = form.licensePlate || form.querySelector('input[name="licensePlate"]');
+        const plate = plateInput?.value.trim();
+        if (!plate) { setVoucherError(t('voucher.errorNeedPlate')); return; }
+        const base = (function () {
+          const qty = customQty || selectedPack?.quantity || 0;
+          const price = selectedPack
+            ? (customQty ? (customQty * (selectedPack.price / selectedPack.quantity)) : selectedPack.price)
+            : 0;
+          return Math.round(price);
+        })();
+        if (!base) { setVoucherError(t('voucher.errorNoBase')); return; }
+        applyBtn.disabled = true;
+        applyBtn.textContent = t('common.loading');
+        try {
+          const res = await previewVoucher({ code, plate, baseAmount: base, orderType: 'credits' });
+          if (res?.ok) {
+            promoVoucher = { code: res.voucherCode, name: res.name, type: res.type, value: res.value, discountAmount: res.discountAmount };
+            renderApplied();
+            updateSummary(pageEl);
+            showToast(t('voucher.appliedToast'), 'success');
+          } else {
+            setVoucherError(t(`voucher.error.${res?.error || 'unknown'}`));
+          }
+        } catch (err) {
+          console.error('previewVoucher', err);
+          setVoucherError(err?.message || t('common.error'));
+        } finally {
+          applyBtn.disabled = false;
+          applyBtn.textContent = t('voucher.apply');
+        }
+      });
+
+      removeBtn?.addEventListener('click', () => {
+        promoVoucher = null;
+        if (voucherInput) voucherInput.value = '';
+        setVoucherError('');
+        renderApplied();
+        updateSummary(pageEl);
+      });
+    }
+
     // Clear red field-error state as the user edits any input.
     ['licensePlate', 'name', 'phone', 'email', 'makeModel'].forEach(n => {
       const input = form.elements[n];
@@ -337,7 +448,8 @@ export default async function Booking(container) {
     // Wire PF/PJ toggle for the billing block (idempotent — safe across re-renders).
     wireBillingToggle(form);
 
-    // Payment-method toggle — repaints active card and re-renders the summary.
+    // Payment-method toggle — repaints active card, swaps submit copy
+    // (no Netopia branding when paying at pickup), and re-renders the summary.
     const paymethodWrap = pageEl.querySelector('[data-paymethod-toggle]');
     if (paymethodWrap) {
       paymethodWrap.addEventListener('change', (e) => {
@@ -349,6 +461,12 @@ export default async function Booking(container) {
           lbl.classList.toggle('bg-mango/5', inp.checked);
           lbl.classList.toggle('border-frost-deep', !inp.checked);
         });
+        const payBtn = pageEl.querySelector('[data-pay-btn]');
+        if (payBtn && !processing) {
+          payBtn.textContent = paymentMethod === 'pay-at-pickup'
+            ? t('credit.payNowPickup')
+            : t('credit.payNow');
+        }
         updateSummary(pageEl);
       });
     }
@@ -391,6 +509,12 @@ export default async function Booking(container) {
         return;
       }
 
+      // Terms must be agreed before any payment intent is created.
+      if (!form.elements.acceptTerms?.checked) {
+        showToast(t('legal.acceptTermsRequired'), 'error');
+        return;
+      }
+
       const billing = readBilling(form);
       if (billing.error) {
         showToast(billing.error, 'error');
@@ -420,9 +544,11 @@ export default async function Booking(container) {
         }
       }
 
-      const voucherIdToSend = (voucher && voucher.status === 'unused' && getSelectedPrice() > voucher.amount)
+      // Promo voucher wins over legacy signup voucher.
+      const voucherIdToSend = (!promoVoucher && voucher && voucher.status === 'unused' && getSelectedPrice() > voucher.amount)
         ? voucher.userId
         : null;
+      const voucherCodeToSend = promoVoucher && paymentMethod === 'online' ? promoVoucher.code : null;
 
       try {
         await startNetopiaPayment({
@@ -434,6 +560,7 @@ export default async function Booking(container) {
           // original anchor when paymentMethod is pay-at-pickup.
           packPrice: getSelectedPrice(),
           voucherId: paymentMethod === 'online' ? voucherIdToSend : null,
+          voucherCode: voucherCodeToSend,
           customerData: {
             customerId: user?.uid || null,
             licensePlate,

@@ -2,11 +2,12 @@ import { html } from '../../utils/dom.js';
 import { t, localePath, altLocalePath, getLocale } from '../../i18n/index.js';
 import { getCurrentUser, getUserProfile, logout } from '../../firebase/auth.js';
 import { navigate, getCurrentPath } from '../../router/index.js';
+import { hasAdminAccess } from '../../utils/permissions.js';
 
 export function Navbar() {
   const user = getCurrentUser();
   const profile = getUserProfile();
-  const isAdminUser = profile?.role === 'admin' || profile?.role === 'staff';
+  const isAdminUser = hasAdminAccess(profile?.role);
   const currentFullPath = window.location.pathname;
   const altPath = altLocalePath(currentFullPath);
   const langSwitch = t('langSwitch');
@@ -22,6 +23,7 @@ export function Navbar() {
           <div class="hidden md:flex items-center gap-8 text-[14px] font-medium text-charcoal/40">
             <a href="${localePath('/')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.howItWorks')}</a>
             <a href="${localePath('/pricing')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.pricing')}</a>
+            <a href="${localePath('/promotions')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.promotions')}</a>
             <a href="${localePath('/shuttle')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.shuttle')}</a>
             <a href="${localePath('/about')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.faq')}</a>
           </div>
@@ -51,6 +53,7 @@ export function Navbar() {
         <div class="space-y-1 text-lg font-heading font-semibold">
           <a href="${localePath('/')}" class="block py-3 px-2">${t('nav.howItWorks')}</a>
           <a href="${localePath('/pricing')}" class="block py-3 px-2">${t('nav.pricing')}</a>
+          <a href="${localePath('/promotions')}" class="block py-3 px-2">${t('nav.promotions')}</a>
           <a href="${localePath('/shuttle')}" class="block py-3 px-2">${t('nav.shuttle')}</a>
           <a href="${localePath('/about')}" class="block py-3 px-2">${t('nav.faq')}</a>
           <a href="${localePath('/contact')}" class="block py-3 px-2">${t('footer.contact')}</a>

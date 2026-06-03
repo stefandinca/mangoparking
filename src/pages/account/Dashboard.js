@@ -4,7 +4,7 @@ import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getUserProfile, getCurrentUser } from '../../firebase/auth.js';
-import { updateDocument, getDocument } from '../../firebase/db.js';
+import { updateDocument, getDocument, getCollection, where, orderBy } from '../../firebase/db.js';
 import { getBalance, getTransactions } from '../../services/tokenService.js';
 import { showToast } from '../../components/core/Toast.js';
 import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
@@ -26,12 +26,40 @@ export default async function Dashboard(container) {
   const profile = uid ? await getDocument('users', uid).catch(() => getUserProfile()) : getUserProfile();
   const displayName = profile?.displayName || 'User';
 
-  const [balanceDoc, transactions, shuttleSchedule, voucher] = await Promise.all([
+  const [balanceDoc, transactions, shuttleSchedule, voucher, upcomingBookings, myPromos, myRedemptions] = await Promise.all([
     uid ? getBalance(uid).catch(() => null) : Promise.resolve(null),
     uid ? getTransactions(uid, 5).catch(() => []) : Promise.resolve([]),
     getShuttleSchedule().catch(() => []),
     uid ? getMyVoucher().catch(() => null) : Promise.resolve(null),
+    uid
+      ? getCollection('bookings',
+          where('customerId', '==', uid),
+          where('status', 'in', ['upcoming', 'active'])
+        ).then(rows => rows.sort((a, b) => String(a.startDate || a.dropoffAt || '').localeCompare(String(b.startDate || b.dropoffAt || '')))).catch(() => [])
+      : Promise.resolve([]),
+    uid ? getCollection('promoVouchers', where('assignedUserIds', 'array-contains', uid)).catch(() => []) : Promise.resolve([]),
+    uid ? getCollection('voucherRedemptions', where('userId', '==', uid)).catch(() => []) : Promise.resolve([]),
   ]);
+
+  // Count promo vouchers that are usable today: active, in window, not
+  // yet redeemed by this user. Drives the dashboard hint card.
+  const usedCodes = new Set((myRedemptions || []).map((r) => r.voucherCode).filter(Boolean));
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const usablePromoCount = (myPromos || []).filter((v) => {
+    if (!v.active) return false;
+    if (usedCodes.has(v.code)) return false;
+    if (v.startDate && todayStr < v.startDate) return false;
+    if (v.endDate && todayStr > v.endDate) return false;
+    return true;
+  }).length;
+
+  // Active credit check-ins for this user's plates — rendered alongside
+  // longterm upcoming bookings so the widget reflects every "in-progress"
+  // reservation regardless of type.
+  const myPlates = (balanceDoc?.plates || []).filter(Boolean);
+  const activeCheckIns = myPlates.length > 0
+    ? (await Promise.all(myPlates.map(p => getDocument('activeCheckIns', p).catch(() => null)))).filter(Boolean)
+    : [];
 
   const balance = balanceDoc?.balance ?? 0;
   const totalPurchased = balanceDoc?.totalPurchased ?? 0;
@@ -98,8 +126,24 @@ export default async function Dashboard(container) {
       </form>
     </div>
 
+    ${usablePromoCount > 0 ? `
+    <!-- Promo voucher hint — links to the full list at /account/vouchers -->
+    <a href="${localePath('/account/vouchers')}" class="block rounded-2xl p-5 mb-6 bg-mango/10 border-2 border-mango/30 hover:bg-mango/15 transition-colors flex items-center justify-between gap-4">
+      <div class="flex items-center gap-4 min-w-0">
+        <div class="w-12 h-12 rounded-xl bg-mango flex items-center justify-center shrink-0">
+          <svg class="w-6 h-6 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z"/></svg>
+        </div>
+        <div class="min-w-0">
+          <p class="font-heading font-bold text-lg text-blueberry-deep">${t('accountVouchers.hintTitle', { count: usablePromoCount })}</p>
+          <p class="text-charcoal/70 text-[14px]">${t('accountVouchers.hintBody')}</p>
+        </div>
+      </div>
+      <span class="text-mango font-mono text-[13px] font-bold shrink-0">${t('accountVouchers.hintCta')} →</span>
+    </a>
+    ` : ''}
+
     ${voucher && voucher.status === 'unused' ? `
-    <!-- Voucher banner -->
+    <!-- Legacy signup voucher banner (in-flight balances only) -->
     <div class="rounded-2xl p-5 mb-6 bg-mango/10 border-2 border-mango/30 flex items-center gap-4">
       <div class="w-12 h-12 rounded-xl bg-mango flex items-center justify-center shrink-0">
         <svg class="w-6 h-6 text-charcoal" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -129,13 +173,34 @@ export default async function Dashboard(container) {
       </div>
     </div>
 
-    <!-- Buy more + Next shuttle -->
-    <div class="grid md:grid-cols-2 gap-6 mb-6">
-      <!-- Buy more tokens -->
+    <!-- Upcoming reservations (longterm + active credit check-ins) -->
+    <div class="card-solid rounded-2xl p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-heading font-bold text-lg">${t('account.upcomingTitle')}</h3>
+        <a href="${localePath('/account/bookings')}" class="text-mango text-[14px] font-semibold hover:text-mango-hover transition-colors">${t('account.viewDetails')} →</a>
+      </div>
+      ${(upcomingBookings.length + activeCheckIns.length) > 0 ? `
+        <div class="space-y-3">
+          ${activeCheckIns.map(ck => renderActiveCheckIn(ck, locale)).join('')}
+          ${upcomingBookings.map(b => renderUpcomingBooking(b, locale)).join('')}
+        </div>
+      ` : `<p class="text-dim text-center py-4">${t('account.upcomingNone')}</p>`}
+    </div>
+
+    <!-- Reserve CTAs + Next shuttle -->
+    <div class="grid md:grid-cols-3 gap-6 mb-6">
+      <!-- Buy credits -->
       <div class="card-solid rounded-2xl p-6">
-        <h3 class="font-heading font-bold text-lg mb-3">${t('credit.buyMore')}</h3>
-        <p class="text-dim text-[14px] mb-4">${t('credit.rule2')} — ${t('credit.rule1')}</p>
-        <a href="${localePath('/booking')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('credit.buyTokens')}</a>
+        <h3 class="font-heading font-bold text-lg mb-3">${t('account.reserveCredits')}</h3>
+        <p class="text-dim text-[14px] mb-4">${t('credit.rule2')}</p>
+        <a href="${localePath('/booking/credits')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-5 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('credit.buyTokens')}</a>
+      </div>
+
+      <!-- Reserve longterm -->
+      <div class="card-solid rounded-2xl p-6">
+        <h3 class="font-heading font-bold text-lg mb-3">${t('account.reserveLongterm')}</h3>
+        <p class="text-dim text-[14px] mb-4">${t('longTerm.pageSubtitle')}</p>
+        <a href="${localePath('/booking/long-term')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-5 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('account.reserveNow')}</a>
       </div>
 
       <!-- Next shuttle -->
@@ -246,4 +311,47 @@ export default async function Dashboard(container) {
   }
 
   container.appendChild(page);
+}
+
+function renderUpcomingBooking(b, locale) {
+  const dropoff = b.dropoffAt || b.startDate;
+  const pickup = b.pickupAt || b.endDate;
+  const active = b.status === 'active';
+  const badge = active
+    ? `<span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-leaf/10 text-leaf">${t('account.currentlyParked')}</span>`
+    : `<span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blueberry/10 text-blueberry">${t('account.bookingLongterm')}</span>`;
+  return `
+    <div class="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-frost-deep last:border-0">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          ${badge}
+          ${b.code ? `<span class="text-[12px] font-mono text-dim">${b.code}</span>` : ''}
+        </div>
+        <p class="text-[14px] text-charcoal">
+          <span class="font-mono font-bold">${b.licensePlate || '—'}</span>
+          · ${t('account.arrivingOn')} <span class="font-medium">${formatDate(dropoff, locale)}</span>
+          · ${t('account.leavingOn')} <span class="font-medium">${formatDate(pickup, locale)}</span>
+        </p>
+      </div>
+      ${active && b.spotId ? `<p class="text-[12px] text-dim">${t('account.spot')} <span class="font-mono font-semibold">${b.spotId}</span></p>` : ''}
+    </div>
+  `;
+}
+
+function renderActiveCheckIn(ck, locale) {
+  return `
+    <div class="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-frost-deep last:border-0">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-leaf/10 text-leaf">${t('account.currentlyParked')}</span>
+          <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-mango/15 text-charcoal">${t('account.bookingCredit')}</span>
+        </div>
+        <p class="text-[14px] text-charcoal">
+          <span class="font-mono font-bold">${ck.licensePlate || '—'}</span>
+          · ${formatDate(ck.checkinTime, locale)}
+        </p>
+      </div>
+      ${ck.spotId ? `<p class="text-[12px] text-dim">${t('account.spot')} <span class="font-mono font-semibold">${ck.spotId}</span></p>` : ''}
+    </div>
+  `;
 }

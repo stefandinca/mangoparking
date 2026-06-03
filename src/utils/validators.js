@@ -1,14 +1,14 @@
 export function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email ?? ''));
 }
 
 export function isValidPhone(phone) {
-  return /^(\+?40|0)[27]\d{8}$/.test(phone.replace(/[\s-]/g, ''));
+  return /^(\+?40|0)[27]\d{8}$/.test(String(phone ?? '').replace(/[\s-]/g, ''));
 }
 
 export function isValidLicensePlate(plate) {
   // Romanian license plates: B 123 ABC or XX 12 ABC
-  return /^[A-Z]{1,2}\s?\d{2,3}\s?[A-Z]{3}$/.test(plate.toUpperCase().trim());
+  return /^[A-Z]{1,2}\s?\d{2,3}\s?[A-Z]{3}$/.test(String(plate ?? '').toUpperCase().trim());
 }
 
 export function required(value) {

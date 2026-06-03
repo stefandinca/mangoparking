@@ -13,6 +13,7 @@ export default function GDPR(container) {
   });
 
   renderLegalPage(container, {
+    slug: 'gdpr',
     title: t('legal.gdprTitle'),
     intro: t('legal.gdprIntro'),
     sections: [

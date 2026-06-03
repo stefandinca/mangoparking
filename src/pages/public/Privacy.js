@@ -13,6 +13,7 @@ export default function Privacy(container) {
   });
 
   renderLegalPage(container, {
+    slug: 'privacy',
     title: t('legal.privacyTitle'),
     intro: t('legal.privacyIntro'),
     sections: [

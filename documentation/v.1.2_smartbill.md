@@ -1,0 +1,343 @@
+# Mango Parking v1.2 — SmartBill Integration
+
+## Goal
+
+Issue Romanian fiscal invoices (facturi) automatically from every paid order — Netopia online, admin cash, admin card — with auto-paired chitanță for cash flows, e-Factura submission for B2B, and proper storno on cancellation. Customers and admins can download the PDF straight from the booking row.
+
+Documentation: <https://api.smartbill.ro/>
+
+---
+
+## Locked decisions
+
+1. **Series strategy** — one series for everything (e.g. `MNG`). Simpler reconciliation; clients don't care which product line a row came from.
+2. **Cash flows** — emit **factură + chitanță** automatically (SmartBill auto-pairs when `paymentBase` is set). No bon fiscal route.
+3. **PF without CNP** — factură for everyone, PF or PJ, CNP or no CNP. Romanian fiscal law accepts name + address as identifier for PF.
+4. **e-Factura** — auto-submit to ANAF SPV for any invoice where the client is a VAT payer (PJ with CUI returned `isTaxPayer: true` from ANAF). Skip for PF.
+5. **VAT rate** — **21%** standard rate (Romania's 2026 rate). Configured server-side; if SmartBill account is non-VAT-payer, code branches to `taxPercentage: 0`.
+
+---
+
+## What SmartBill gives us
+
+- REST API at `api.smartbill.ro/SBORO/api` — HTTP Basic auth (username = SmartBill account email, password = API token from SmartBill admin → "Configurări → Token API").
+- Endpoints used:
+  - `POST /invoice` — issue factura. Returns `{ series, number, url }` (public PDF link).
+  - `POST /invoice/cancel` — clean cancel (same fiscal day only, no VAT impact).
+  - `POST /invoice/creditnote` — storno (refund/credit note). Used for prior-day cancellations.
+  - `GET /invoice/pdf` — PDF stream (already in `url` from issue response; this is a fallback).
+  - `POST /einvoice` — submit invoice to ANAF SPV (e-Factura, B2B mandate).
+  - `GET /einvoice/status/{uploadId}` — poll e-Factura status (`OK` | `NOK` | `IN_PROGRESS`).
+  - `GET /tax` — list VAT rates available in the account (called once at boot to verify 21% exists).
+  - `GET /series` — list invoice series. Called once at boot to verify our `MNG` series is configured.
+- Series prefix is configured in SmartBill's admin UI; we pass `seriesName: 'MNG'` (or whatever the account uses) in every request body.
+- SmartBill returns **HTTP 200** with `{ errorText: "...", number: 0 }` on validation failures. Don't trust HTTP status alone — always check `errorText`.
+
+---
+
+## Existing repo plumbing we'll reuse
+
+- Billing object on `bookings`, `pendingOrders`, `tokenTransactions` with PF/PJ split: `{ type, firstName, lastName, cnp?, address, locality, companyName?, cui?, regCom?, companyAddress? }` — populated by `BillingFields.js`.
+- ANAF CUI lookup (`cuiService.js` → callable `lookupCui`) — already returns `isVatPayer`, which feeds into the e-Factura decision.
+- Three paid flows already exist in `functions/src/index.js`:
+  - `createBookingFromOrder` (Netopia success branch)
+  - `adminMarkOrderPaid` (cash/card mark-paid for unpaid bookings & credit orders)
+  - `adminCreateLongtermBooking` + `grantCreditsForCash` (direct over-the-counter sales)
+- Cancellation: `cancelBookingWithRefund` callable.
+- Brevo Trigger Email (writes to `mail` collection) — extend templates to include invoice PDF link.
+- `auditLog` collection — used for every issue/cancel/storno.
+
+---
+
+## Phase 1 — Foundations (~0.5 day)
+
+### 1.1 Secrets
+
+- `firebase functions:secrets:set SMARTBILL_USERNAME`
+- `firebase functions:secrets:set SMARTBILL_TOKEN`
+- `firebase functions:secrets:set SMARTBILL_CIF` (your fiscal code, RO format `RO12345678` or unprefixed)
+
+Bind all three on every callable/trigger that issues invoices — list in `secrets: [SMARTBILL_USERNAME, SMARTBILL_TOKEN, SMARTBILL_CIF]`.
+
+### 1.2 New `functions/src/smartbill.js`
+
+```js
+const BASE = 'https://ws.smartbill.ro/SBORO/api';
+
+async function smartbillFetch(path, init = {}) {
+  const user = process.env.SMARTBILL_USERNAME;
+  const tok  = process.env.SMARTBILL_TOKEN;
+  const auth = Buffer.from(`${user}:${tok}`).toString('base64');
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type':  'application/json',
+      'Accept':        'application/json',
+      ...(init.headers || {}),
+    },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (body.errorText) throw new Error(`SmartBill: ${body.errorText}`);
+  if (!res.ok) throw new Error(`SmartBill HTTP ${res.status}`);
+  return body;
+}
+
+export function buildInvoicePayload({ billing, items, paymentMethod, paymentBase = 'OP', dueDateIso }) { /* … */ }
+export async function issueInvoice(payload) { /* POST /invoice */ }
+export async function cancelInvoice({ seriesName, number }) { /* POST /invoice/cancel */ }
+export async function creditNote({ seriesName, number, items }) { /* POST /invoice/creditnote */ }
+export async function submitEinvoice({ seriesName, number }) { /* POST /einvoice */ }
+export async function einvoiceStatus(uploadId) { /* GET /einvoice/status/{uploadId} */ }
+```
+
+### 1.3 Doc-shape extension
+
+New `smartbill` field on `bookings`, `pendingOrders`, `tokenTransactions`:
+
+```js
+smartbill: {
+  series: 'MNG',
+  number: 1042,                            // numeric, assigned by SmartBill
+  issuedAt: '2026-05-18T10:14:22.000Z',
+  pdfUrl: 'https://www.smartbill.ro/api/invoice/pdf?...',
+  status: 'issued' | 'cancelled' | 'credit-noted' | 'failed',
+  eFactura: {
+    required: true,
+    uploadId: 'abc123',
+    status: 'IN_PROGRESS' | 'OK' | 'NOK',
+    statusText: '',                        // ANAF rejection reason if NOK
+    submittedAt: '...',
+    polledAt: '...',
+  } | null,
+  lastError: null,
+  attempts: 0,
+}
+```
+
+Server-written only. Firestore rules: customers can read their own (already covered by existing booking rule); staff can read all; no client writes.
+
+### 1.4 Boot validation
+
+Add a one-shot callable `smartbillHealthcheck` (admin-only). Calls `/series` and `/tax`, surfaces what's configured. Run it once after deploy to confirm `MNG` series exists and 21% VAT is present.
+
+---
+
+## Phase 2 — Auto-issue on online payment (~0.5 day)
+
+`functions/src/index.js` → `createBookingFromOrder`:
+
+After the booking doc is created (Netopia success path), call:
+
+```js
+try {
+  const inv = await smartbill.issueInvoice(
+    smartbill.buildInvoicePayload({
+      billing: order.customerData.billing,
+      items: itemsFromOrder(order),
+      paymentMethod: 'Card online',
+      paymentBase: 'OP',
+    })
+  );
+  await bookingRef.update({
+    smartbill: {
+      series: inv.series, number: inv.number, pdfUrl: inv.url,
+      status: 'issued', issuedAt: nowIso(), eFactura: null, lastError: null, attempts: 1,
+    },
+  });
+} catch (err) {
+  await bookingRef.update({
+    smartbill: { status: 'failed', lastError: String(err.message), attempts: 1 },
+  });
+}
+```
+
+**Critical:** invoice failures must not break the booking flow. The customer paid; the doc must exist. Phase 7's retry queue picks failures up.
+
+Same pattern for the credits branch (`tokenTransactions/{id}` after `creditTokens`).
+
+---
+
+## Phase 3 — Auto-issue on cash/admin flows (~0.5 day)
+
+| Source | `paymentMethod` | `paymentBase` |
+|---|---|---|
+| `adminMarkOrderPaid` with `paidBy: 'cash'` | `Numerar` | `Chitanta` (auto-pairs chitanță) |
+| `adminMarkOrderPaid` with `paidBy: 'card'` | `Card` | `Bon fiscal` |
+| `adminCreateLongtermBooking` (direct cash) | `Numerar` | `Chitanta` |
+| `grantCreditsForCash` (direct cash) | `Numerar` | `Chitanta` |
+
+Every call writes to the source doc's `smartbill` block. Card flows skip chitanță auto-pairing.
+
+Cashbook entries get the invoice number stamped on `cashEntries.invoiceNumber` for the per-agent report (phase 5).
+
+---
+
+## Phase 4 — Cancellation → storno (~0.5 day)
+
+`cancelBookingWithRefund`:
+
+```js
+const existing = bookingDoc.data().smartbill;
+if (!existing || existing.status === 'failed') {
+  // nothing to invalidate
+} else if (existing.status === 'issued' && sameDay(existing.issuedAt)) {
+  await smartbill.cancelInvoice({ seriesName: existing.series, number: existing.number });
+  patch.smartbill = { ...existing, status: 'cancelled' };
+} else if (existing.status === 'issued') {
+  const cn = await smartbill.creditNote({ seriesName: existing.series, number: existing.number, items: existing.items });
+  patch.smartbill = { ...existing, status: 'credit-noted', creditNoteNumber: cn.number };
+}
+```
+
+If the original was e-Factura, the storno/cancel also needs to submit to ANAF. Same `submitEinvoice` call, marked with `isCancellation: true` flag in our doc to distinguish.
+
+---
+
+## Phase 5 — Customer + admin PDF access (~0.5 day)
+
+- `src/pages/account/BookingHistory.js` — each row: `Descarcă factura` link if `smartbill.pdfUrl`. Falls back to `—` when missing or failed.
+- `src/pages/admin/AdminCheckIns.js` + `AdminTransactions.js`:
+  - Same download link.
+  - `Re-emite factura` button (admin/agent) when `smartbill.status === 'failed'` — calls new callable `adminReissueInvoice({ collection, docId })`.
+- `src/pages/admin/AdminCashbook.js` — entry rows + report tables get an Invoice column (number, links to PDF). Sourced from `cashEntries.invoiceNumber` + `cashEntries.invoiceUrl`.
+
+---
+
+## Phase 6 — Email attachment via Brevo (~0.25 day)
+
+- Brevo templates `booking-longterm-confirm-ro/en` and `credit-purchase-ro/en` already render via the `mail` collection.
+- Pass `params.invoiceUrl` and `params.invoiceNumber` when writing the `mail` doc.
+- Update Brevo templates to render a `Descarcă factura PDF` button below the main CTA.
+- SmartBill's public PDF URL is the link target — no upload to our storage, no signed URLs to manage. Caveat: anyone with the URL can fetch it (SmartBill design, not ours).
+
+---
+
+## Phase 7 — Retry queue + reconciliation (~0.5 day)
+
+`functions/src/scheduled.js` → new `retryFailedInvoices` (every 30 min, `europe-west1`):
+
+```js
+const stuck = await db.collectionGroup('bookings')
+  .where('smartbill.status', '==', 'failed')
+  .where('smartbill.attempts', '<', 3)
+  .get();
+// + same for pendingOrders + tokenTransactions
+```
+
+For each: retry `issueInvoice`, increment `attempts`, update status. After 3 failures, leave it for manual admin intervention.
+
+Admin dashboard (`/admin/dashboard`):
+- New tile "Facturi neemise" with count and a link to a filtered view.
+- Manual `Re-emite` button per row.
+
+Firestore indexes: composite indexes on `(smartbill.status, smartbill.attempts)` for each of the three collections.
+
+---
+
+## Phase 8 — e-Factura (B2B mandate) (~0.5 day)
+
+- After every issue where `billing.type === 'PJ'` AND `billing.isVatPayer === true` (set by `lookupCui` at booking time): call `smartbill.submitEinvoice({ seriesName, number })`.
+- Store `uploadId` on `smartbill.eFactura`.
+- New scheduled function `pollEinvoiceStatus` (every 1h):
+  - Query for docs where `smartbill.eFactura.status == 'IN_PROGRESS'`.
+  - Call `einvoiceStatus(uploadId)`. If terminal (`OK` or `NOK`), update doc.
+  - `NOK` surfaces in the admin retry banner with `statusText`.
+- Same flow for storno/cancel — the cancellation event must also be submitted to ANAF.
+
+This phase is **mandatory for compliance** since 2024 — RO B2B e-Factura is enforced. Skipping it is a fiscal risk, not just a feature gap.
+
+---
+
+## File-level touch summary
+
+**New files (~3):**
+- `functions/src/smartbill.js` — REST wrapper + payload builders
+- `functions/src/einvoice.js` (optional, kept separate so phase 8 is feature-flaggable)
+- `src/services/invoiceService.js` — client wrappers for `reissue` / status queries
+
+**Modified files (~10):**
+- `functions/src/index.js` — issue calls in 4 paid-flow paths; storno in cancel path; new `adminReissueInvoice` + `smartbillHealthcheck` callables
+- `functions/src/scheduled.js` — `retryFailedInvoices`, `pollEinvoiceStatus`
+- `functions/src/emails.js` — pass invoice params into Brevo writes
+- `firestore.rules` — `smartbill` field readable by staff + owning customer, write-only by server
+- `firestore.indexes.json` — composite indexes for retry queries
+- `src/pages/account/BookingHistory.js` — invoice download link
+- `src/pages/admin/AdminCheckIns.js`, `AdminTransactions.js` — invoice column + retry button
+- `src/pages/admin/AdminCashbook.js` — invoice column on entries + reports
+- `src/pages/admin/AdminDashboard.js` — failed-invoices banner
+- `src/i18n/ro.js` + `en.js` — `invoice.*` keys (`download`, `reissue`, `failed`, `pending`, `efacturaStatus`, …)
+
+---
+
+## Verification checkpoints
+
+Run after each phase, not just at the end.
+
+### Phase 1
+- `smartbillHealthcheck` returns `{ series: ['MNG'], taxes: [..., { name: 'TVA', percentage: 21 }] }`.
+- Hand-write a payload via Node REPL → invoice appears in SmartBill dashboard with expected client + product lines.
+
+### Phase 2
+- Pay a sandbox Netopia order. Within ~5s, `bookings/{id}.smartbill.pdfUrl` populated; opening it shows the correct booking dates, plate, amount, VAT 21%.
+- Force a failure (revoke token temporarily) → `smartbill.status === 'failed'`, booking doc still created.
+
+### Phase 3
+- Cash mark-paid on an unpaid booking → factură + chitanță visible in SmartBill (auto-paired).
+- Card mark-paid → factură only, `paymentMethod: 'Card'`.
+- Cashbook page shows the invoice number column populated.
+
+### Phase 4
+- Same-day cancel → SmartBill shows the invoice cancelled (no second doc).
+- Prior-day cancel → SmartBill shows a credit note paired with the original; both PDFs accessible.
+
+### Phase 5
+- Customer's `BookingHistory` row shows "Descarcă factura" → opens correct PDF.
+- Admin force-fails an invoice → "Re-emite" button appears; clicking it retries and clears the banner.
+
+### Phase 6
+- Booking confirmation email arrives with "Descarcă factura PDF" button → opens correct PDF.
+
+### Phase 7
+- Manually write `smartbill: { status: 'failed', attempts: 1 }` on a booking → next scheduled tick retries; if mock continues failing, after 3 attempts the row appears in the admin failed-invoices tile.
+
+### Phase 8
+- Book as PJ with real CUI (VAT payer) → `smartbill.eFactura.uploadId` set; polling completes within an hour with `status: 'OK'`.
+- Book as PF → `smartbill.eFactura === null` (correctly skipped).
+
+### Cross-cutting (before declaring done)
+- Issue 10 sandbox invoices across all 4 paid-flow paths — verify SmartBill admin shows correct numbering, no gaps.
+- Cancel + storno test for each — confirm correct fiscal trail.
+- `npm run build` clean.
+- 375px viewport check on the BookingHistory invoice link tap target.
+- Run audit: every new i18n key exists in both RO and EN.
+- Deploy to staging Firebase project; run end-to-end with SmartBill sandbox account before prod.
+
+---
+
+## Estimated effort
+
+| Phase | Days |
+|---|---|
+| 1 — Foundations | 0.5 |
+| 2 — Online auto-issue | 0.5 |
+| 3 — Cash/admin auto-issue | 0.5 |
+| 4 — Cancel / storno | 0.5 |
+| 5 — Customer + admin PDF | 0.5 |
+| 6 — Email attachment | 0.25 |
+| 7 — Retry + reconciliation | 0.5 |
+| 8 — e-Factura | 0.5 |
+| **Total** | **~3.75 days** |
+
+Phases 1 → 2 → 3 are linear (each builds on the SmartBill wrapper). Phases 4–8 can interleave or run in parallel once the wrapper exists.
+
+---
+
+## Caveats and follow-ups
+
+- **SmartBill public PDF URLs don't expire.** Anyone with the link can fetch the invoice. SmartBill design choice. Acceptable for our use case (link is only shared with the buyer + admins) but worth flagging if a customer asks.
+- **VAT rate is hardcoded to 21%.** If RO changes the rate again, update one constant in `smartbill.js`. The 19% legacy invoices stay at 19% — we never rewrite history.
+- **Storno on prior-day cancellations is mandatory under RO fiscal rules** — can't just delete. Phase 4's branching is non-negotiable.
+- **e-Factura rejections (`NOK`)** usually mean bad CUI / regCom data. The admin banner needs to show the `statusText` so staff know what to fix.
+- **No invoice on free actions** (token use at the lot, walk-in check-in without payment, refunds where we already storno'd). Sanity-check this in phase 3 — only money-in events trigger an issue.
+- **Out of scope for v1.2:** invoice PDF localization in EN (SmartBill issues RO only), recurring/subscription invoices (no subscriptions in this product), proforma issuance (no quote/estimate flow).

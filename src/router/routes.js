@@ -26,6 +26,11 @@ export const routes = [
     guards: [],
   },
   {
+    path: '/pay',
+    component: () => import('../pages/public/PayOrder.js'),
+    guards: [],
+  },
+  {
     path: '/pricing',
     component: () => import('../pages/public/Pricing.js'),
     guards: [],
@@ -49,6 +54,11 @@ export const routes = [
   {
     path: '/contact',
     component: () => import('../pages/public/Contact.js'),
+    guards: [],
+  },
+  {
+    path: '/promotions',
+    component: () => import('../pages/public/Promotions.js'),
     guards: [],
   },
 
@@ -90,6 +100,11 @@ export const routes = [
     component: () => import('../pages/auth/Register.js'),
     guards: [],
   },
+  {
+    path: '/auth/finish-signup',
+    component: () => import('../pages/auth/FinishSignup.js'),
+    guards: [],
+  },
 
   // Customer account
   {
@@ -100,6 +115,11 @@ export const routes = [
   {
     path: '/account/bookings',
     component: () => import('../pages/account/BookingHistory.js'),
+    guards: ['auth'],
+  },
+  {
+    path: '/account/vouchers',
+    component: () => import('../pages/account/Vouchers.js'),
     guards: ['auth'],
   },
   // MVP: hidden
@@ -120,46 +140,72 @@ export const routes = [
   //   guards: ['auth'],
   // },
 
-  // Admin panel
+  // Admin panel — per-route permissions filter what each role can reach.
+  // See src/utils/permissions.js for the role→permission map.
   {
     path: '/admin',
     component: () => import('../pages/admin/AdminDashboard.js'),
-    guards: ['auth', 'admin'],
+    guards: ['auth', 'admin', 'perm:dashboard'],
   },
   {
     path: '/admin/checkins',
     component: () => import('../pages/admin/AdminCheckIns.js'),
-    guards: ['auth', 'admin'],
+    guards: ['auth', 'admin', 'perm:checkins'],
   },
   {
-    path: '/admin/bookings',
-    component: () => import('../pages/admin/AdminBookings.js'),
-    guards: ['auth', 'admin'],
+    path: '/admin/transactions',
+    component: () => import('../pages/admin/AdminTransactions.js'),
+    guards: ['auth', 'admin', 'perm:transactions'],
+  },
+  {
+    path: '/admin/cashbook',
+    component: () => import('../pages/admin/AdminCashbook.js'),
+    guards: ['auth', 'admin', 'perm:cashbook'],
+  },
+  {
+    path: '/admin/refunds',
+    component: () => import('../pages/admin/AdminRefunds.js'),
+    guards: ['auth', 'admin', 'perm:refunds'],
+  },
+  {
+    path: '/admin/vouchers',
+    component: () => import('../pages/admin/AdminVouchers.js'),
+    guards: ['auth', 'admin', 'perm:vouchers'],
+  },
+  {
+    path: '/admin/promotions',
+    component: () => import('../pages/admin/AdminPromotions.js'),
+    guards: ['auth', 'admin', 'perm:promotions'],
+  },
+  {
+    path: '/admin/legal',
+    component: () => import('../pages/admin/AdminLegal.js'),
+    guards: ['auth', 'admin', 'perm:legal'],
   },
   {
     path: '/admin/capacity',
     component: () => import('../pages/admin/AdminCapacity.js'),
-    guards: ['auth', 'admin'],
+    guards: ['auth', 'admin', 'perm:capacity'],
   },
   {
     path: '/admin/pricing',
     component: () => import('../pages/admin/AdminPricing.js'),
-    guards: ['auth', 'admin'],
-  },
-  {
-    path: '/admin/rates',
-    component: () => import('../pages/admin/AdminRates.js'),
-    guards: ['auth', 'admin'],
+    guards: ['auth', 'admin', 'perm:pricing'],
   },
   {
     path: '/admin/shuttle',
     component: () => import('../pages/admin/AdminShuttle.js'),
-    guards: ['auth', 'admin'],
+    guards: ['auth', 'admin', 'perm:shuttle'],
   },
   {
     path: '/admin/reviews',
     component: () => import('../pages/admin/AdminReviews.js'),
-    guards: ['auth', 'admin'],
+    guards: ['auth', 'admin', 'perm:reviews'],
+  },
+  {
+    path: '/admin/users',
+    component: () => import('../pages/admin/AdminUsers.js'),
+    guards: ['auth', 'admin', 'perm:users'],
   },
   // MVP: hidden
   // {

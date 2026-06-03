@@ -13,6 +13,7 @@ export default function Delivery(container) {
   });
 
   renderLegalPage(container, {
+    slug: 'delivery',
     title: t('legal.deliveryTitle'),
     intro: t('legal.deliveryIntro'),
     sections: [

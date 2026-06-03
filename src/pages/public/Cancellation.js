@@ -13,6 +13,7 @@ export default function Cancellation(container) {
   });
 
   renderLegalPage(container, {
+    slug: 'cancellation',
     title: t('legal.cancellationTitle'),
     intro: t('legal.cancellationIntro'),
     sections: [

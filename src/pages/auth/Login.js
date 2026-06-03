@@ -2,11 +2,16 @@ import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { loginWithEmail, loginWithGoogle } from '../../firebase/auth.js';
-import { ensureSignupVoucher } from '../../services/voucherService.js';
 import { mergeGuestDataForCurrentUser } from '../../services/userMergeService.js';
 import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { html } from '../../utils/dom.js';
+import { html, qs } from '../../utils/dom.js';
+import { showToast } from '../../components/core/Toast.js';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../firebase/config.js';
+import { isValidEmail } from '../../utils/validators.js';
+
+const requestPasswordResetFn = httpsCallable(functions, 'requestPasswordReset');
 
 const FIREBASE_ERROR_MAP = {
   'auth/invalid-email': 'auth.errors.invalidEmail',
@@ -79,6 +84,23 @@ export default function Login(container) {
             </button>
           </form>
 
+          <!-- Forgot password — collapses into an inline form -->
+          <div class="text-center mt-4">
+            <button type="button" data-forgot-toggle class="text-dim hover:text-charcoal text-[13px] underline transition-colors">${t('forgot.link')}</button>
+          </div>
+
+          <div data-forgot-panel class="hidden mt-4 p-4 rounded-2xl bg-frost border border-frost-deep">
+            <p class="text-[13px] text-charcoal/70 mb-3">${t('forgot.hint')}</p>
+            <form data-forgot-form class="space-y-3">
+              <input name="email" type="email" required placeholder="${t('forgot.emailLabel')}" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+              <div data-forgot-msg class="text-[13px] min-h-[1em]"></div>
+              <div class="flex gap-2 justify-end">
+                <button type="button" data-forgot-cancel class="px-4 py-2 rounded-xl bg-white text-charcoal/70 font-semibold text-[13px] hover:bg-frost-deep transition-colors border border-frost-deep">${t('forgot.cancel')}</button>
+                <button type="submit" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[13px] px-4 py-2 rounded-xl transition-colors">${t('forgot.submit')}</button>
+              </div>
+            </form>
+          </div>
+
           <!-- Register link -->
           <p class="text-center text-dim text-[14px] mt-6">
             ${t('auth.noAccount')} <a href="${localePath('/register')}" class="text-mango hover:text-mango-hover font-semibold transition-colors">${t('auth.registerLink')}</a>
@@ -121,10 +143,6 @@ export default function Login(container) {
     btn.textContent = '...';
     try {
       await loginWithEmail(email, password);
-      // Idempotent — creates the signup voucher only if the user doesn't
-      // already have one. Lets pre-feature accounts also receive it on
-      // their first login after the feature ships.
-      await ensureSignupVoucher().catch(() => {});
       // Reconcile any prior guest activity tied to this email — runs
       // best-effort, login still succeeds if it fails.
       await mergeGuestDataForCurrentUser();
@@ -136,13 +154,57 @@ export default function Login(container) {
     }
   });
 
+  // Forgot password toggle + submit
+  const forgotToggle = qs('[data-forgot-toggle]', page);
+  const forgotPanel = qs('[data-forgot-panel]', page);
+  const forgotForm = qs('[data-forgot-form]', page);
+  const forgotCancel = qs('[data-forgot-cancel]', page);
+  const forgotMsg = qs('[data-forgot-msg]', page);
+
+  forgotToggle.addEventListener('click', () => {
+    forgotPanel.classList.toggle('hidden');
+    if (!forgotPanel.classList.contains('hidden')) {
+      forgotMsg.textContent = '';
+      // Prefill from the login email if the user has typed it, then focus.
+      const emailInput = forgotForm.querySelector('input[name=email]');
+      if (form.email.value && !emailInput.value) emailInput.value = form.email.value;
+      emailInput.focus();
+    }
+  });
+  forgotCancel.addEventListener('click', () => forgotPanel.classList.add('hidden'));
+
+  forgotForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const emailVal = String(new FormData(forgotForm).get('email') || '').trim();
+    if (!isValidEmail(emailVal)) {
+      forgotMsg.textContent = t('forgot.error');
+      forgotMsg.className = 'text-danger text-[13px] min-h-[1em]';
+      return;
+    }
+    const btn = forgotForm.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+      await requestPasswordResetFn({ email: emailVal });
+      forgotMsg.textContent = t('forgot.sent');
+      forgotMsg.className = 'text-leaf text-[13px] min-h-[1em]';
+      showToast(t('forgot.sent'), 'success');
+    } catch (err) {
+      console.error('requestPasswordReset', err);
+      forgotMsg.textContent = t('forgot.error');
+      forgotMsg.className = 'text-danger text-[13px] min-h-[1em]';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = t('forgot.submit');
+    }
+  });
+
   // Google login
   const googleBtn = page.querySelector('[data-google-btn]');
   googleBtn.addEventListener('click', async () => {
     clearError();
     try {
       await loginWithGoogle();
-      await ensureSignupVoucher().catch(() => {});
       await mergeGuestDataForCurrentUser();
       navigate(localePath('/account'));
     } catch (err) {

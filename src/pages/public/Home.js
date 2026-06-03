@@ -4,7 +4,7 @@ import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { checkIcon, starIcon, planeIcon, clockIcon } from '../../components/widgets/icons.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
-import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS } from '../../utils/constants.js';
+import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL } from '../../utils/constants.js';
 import { subscribeCapacity } from '../../services/capacityService.js';
 import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
 import { getLongTermRates } from '../../services/longTermService.js';
@@ -219,7 +219,7 @@ export default function Home(container) {
           <!-- Commuter / Credits (right) -->
           <div class="bg-blueberry border-2 border-mango rounded-3xl p-8 flex flex-col relative">
             <div class="absolute -top-3 right-8 bg-mango text-charcoal text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
-            <div class="flex items-center gap-3 mb-6">
+            <div class="flex items-center gap-3 mb-3">
               <div class="w-10 h-10 rounded-xl bg-mango flex items-center justify-center">
                 ${clockIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-charcoal"')}
               </div>
@@ -228,6 +228,7 @@ export default function Home(container) {
                 <p class="text-white/70 text-[14px]">${t('funnel.commuter.tagline')}</p>
               </div>
             </div>
+            <p class="text-white/85 text-[13px] leading-relaxed mb-5">${t('funnel.commuter.description')}</p>
             <p class="text-white/70 text-[12px] font-mono uppercase tracking-wider mb-1">${locale === 'ro' ? 'De la' : 'From'}</p>
             <div class="flex items-baseline gap-1.5 mb-6">
               <span class="font-heading font-bold text-5xl text-white tracking-tight" data-credits-from>—</span>
@@ -300,6 +301,12 @@ export default function Home(container) {
         </div>
         <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto" data-reviews-grid>
           <!-- Populated after getPublishedReviews() resolves; uses FALLBACK_REVIEWS until then. -->
+        </div>
+        <div class="text-center mt-10">
+          <a href="${GOOGLE_REVIEWS_URL}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-white border border-frost-deep hover:border-mango text-charcoal font-semibold text-[14px] px-6 py-3 rounded-2xl shadow-sm hover:shadow-md transition-all">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.25 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.997 10.997 0 0012 23z"/><path fill="#FBBC04" d="M5.84 14.1A6.59 6.59 0 015.49 12c0-.73.13-1.44.35-2.1V7.06H2.18A10.997 10.997 0 001 12c0 1.78.43 3.46 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/></svg>
+            ${t('reviews.viewOnGoogle')}
+          </a>
         </div>
       </div>
     </section>

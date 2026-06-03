@@ -13,6 +13,13 @@ export const CREATE_PAYMENT_URL =
   import.meta.env.VITE_CREATE_PAYMENT_URL
   || 'https://createpayment-zddpe6b7fa-ew.a.run.app';
 
+// Self-service repay for an existing pay-at-pickup order. Customer follows
+// the link from their confirmation email; the function returns a fresh
+// Netopia handoff envelope keyed to the same orderId.
+export const REPAY_ORDER_URL =
+  import.meta.env.VITE_REPAY_ORDER_URL
+  || 'https://repayorder-zddpe6b7fa-ew.a.run.app';
+
 // ── Contact (public, operating location — the parking lot itself) ──
 // Corbeanca is adjacent to Otopeni (~5 km from Henri Coandă Airport); site copy
 // still references "Aeroportul Otopeni" as the destination served via shuttle.
@@ -32,6 +39,8 @@ export const ANPC_SAL_URL = 'https://anpc.ro/ce-este-sal/';
 export const ANPC_SOL_URL = 'https://consumer-redress.ec.europa.eu/index_en';
 // Address-based embed — works without an API key and auto-tracks the address string.
 export const GOOGLE_MAPS_EMBED = 'https://maps.google.com/maps?q=' + encodeURIComponent('Strada Radarului 1, Corbeanca, Ilfov') + '&output=embed';
+// Short link to the public Google Maps reviews tab for the location.
+export const GOOGLE_REVIEWS_URL = 'https://maps.app.goo.gl/ZeDmitAccYJ6K9nQ6';
 
 export const LOYALTY_TIERS = {
   bronze: { min: 0, max: 499, discount: 0, label: 'Bronze' },

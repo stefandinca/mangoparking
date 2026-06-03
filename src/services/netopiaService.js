@@ -21,11 +21,20 @@
 //      the "pay at the lot" confirmation copy.
 
 import { CREATE_PAYMENT_URL } from '../utils/constants.js';
+import { auth } from '../firebase/config.js';
 
 export async function startNetopiaPayment(payload) {
+  // Pass a Firebase ID token if the user is signed in — the server uses
+  // it to verify the voucherId/customerId before applying a discount.
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const idToken = await auth.currentUser?.getIdToken?.();
+    if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+  } catch (_) { /* anonymous flow — voucher won't be applied */ }
+
   const resp = await fetch(CREATE_PAYMENT_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
 
@@ -45,10 +54,14 @@ export async function startNetopiaPayment(payload) {
     return orderId;
   }
 
-  if (!action || !env_key || !data) throw new Error('Invalid Netopia handoff payload');
+  submitNetopiaHandoff({ action, env_key, data, cipher, iv });
+  return orderId;
+}
 
-  // Build a hidden form and auto-submit. The browser leaves the SPA at
-  // this point — there is no return value to await.
+// Build a hidden POST form and submit it. Used by both the initial
+// payment flow and the self-service repay flow.
+export function submitNetopiaHandoff({ action, env_key, data, cipher, iv }) {
+  if (!action || !env_key || !data) throw new Error('Invalid Netopia handoff payload');
   const form = document.createElement('form');
   form.method = 'POST';
   form.action = action;
@@ -67,5 +80,4 @@ export async function startNetopiaPayment(payload) {
   }
   document.body.appendChild(form);
   form.submit();
-  return orderId;
 }

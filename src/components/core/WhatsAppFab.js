@@ -3,8 +3,8 @@
 // Mounted once at boot from main.js, outside the #app container so it
 // survives every route render. Hidden on admin routes — the router
 // fires `app-rendered` after each navigation, which is when we re-evaluate
-// visibility. On mobile, sits above the Footer's mobile contact bar
-// (bottom-20) so the two don't collide; on md+ it drops to bottom-6.
+// visibility. Mobile already has a WhatsApp button in the Footer contact
+// bar, so the FAB is desktop-only (md+) to avoid the duplicate.
 
 import { CONTACT_PHONE } from '../../utils/constants.js';
 import { t, onLocaleChange, stripLocale } from '../../i18n/index.js';
@@ -20,7 +20,13 @@ function isAdminRoute() {
 
 function refresh() {
   if (!fab) return;
-  fab.style.display = isAdminRoute() ? 'none' : '';
+  // On admin routes, force-hide overriding the responsive md:flex.
+  // Otherwise let the className do its job (hidden on mobile, flex on md+).
+  if (isAdminRoute()) {
+    fab.style.display = 'none';
+  } else {
+    fab.style.removeProperty('display');
+  }
   fab.href = `https://wa.me/${PHONE_DIGITS}?text=${encodeURIComponent(t('whatsapp.message'))}`;
   fab.setAttribute('aria-label', t('whatsapp.label'));
 }
@@ -31,11 +37,12 @@ export function mountWhatsAppFab() {
   fab.target = '_blank';
   fab.rel = 'noopener noreferrer';
   fab.className = [
-    'fixed right-6 bottom-20 md:bottom-6 z-40',
+    'fixed right-6 bottom-6 z-40',
+    'hidden md:flex',
     'w-14 h-14 rounded-full',
     'bg-leaf hover:bg-leaf/90 text-white',
     'shadow-lg hover:shadow-xl',
-    'flex items-center justify-center',
+    'items-center justify-center',
     'transition-all duration-200 hover:scale-105',
   ].join(' ');
   fab.innerHTML = whatsappIcon;

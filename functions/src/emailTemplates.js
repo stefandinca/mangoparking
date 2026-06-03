@@ -16,32 +16,34 @@
 
 const TEMPLATES = {
   // Account
-  'signup-welcome-ro':              null,   // TODO: set Brevo ID
-  'signup-welcome-en':              null,
-  'password-reset-ro':              null,
-  'password-reset-en':              null,
-  'admin-invite-ro':                null,
-  'admin-invite-en':                null,
+  'signup-welcome-ro':              4,   
+  'signup-welcome-en':              5,
+  'password-reset-ro':              6,
+  'password-reset-en':              7,
+  'admin-invite-ro':                8,
+  'admin-invite-en':                1,
 
   // Reservations
-  'booking-longterm-confirm-ro':    null,
-  'booking-longterm-confirm-en':    null,
+  'booking-longterm-confirm-ro':    2,
+  'booking-longterm-confirm-en':    9,
+  'booking-refunded-ro':            22,
+  'booking-refunded-en':            21,
 
   // Credit packs
-  'credit-purchase-ro':             null,
-  'credit-purchase-en':             null,
-  'credit-used-ro':                 null,
-  'credit-used-en':                 null,
-  'low-credit-warning-ro':          null,
-  'low-credit-warning-en':          null,
+  'credit-purchase-ro':             3,
+  'credit-purchase-en':             10,
+  'credit-used-ro':                 11,
+  'credit-used-en':                 12,
+  'low-credit-warning-ro':          13,
+  'low-credit-warning-en':          14,
 
   // Reminders (scheduled)
-  'reminder-checkin-24h-ro':        null,
-  'reminder-checkin-24h-en':        null,
-  'reminder-checkout-24h-ro':       null,
-  'reminder-checkout-24h-en':       null,
-  'reminder-commuter-7pm-ro':       null,
-  'reminder-commuter-7pm-en':       null,
+  'reminder-checkin-24h-ro':        15,
+  'reminder-checkin-24h-en':        16,
+  'reminder-checkout-24h-ro':       17,
+  'reminder-checkout-24h-en':       18,
+  'reminder-commuter-7pm-ro':       19,
+  'reminder-commuter-7pm-en':       20,
 };
 
 export function templateId(name, locale = 'ro') {

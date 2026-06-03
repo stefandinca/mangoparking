@@ -20,7 +20,9 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
+    "dompurify": "^3.4.7",
     "firebase": "^12.10.0",
-    "flatpickr": "^4.6.13"
+    "flatpickr": "^4.6.13",
+    "quill": "^2.0.3"
   }
 }
