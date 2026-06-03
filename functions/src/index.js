@@ -26,6 +26,7 @@ import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { defineSecret } from 'firebase-functions/params';
 import {
   NETOPIA_ENDPOINTS,
@@ -35,6 +36,18 @@ import {
   crcSuccess,
   crcError,
 } from './netopia.js';
+import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
+import { sendRepayPaidEmail, sendRefundIssuedEmail } from './emails.js';
+import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
+
+// Email triggers (Phase E) — re-exported so firebase deploy picks them up.
+export { onUserCreated, onBookingCreated, onTokenTransactionCreated } from './emails.js';
+
+// ANAF CUI lookup callable (Phase B4).
+export { lookupCui } from './cui.js';
+
+// Scheduled jobs (Phase F).
+export { daily24hReminders, commuter7PMCheck, expireStaleHolds, markNoShows } from './scheduled.js';
 
 initializeApp();
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
@@ -74,7 +87,7 @@ function generateBookingCode(type) {
   return `${prefix}-${suffix}`;
 }
 
-async function creditTokens({ packId, quantity, customerData, source = 'netopia', paidBy = null, grantedBy = null }) {
+async function creditTokens({ packId, quantity, amount = 0, customerData, source = 'netopia', paidBy = null, grantedBy = null }) {
   const db = getFirestore();
   const docId = balanceDocId(customerData);
   const plate = normalizePlate(customerData.licensePlate);
@@ -85,11 +98,18 @@ async function creditTokens({ packId, quantity, customerData, source = 'netopia'
     if (snap.exists) {
       const data = snap.data();
       const plates = data.plates?.includes(plate) ? data.plates : [...(data.plates || []), plate];
-      tx.update(ref, {
+      // Patch contact details on the existing doc if they were missing —
+      // a guest plate doc may have been created without an email, and
+      // later signed up: we want resolveRecipient to find them.
+      const patch = {
         balance: FieldValue.increment(quantity),
         totalPurchased: FieldValue.increment(quantity),
         plates,
-      });
+      };
+      if (!data.email && customerData.email) patch.email = customerData.email;
+      if (!data.displayName && customerData.name) patch.displayName = customerData.name;
+      if (!data.phone && customerData.phone) patch.phone = customerData.phone;
+      tx.update(ref, patch);
     } else {
       tx.set(ref, {
         balance: quantity,
@@ -107,6 +127,9 @@ async function creditTokens({ packId, quantity, customerData, source = 'netopia'
     licensePlate: plate,
     type: 'purchase',
     quantity,
+    // Total RON paid for this batch — required by the credit-purchase
+    // email template; blank otherwise.
+    amount: Number(amount) || 0,
     packId: packId || null,
     timestamp: new Date().toISOString(),
     source,
@@ -115,12 +138,60 @@ async function creditTokens({ packId, quantity, customerData, source = 'netopia'
     billing: customerData.billing || { type: 'PF' },
   });
 
+  // Cache billing on the user profile for future pre-fill on subsequent purchases.
+  if (customerData.customerId && customerData.billing) {
+    await db.collection('users')
+      .doc(customerData.customerId)
+      .set({ billing: customerData.billing }, { merge: true })
+      .catch((err) => console.warn('billing profile cache failed:', err?.message));
+  }
+
   return docId;
+}
+
+// Pick the first available spot and flip it to `reserved`, then return
+// its id. Returns null if no spot is free — callers should treat that
+// as "all reserved" and continue without a spotId (admin can assign
+// manually from the capacity page).
+//
+// Uses a Firestore transaction so two concurrent reservations don't
+// grab the same spot.
+async function reserveAvailableSpot(bookingId) {
+  const db = getFirestore();
+  const snap = await db.collection('spots')
+    .where('status', '==', 'available')
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+
+  const candidateId = snap.docs[0].id;
+  const ref = db.collection('spots').doc(candidateId);
+
+  try {
+    return await db.runTransaction(async (tx) => {
+      const cur = await tx.get(ref);
+      if (!cur.exists || cur.data().status !== 'available') {
+        return null;
+      }
+      tx.update(ref, {
+        status: 'reserved',
+        currentBookingId: bookingId || null,
+      });
+      return candidateId;
+    });
+  } catch (err) {
+    console.warn('reserveAvailableSpot transaction failed:', err?.message);
+    return null;
+  }
 }
 
 async function createBookingFromOrder(orderId, order) {
   const db = getFirestore();
   const nowIso = new Date().toISOString();
+  // Branch on the payment method so the booking is written with the
+  // correct paymentStatus atomically — the onBookingCreated trigger
+  // reads this exact snapshot to pick the email-template branch.
+  const isPickup = order.paymentMethod === 'pay-at-pickup';
   const bookingRef = await db.collection('bookings').add({
     code: generateBookingCode('longTerm'),
     type: 'longTerm',
@@ -143,15 +214,38 @@ async function createBookingFromOrder(orderId, order) {
       phone: order.customerData.phone || '',
     },
     billing: order.customerData.billing || { type: 'PF' },
+    // Always reference the pendingOrders doc — admin "Mark paid" and the
+    // pay-online repay link both need it. Field is no longer "paid via X"
+    // semantics; it's just the order reference.
     paymentId: orderId,
-    paymentMethod: order.paymentMethod || 'online',
-    paymentStatus: 'paid',
-    paidAt: nowIso,
-    paidBy: 'netopia',
+    paymentMethod: isPickup ? 'pay-at-pickup' : 'online',
+    paymentStatus: isPickup ? 'unpaid' : 'paid',
+    paidAt: isPickup ? null : nowIso,
+    paidBy: isPickup ? null : 'netopia',
+    spotId: null,
     createdAt: nowIso,
     completedAt: null,
     source: 'web',
   });
+
+  // Reserve a spot only when the booking is already paid. Pay-at-pickup
+  // bookings reserve later, when admin flips them to paid.
+  if (!isPickup) {
+    const spotId = await reserveAvailableSpot(bookingRef.id);
+    if (spotId) {
+      await bookingRef.update({ spotId });
+    }
+  }
+
+  // Cache billing on the user profile for future pre-fill. Only when a
+  // logged-in customer placed the order — guests have no profile to write to.
+  if (order.customerData.customerId && order.customerData.billing) {
+    await db.collection('users')
+      .doc(order.customerData.customerId)
+      .set({ billing: order.customerData.billing }, { merge: true })
+      .catch((err) => console.warn('billing profile cache failed:', err?.message));
+  }
+
   return bookingRef.id;
 }
 
@@ -190,11 +284,55 @@ export const createPayment = onRequest(
     let amount;
     let details;
     if (orderType === 'longTerm') {
-      amount = Number(body.totalPrice);
-      details = `Mango Parking — parcare pe termen lung (${body.days} zile)`;
+      // Server-authoritative recomputation — re-derive the expected
+      // online total from the canonical rates + seasonal periods and
+      // require an exact match against what the client sent. Without
+      // this, a tampered totalPrice would be charged as-is.
+      const check = await computeAuthoritativeLongTermTotal({
+        dropoffAt: body.dropoffAt,
+        pickupAt: body.pickupAt,
+      }).catch((err) => ({ ok: false, error: `compute-failed:${err?.message || 'unknown'}` }));
+      if (!check.ok) {
+        console.warn('createPayment longTerm price validation refused:', check.error, { dropoffAt: body.dropoffAt, pickupAt: body.pickupAt });
+        return res.status(400).json({ error: `price validation failed: ${check.error}` });
+      }
+      const submitted = Number(body.totalPrice);
+      if (!Number.isFinite(submitted) || submitted <= 0) {
+        return res.status(400).json({ error: 'invalid totalPrice' });
+      }
+      if (submitted !== check.expected) {
+        console.warn('createPayment longTerm price mismatch:', { submitted, expected: check.expected, days: check.days, periodId: check.periodId, plate: cd.licensePlate });
+        return res.status(400).json({
+          error: 'price mismatch — refresh the page and try again',
+          expected: check.expected,
+        });
+      }
+      amount = check.expected;
+      details = `Mango Parking — parcare pe termen lung (${check.days} zile)`;
     } else {
-      amount = Number(body.packPrice || body.totalPrice || 0);
-      details = `Mango Parking — pachet ${body.quantity} credite`;
+      // Credits — recompute against the canonical token pack to
+      // prevent submitting a discounted price for a premium pack.
+      const packCheck = await computeAuthoritativePackPrice({
+        packId: body.packId,
+        quantity: body.quantity,
+      }).catch((err) => ({ ok: false, error: `compute-failed:${err?.message || 'unknown'}` }));
+      if (!packCheck.ok) {
+        console.warn('createPayment credits price validation refused:', packCheck.error, { packId: body.packId, quantity: body.quantity });
+        return res.status(400).json({ error: `pack validation failed: ${packCheck.error}` });
+      }
+      const submitted = Number(body.packPrice || body.totalPrice || 0);
+      if (!Number.isFinite(submitted) || submitted <= 0) {
+        return res.status(400).json({ error: 'invalid packPrice' });
+      }
+      if (submitted !== packCheck.expectedPrice) {
+        console.warn('createPayment credits price mismatch:', { submitted, expected: packCheck.expectedPrice, packId: body.packId, plate: cd.licensePlate });
+        return res.status(400).json({
+          error: 'price mismatch — refresh the page and try again',
+          expected: packCheck.expectedPrice,
+        });
+      }
+      amount = packCheck.expectedPrice;
+      details = `Mango Parking — pachet ${packCheck.expectedQty} credite`;
     }
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Missing or invalid amount' });
@@ -210,27 +348,70 @@ export const createPayment = onRequest(
       }
     }
 
-    // Voucher application — only honored for authenticated customers AND
-    // online payments. Pay-at-pickup orders skip vouchers entirely;
-    // discounts there happen at the till, not in this flow.
+    // Voucher application — supports BOTH the legacy `vouchers/{uid}`
+    // signup-bonus (already-issued users) AND the new `promoVouchers/{code}`
+    // system (admin-created codes). Promo wins when both are submitted —
+    // vouchers cannot be combined.
+    //
+    // Skipped entirely for pay-at-pickup orders so the customer pays the
+    // displayed lot price; vouchers only apply to online payments.
     let voucherAmount = 0;
-    let voucherId = null;
-    if (paymentMethod === 'online' && body.voucherId && cd.customerId && body.voucherId === cd.customerId) {
-      try {
-        const v = await getFirestore().collection('vouchers').doc(body.voucherId).get();
-        if (v.exists) {
-          const data = v.data();
-          if (data.userId === cd.customerId
-              && data.status === 'unused'
-              && Number(data.amount) > 0
-              && Number(data.amount) < amount) {  // strict <: keep amount > 0 for Netopia
-            voucherAmount = Number(data.amount);
-            voucherId = body.voucherId;
-            amount = amount - voucherAmount;
-          }
+    let voucherId = null;       // legacy signup voucher id (== uid)
+    let promoVoucherCode = null; // new promoVouchers code
+    let promoVoucherDoc = null;  // resolved voucher details for the redemption record
+
+    if (paymentMethod === 'online') {
+      // Establish caller identity once — used by both voucher paths.
+      const idToken = (req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      let authedUid = null;
+      if (idToken) {
+        try {
+          const decoded = await getAuth().verifyIdToken(idToken);
+          authedUid = decoded.uid;
+        } catch (err) {
+          console.warn('createPayment: bad ID token, ignoring vouchers:', err?.message);
         }
-      } catch (err) {
-        console.warn('Voucher lookup failed (ignoring):', err);
+      }
+
+      // NEW path: promo voucher code.
+      if (body.voucherCode) {
+        const promoRes = await resolveVoucher({
+          code: body.voucherCode,
+          plate: cd.licensePlate,
+          baseAmount: amount,
+          authedUid,
+        });
+        if (promoRes.ok) {
+          voucherAmount = promoRes.discountAmount;
+          promoVoucherCode = promoRes.voucher.code;
+          promoVoucherDoc = { ...promoRes.voucher, identityKey: promoRes.identityKey };
+          amount = amount - voucherAmount;
+        } else {
+          // The booking page previewed the code, so a refusal here means
+          // it expired or got fully redeemed between preview and pay.
+          // Surface clearly so the client can drop the code and retry.
+          console.warn('createPayment promo voucher refused:', promoRes.error, { code: body.voucherCode, plate: cd.licensePlate });
+          return res.status(400).json({ error: `voucher: ${promoRes.error}` });
+        }
+      }
+      // LEGACY path: signup bonus (only when no promo code was applied).
+      else if (body.voucherId && cd.customerId && body.voucherId === cd.customerId && authedUid && authedUid === cd.customerId) {
+        try {
+          const v = await getFirestore().collection('vouchers').doc(body.voucherId).get();
+          if (v.exists) {
+            const data = v.data();
+            if (data.userId === authedUid
+                && data.status === 'unused'
+                && Number(data.amount) > 0
+                && Number(data.amount) < amount) {  // strict <: keep amount > 0 for Netopia
+              voucherAmount = Number(data.amount);
+              voucherId = body.voucherId;
+              amount = amount - voucherAmount;
+            }
+          }
+        } catch (err) {
+          console.warn('Voucher lookup failed (ignoring):', err);
+        }
       }
     }
 
@@ -240,8 +421,9 @@ export const createPayment = onRequest(
       orderType,
       ...body,
       amount,
-      voucherId,           // null when no voucher applied
-      voucherAmount,       // 0 when no voucher applied
+      voucherId,                 // legacy signup voucher; null otherwise
+      voucherAmount,             // RON discount, regardless of which voucher path
+      promoVoucherCode,          // new promo voucher code; null when not used
       status: 'pending',
       paymentMethod,
       paymentStatus: 'unpaid',
@@ -250,19 +432,59 @@ export const createPayment = onRequest(
       createdAt: new Date().toISOString(),
     };
 
+    // Atomic redemption record + counter increment for the promo voucher.
+    // Done BEFORE writing the pending order so a stampede on the same code
+    // can't get two requests past the duplicate-check inside resolveVoucher.
+    // If the transaction throws (e.g. someone else just claimed the last
+    // slot of a capped voucher), surface 409 so the customer can re-enter.
+    if (promoVoucherCode && promoVoucherDoc) {
+      try {
+        await getFirestore().runTransaction(async (tx) => {
+          const voucherRef = getFirestore().collection('promoVouchers').doc(promoVoucherCode);
+          const vSnap = await tx.get(voucherRef);
+          if (!vSnap.exists) throw new HttpsError('not-found', 'voucher disappeared mid-flight');
+          const vData = vSnap.data();
+          const cap = Number(vData.maxRedemptionsTotal);
+          if (Number.isFinite(cap) && cap > 0 && Number(vData.redeemedCount || 0) >= cap) {
+            throw new HttpsError('already-exists', 'voucher fully redeemed');
+          }
+          // Race-safe duplicate guard — resolveVoucher already checked but
+          // a concurrent createPayment from the same identity could slip.
+          const dupSnap = await getFirestore().collection('voucherRedemptions')
+            .where('voucherCode', '==', promoVoucherCode)
+            .where('identityKey', '==', promoVoucherDoc.identityKey)
+            .limit(1)
+            .get();
+          if (!dupSnap.empty) throw new HttpsError('already-exists', 'voucher already redeemed by this identity');
+
+          const redemptionRef = getFirestore().collection('voucherRedemptions').doc();
+          tx.set(redemptionRef, {
+            voucherCode: promoVoucherCode,
+            identityKey: promoVoucherDoc.identityKey,
+            userId: cd.customerId || null,
+            plate: cd.licensePlate || null,
+            orderId,
+            bookingId: null,             // patched by IPN handler for online
+            amount: voucherAmount,
+            type: promoVoucherDoc.type,
+            value: promoVoucherDoc.value,
+            redeemedAt: new Date().toISOString(),
+          });
+          tx.update(voucherRef, { redeemedCount: (Number(vData.redeemedCount) || 0) + 1 });
+        });
+      } catch (err) {
+        console.warn('createPayment voucher redemption failed:', err?.message);
+        return res.status(409).json({ error: `voucher: ${err?.message || 'redemption-failed'}` });
+      }
+    }
+
     // For pay-at-pickup longTerm bookings, create the booking doc now so
     // the customer's reservation is confirmed at the lot. Credits aren't
     // credited until cash is collected (admin flips status via the
-    // adminMarkOrderPaid callable).
+    // adminMarkOrderPaid callable). createBookingFromOrder writes the
+    // correct paymentStatus from order.paymentMethod, no override needed.
     if (paymentMethod === 'pay-at-pickup' && orderType === 'longTerm') {
       const bookingId = await createBookingFromOrder(orderId, { ...body, paymentMethod });
-      // createBookingFromOrder stamps paymentStatus='paid' by default (it
-      // was designed for the IPN happy path). Override here.
-      await getFirestore().collection('bookings').doc(bookingId).update({
-        paymentStatus: 'unpaid',
-        paidAt: null,
-        paidBy: null,
-      });
       pendingDoc.bookingId = bookingId;
     }
 
@@ -368,20 +590,58 @@ export const netopiaCallback = onRequest(
     if ((action === 'confirmed' || action === 'paid') && errorCode === '0') {
       try {
         const nowIso = new Date().toISOString();
+        const isRepay = pending.paymentMethod === 'pay-at-pickup' && pending.bookingId;
         if (pending.orderType === 'longTerm') {
-          const bookingId = await createBookingFromOrder(orderId, pending);
+          // Repay path: a pay-at-pickup booking was already created at
+          // order time; this IPN is the online repay coming through.
+          // Update the existing booking instead of creating a duplicate.
+          let bookingId = pending.bookingId;
+          if (bookingId) {
+            // Reserve a spot now that the booking is paid (it had none
+            // because pay-at-pickup bookings don't reserve until paid).
+            const bookingRef = db.collection('bookings').doc(bookingId);
+            const bookingSnap = await bookingRef.get();
+            const patch = {
+              paymentStatus: 'paid',
+              paidAt: nowIso,
+              paidBy: 'netopia',
+              paymentMethod: 'online',
+              paymentId: orderId,
+            };
+            if (bookingSnap.exists && !bookingSnap.data().spotId) {
+              const spotId = await reserveAvailableSpot(bookingId);
+              if (spotId) patch.spotId = spotId;
+            }
+            await bookingRef.update(patch);
+          } else {
+            bookingId = await createBookingFromOrder(orderId, pending);
+          }
           await orderRef.update({
             status: 'paid',
             bookingId,
             netopiaAction: action,
+            paymentMethod: 'online',
             paymentStatus: 'paid',
             paidAt: nowIso,
             paidBy: 'netopia',
+            repayInProgress: FieldValue.delete(),
           });
+          // For repays, the onBookingCreated trigger already fired (with
+          // paid=false). Send a fresh "payment received" email so the
+          // customer gets confirmation. New bookings get this email via
+          // the trigger automatically.
+          if (isRepay) {
+            try {
+              await sendRepayPaidEmail(bookingId);
+            } catch (err) {
+              console.warn('repay paid-email failed (booking still updated):', err?.message);
+            }
+          }
         } else {
           const balanceDocId = await creditTokens({
             packId: pending.packId,
             quantity: pending.quantity,
+            amount: pending.amount,
             customerData: pending.customerData,
           });
           await orderRef.update({
@@ -585,8 +845,58 @@ export const mergeGuestData = onCall(
   }
 );
 
-// ── Admin auth gate ─────────────────────────────────────────────────────
-// Read users/{uid}.role — admin or staff may invoke staff-gated callables.
+// ── Cashbook helpers ────────────────────────────────────────────────────
+// One ledger row per cash payment collected at the lot. Powers /admin/cashbook
+// for both the "my open day" view and the close-and-generate-report flow.
+// Only CASH is recorded here — card payments are tracked on the source doc
+// (booking / pendingOrder / tokenTransaction) but never reach the cashbook.
+async function recordCashEntry({
+  agentUid,
+  amount,
+  source,
+  plate = null,
+  payerName = null,
+  bookingId = null,
+  orderId = null,
+  tokenBalanceDocId = null,
+}) {
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) return null;
+  if (!agentUid) return null;
+  const db = getFirestore();
+  let agentName = agentUid;
+  try {
+    const snap = await db.collection('users').doc(agentUid).get();
+    const d = snap.exists ? snap.data() : null;
+    agentName = d?.displayName || d?.email || agentUid;
+  } catch { /* fall through with uid as name */ }
+  const nowIso = new Date().toISOString();
+  const ref = await db.collection('cashEntries').add({
+    agentUid,
+    agentName,
+    amount: amt,
+    paidBy: 'cash',
+    paidAt: nowIso,
+    paidAtDay: nowIso.slice(0, 10),
+    source,
+    plate,
+    payerName,
+    bookingId,
+    orderId,
+    tokenBalanceDocId,
+    closedAt: null,
+    closedBy: null,
+    closedReportId: null,
+  });
+  return ref.id;
+}
+
+// ── Admin auth gates ────────────────────────────────────────────────────
+// Roles: admin > agent (was 'staff') > driver > customer.
+// `assertStaff` is the most permissive backoffice gate — allows any role
+// with admin-side access (driver included), for check-in/check-out ops.
+// `assertAgent` excludes drivers — use for money-bearing ops (mark-paid,
+// cashbook handover, etc.).
 async function assertStaff(request) {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated');
@@ -594,8 +904,21 @@ async function assertStaff(request) {
   const uid = request.auth.uid;
   const snap = await getFirestore().collection('users').doc(uid).get();
   const role = snap.exists ? snap.data().role : null;
-  if (role !== 'admin' && role !== 'staff') {
-    throw new HttpsError('permission-denied', 'Staff or admin only');
+  if (!['admin', 'agent', 'staff', 'driver'].includes(role)) {
+    throw new HttpsError('permission-denied', 'Backoffice access required');
+  }
+  return { uid, role };
+}
+
+async function assertAgent(request) {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be authenticated');
+  }
+  const uid = request.auth.uid;
+  const snap = await getFirestore().collection('users').doc(uid).get();
+  const role = snap.exists ? snap.data().role : null;
+  if (!['admin', 'agent', 'staff'].includes(role)) {
+    throw new HttpsError('permission-denied', 'Agent or admin only');
   }
   return { uid, role };
 }
@@ -610,11 +933,21 @@ export const adminMarkOrderPaid = onCall(
   { region: 'europe-west1', cors: true },
   async (request) => {
     const { uid } = await assertStaff(request);
-    const { orderId, paidBy } = request.data || {};
+    const { orderId, paidBy, payerDetails } = request.data || {};
     if (!orderId) throw new HttpsError('invalid-argument', 'Missing orderId');
     if (!['cash', 'card'].includes(paidBy)) {
       throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
     }
+
+    // payerDetails are required for cashbook reconciliation — without
+    // them, fiscal audit on a cash payment is impossible. Optional only
+    // for backward compat (e.g. an admin reusing an older client).
+    const payer = payerDetails && typeof payerDetails === 'object' ? {
+      firstName: String(payerDetails.firstName || '').trim(),
+      lastName: String(payerDetails.lastName || '').trim(),
+      locality: String(payerDetails.locality || '').trim(),
+      address: String(payerDetails.address || '').trim(),
+    } : null;
 
     const db = getFirestore();
     const orderRef = db.collection('pendingOrders').doc(orderId);
@@ -633,12 +966,15 @@ export const adminMarkOrderPaid = onCall(
       paidAt: nowIso,
       paidBy: paidBy === 'cash' ? 'admin-cash' : 'admin-card',
       status: 'paid',
+      collectedByUid: uid,
+      ...(payer ? { payerDetails: payer } : {}),
     };
 
     if (pending.orderType === 'credits') {
       const docId = await creditTokens({
         packId: pending.packId,
         quantity: pending.quantity,
+        amount: pending.amount,
         customerData: pending.customerData,
       });
       await orderRef.update({ ...paymentMark, balanceDocId: docId });
@@ -646,11 +982,38 @@ export const adminMarkOrderPaid = onCall(
       // If the booking was pre-created at order time (pay-at-pickup
       // longTerm path), flip its payment fields. Otherwise create it now.
       const bookingId = pending.bookingId || await createBookingFromOrder(orderId, pending);
-      await db.collection('bookings').doc(bookingId).update({
+      const bookingRef = db.collection('bookings').doc(bookingId);
+      const bookingSnap = await bookingRef.get();
+      const patch = {
         paymentStatus: 'paid',
         paidAt: nowIso,
         paidBy: paymentMark.paidBy,
-      });
+        collectedByUid: uid,
+      };
+      // If admin captured payer details (the "Încasează acum" form), patch
+      // the booking's billing field so cashbook + future invoicing have
+      // a complete picture. Merge with the existing billing (e.g. PJ
+      // company info captured earlier) rather than overwriting it.
+      if (payer) {
+        const existing = bookingSnap.exists ? (bookingSnap.data().billing || {}) : {};
+        patch.billing = {
+          ...existing,
+          type: existing.type || 'PF',
+          firstName: payer.firstName,
+          lastName: payer.lastName,
+          locality: payer.locality,
+          address: payer.address,
+        };
+      }
+      // The reservation is now real (payment confirmed) — reserve a spot
+      // if one isn't already assigned. createBookingFromOrder skips this
+      // for unpaid pay-at-pickup bookings to avoid orphaning a spot if
+      // the customer never shows up.
+      if (bookingSnap.exists && !bookingSnap.data().spotId) {
+        const spotId = await reserveAvailableSpot(bookingId);
+        if (spotId) patch.spotId = spotId;
+      }
+      await bookingRef.update(patch);
       await orderRef.update({ ...paymentMark, bookingId });
     } else {
       throw new HttpsError('invalid-argument', `Unknown orderType: ${pending.orderType}`);
@@ -665,7 +1028,763 @@ export const adminMarkOrderPaid = onCall(
       timestamp: nowIso,
     });
 
+    // Cashbook ledger — only cash. Card payments stay on the order doc
+    // but don't enter the cashbook (per ops requirement).
+    if (paidBy === 'cash') {
+      const cashAmount = pending.orderType === 'credits'
+        ? Number(pending.amount) || 0
+        : Number(pending.totalPrice) || 0;
+      await recordCashEntry({
+        agentUid: uid,
+        amount: cashAmount,
+        source: pending.orderType === 'credits' ? 'credits-markpaid' : 'longterm-markpaid',
+        plate: pending.customerData?.licensePlate || null,
+        payerName: payer ? `${payer.firstName} ${payer.lastName}`.trim() : (pending.customerData?.name || null),
+        orderId,
+        bookingId: pending.bookingId || null,
+      });
+    }
+
     return { ok: true };
+  }
+);
+
+// ── adminMarkOrderUnpaid (callable) ─────────────────────────────────────
+// Misclick recovery. Reverses an admin-cash/card "Mark paid" action.
+// Refuses to reverse Netopia-paid orders (that's a refund, not a
+// misclick). For longTerm, requires the booking to still be 'upcoming'
+// (refuses reversal once the customer has been checked in). For credits,
+// requires the balance to still cover the granted quantity (refuses if
+// any of the granted tokens have already been used).
+export const adminMarkOrderUnpaid = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertStaff(request);
+    const { orderId } = request.data || {};
+    if (!orderId) throw new HttpsError('invalid-argument', 'Missing orderId');
+
+    const db = getFirestore();
+    const orderRef = db.collection('pendingOrders').doc(orderId);
+    const snap = await orderRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Order not found');
+
+    const pending = snap.data();
+    if (pending.paymentStatus !== 'paid') {
+      // Idempotent — nothing to reverse.
+      return { ok: true, alreadyUnpaid: true };
+    }
+    if (pending.paidBy !== 'admin-cash' && pending.paidBy !== 'admin-card') {
+      throw new HttpsError(
+        'failed-precondition',
+        'Only cash/card admin-payments can be reversed here. Netopia payments require a refund.'
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const reversalMark = {
+      paymentStatus: 'unpaid',
+      paidAt: null,
+      paidBy: null,
+      status: 'pending',
+      reversedAt: nowIso,
+      reversedBy: uid,
+    };
+
+    if (pending.orderType === 'longTerm') {
+      const bookingId = pending.bookingId;
+      if (!bookingId) {
+        throw new HttpsError('failed-precondition', 'Order has no linked booking');
+      }
+      const bookingRef = db.collection('bookings').doc(bookingId);
+      const bookingSnap = await bookingRef.get();
+      if (!bookingSnap.exists) {
+        throw new HttpsError('not-found', 'Booking not found');
+      }
+      const booking = bookingSnap.data();
+      if (booking.status !== 'upcoming') {
+        throw new HttpsError(
+          'failed-precondition',
+          'Booking has already been checked in — reversal not allowed.'
+        );
+      }
+      // Release the reserved spot — the booking is no longer paid, so
+      // the reservation isn't real anymore. Capacity map flips it back
+      // to green/available.
+      const reservedSpot = booking.spotId;
+      await bookingRef.update({
+        paymentStatus: 'unpaid',
+        paidAt: null,
+        paidBy: null,
+        spotId: null,
+      });
+      if (reservedSpot) {
+        try {
+          const spotRef = db.collection('spots').doc(reservedSpot);
+          const spotSnap = await spotRef.get();
+          if (spotSnap.exists && spotSnap.data().status === 'reserved') {
+            await spotRef.update({ status: 'available', currentBookingId: null });
+          }
+        } catch (err) {
+          console.warn('adminMarkOrderUnpaid: spot release failed', err?.message);
+        }
+      }
+      await orderRef.update(reversalMark);
+    } else if (pending.orderType === 'credits') {
+      const balanceDocId = pending.balanceDocId;
+      const quantity = Number(pending.quantity) || 0;
+      if (!balanceDocId || !quantity) {
+        throw new HttpsError('failed-precondition', 'Order is missing balance info');
+      }
+      await db.runTransaction(async (tx) => {
+        const balRef = db.collection('tokenBalances').doc(balanceDocId);
+        const balSnap = await tx.get(balRef);
+        if (!balSnap.exists) {
+          throw new HttpsError('failed-precondition', 'Token balance no longer exists');
+        }
+        const current = balSnap.data();
+        if ((current.balance || 0) < quantity) {
+          throw new HttpsError(
+            'failed-precondition',
+            'Some of the granted credits have already been used — reversal not allowed.'
+          );
+        }
+        tx.update(balRef, {
+          balance: FieldValue.increment(-quantity),
+          totalPurchased: FieldValue.increment(-quantity),
+        });
+        tx.update(orderRef, reversalMark);
+      });
+    } else {
+      throw new HttpsError('invalid-argument', `Unknown orderType: ${pending.orderType}`);
+    }
+
+    await db.collection('auditLog').add({
+      action: 'order_marked_unpaid',
+      entityType: 'pendingOrder',
+      entityId: orderId,
+      actorUid: uid,
+      payload: { orderType: pending.orderType, originalPaidBy: pending.paidBy },
+      timestamp: nowIso,
+    });
+
+    return { ok: true };
+  }
+);
+
+// ── cancelPendingCreditOrder (callable) ─────────────────────────────────
+// Customer self-cancel for an UNPAID pay-at-pickup credit-pack order.
+// No money has moved yet, so this just flips the pendingOrders doc to
+// `cancelled`. We refuse cancellation once the order is paid — those go
+// through the regular refund flow because tokens have already been
+// credited and may have been used.
+//
+// The owner check matches by customerId (logged-in user) OR by email on
+// the customerData blob (guest who placed the order while not signed in
+// and later returns).
+export const cancelPendingCreditOrder = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated');
+    }
+    const callerUid = request.auth.uid;
+    const callerEmail = (request.auth.token?.email || '').toLowerCase();
+    const { orderId } = request.data || {};
+    if (!orderId) throw new HttpsError('invalid-argument', 'Missing orderId');
+
+    const db = getFirestore();
+    const orderRef = db.collection('pendingOrders').doc(orderId);
+    const snap = await orderRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Order not found');
+    const order = snap.data();
+
+    // Ownership: customerId match OR email match on the customerData blob.
+    // Any backoffice user (admin/agent/driver) can cancel any order.
+    const cd = order.customerData || {};
+    const ownsByUid = cd.customerId && cd.customerId === callerUid;
+    const ownsByEmail = callerEmail && String(cd.email || '').toLowerCase() === callerEmail;
+    const owns = ownsByUid || ownsByEmail;
+    if (!owns) {
+      const userSnap = await db.collection('users').doc(callerUid).get();
+      const role = userSnap.exists ? userSnap.data().role : null;
+      if (!['admin', 'agent', 'staff', 'driver'].includes(role)) {
+        throw new HttpsError('permission-denied', 'Not your order');
+      }
+    }
+
+    if (order.status === 'cancelled') {
+      return { ok: true, alreadyCancelled: true };
+    }
+    if (order.orderType !== 'credits') {
+      throw new HttpsError('failed-precondition', 'Only credit orders can be cancelled here');
+    }
+    if (order.paymentStatus === 'paid') {
+      throw new HttpsError(
+        'failed-precondition',
+        'This order has already been paid — credits may have been issued. Contact support for a refund.'
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    await orderRef.update({
+      status: 'cancelled',
+      cancelledAt: nowIso,
+      cancelledBy: callerUid,
+    });
+
+    await db.collection('auditLog').add({
+      action: 'pending_order_cancelled',
+      entityType: 'pendingOrder',
+      entityId: orderId,
+      actorUid: callerUid,
+      payload: { orderType: order.orderType, bySelf: owns },
+      timestamp: nowIso,
+    });
+
+    return { ok: true };
+  }
+);
+
+// ── closeCashbook (callable) ────────────────────────────────────────────
+// An agent (or admin) closes their open cash entries. Snapshots them into
+// a `cashbookReports/{auto}` doc, then marks each cashEntry as closed so
+// it doesn't appear in the open list anymore. The generated report stays
+// readable for audit / printing later.
+//
+// Without arguments, closes the CALLER's own open cashbook (the common
+// case). Admins may pass `{ agentUid }` to close another agent's day.
+export const closeCashbook = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid: callerUid, role } = await assertStaff(request);
+    const targetUid = request.data?.agentUid || callerUid;
+    // Only admin can close another agent's cashbook.
+    if (targetUid !== callerUid && role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Only admin can close another agent\'s cashbook');
+    }
+    // Driver role is checked-in only — they shouldn't be cashing up either.
+    if (role === 'driver') {
+      throw new HttpsError('permission-denied', 'Drivers do not handle cash');
+    }
+
+    const db = getFirestore();
+    const open = await db.collection('cashEntries')
+      .where('agentUid', '==', targetUid)
+      .where('closedAt', '==', null)
+      .get();
+
+    if (open.empty) {
+      throw new HttpsError('failed-precondition', 'No open cash entries to close');
+    }
+
+    const entries = open.docs.map((d) => ({ id: d.id, ...d.data() }));
+    entries.sort((a, b) => String(a.paidAt || '').localeCompare(String(b.paidAt || '')));
+
+    const totalAmount = entries.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+    const rangeFromIso = entries[0]?.paidAt || null;
+    const rangeToIso = entries[entries.length - 1]?.paidAt || null;
+    const agentName = entries[0]?.agentName || targetUid;
+
+    // Pull any handovers for the matching days so the report stands on
+    // its own without cross-referencing cashHandovers separately.
+    const days = [...new Set(entries.map((e) => e.paidAtDay))];
+    const handovers = [];
+    for (const day of days) {
+      const h = await db.collection('cashHandovers')
+        .where('day', '==', day)
+        .where('handedBy', '==', targetUid)
+        .get();
+      h.forEach((doc) => handovers.push({ id: doc.id, ...doc.data() }));
+    }
+
+    const nowIso = new Date().toISOString();
+    const reportRef = await db.collection('cashbookReports').add({
+      agentUid: targetUid,
+      agentName,
+      generatedAt: nowIso,
+      generatedBy: callerUid,
+      rangeFromIso,
+      rangeToIso,
+      totalAmount,
+      entryCount: entries.length,
+      entries: entries.map((e) => ({
+        cashEntryId: e.id,
+        paidAt: e.paidAt,
+        amount: e.amount,
+        source: e.source,
+        plate: e.plate || null,
+        payerName: e.payerName || null,
+        bookingId: e.bookingId || null,
+        orderId: e.orderId || null,
+      })),
+      handovers,
+    });
+
+    // Flip each open entry to closed in a batched write.
+    const batch = db.batch();
+    for (const e of entries) {
+      batch.update(db.collection('cashEntries').doc(e.id), {
+        closedAt: nowIso,
+        closedBy: callerUid,
+        closedReportId: reportRef.id,
+      });
+    }
+    await batch.commit();
+
+    await db.collection('auditLog').add({
+      action: 'cashbook_closed',
+      entityType: 'cashbookReport',
+      entityId: reportRef.id,
+      actorUid: callerUid,
+      payload: { targetUid, entryCount: entries.length, totalAmount },
+      timestamp: nowIso,
+    });
+
+    return {
+      ok: true,
+      reportId: reportRef.id,
+      entryCount: entries.length,
+      totalAmount,
+    };
+  }
+);
+
+// ── recordCashHandover (callable) ───────────────────────────────────────
+// Records a single staff-to-manager cash handover entry. Simple ledger —
+// no approval workflow, no double-entry checks, no reversal. Per v1.1
+// client decision: it's a logbook, not a finance system.
+//
+// Fields: day (YYYY-MM-DD), amount (RON), handedTo (manager name), notes?
+// `forAgentUid` is optional — admins may record a handover on behalf of
+// another agent (e.g. closing out their day for them). Defaults to the
+// caller's uid otherwise. `handedBy` always records the actual actor;
+// `forAgentUid` is what the cashbook UI filters on so the entry shows up
+// under the right agent's section.
+export const recordCashHandover = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid, role } = await assertStaff(request);
+    const { day, amount, handedTo, notes, forAgentUid } = request.data || {};
+    if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      throw new HttpsError('invalid-argument', 'day must be YYYY-MM-DD');
+    }
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      throw new HttpsError('invalid-argument', 'amount must be positive');
+    }
+    if (!handedTo || !String(handedTo).trim()) {
+      throw new HttpsError('invalid-argument', 'handedTo required');
+    }
+    let owner = uid;
+    if (forAgentUid && forAgentUid !== uid) {
+      if (role !== 'admin') {
+        throw new HttpsError('permission-denied', 'Only admin can record a handover for another agent');
+      }
+      owner = String(forAgentUid);
+    }
+    const db = getFirestore();
+    // One handover per (agent, day) — if the agent miscounted or
+    // mistyped, they roll back the existing one via cancelCashHandover
+    // and re-record. Server-side enforcement; the UI matches.
+    const existing = await db.collection('cashHandovers')
+      .where('forAgentUid', '==', owner)
+      .where('day', '==', day)
+      .limit(1)
+      .get();
+    if (!existing.empty) {
+      throw new HttpsError(
+        'already-exists',
+        'A handover already exists for this agent on this day. Cancel it before recording a new one.'
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const ref = await db.collection('cashHandovers').add({
+      day,
+      amount: amt,
+      handedTo: String(handedTo).trim(),
+      notes: String(notes || '').trim() || null,
+      forAgentUid: owner,
+      handedBy: uid,
+      handedAt: nowIso,
+    });
+    await db.collection('auditLog').add({
+      action: 'cash_handover',
+      entityType: 'cashHandover',
+      entityId: ref.id,
+      actorUid: uid,
+      payload: { day, amount: amt, handedTo, forAgentUid: owner },
+      timestamp: nowIso,
+    });
+    return { ok: true, id: ref.id };
+  }
+);
+
+// ── cancelCashHandover (callable) ───────────────────────────────────────
+// Rollback for a mistakenly recorded handover. Permitted to the owning
+// agent (matched against forAgentUid, falling back to handedBy for legacy
+// rows) and to admins. The doc is hard-deleted; the action is audit-logged
+// so the trail survives.
+export const cancelCashHandover = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid, role } = await assertStaff(request);
+    const { handoverId } = request.data || {};
+    if (!handoverId) throw new HttpsError('invalid-argument', 'Missing handoverId');
+    const db = getFirestore();
+    const ref = db.collection('cashHandovers').doc(handoverId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Handover not found');
+    const h = snap.data();
+    const owner = h.forAgentUid || h.handedBy;
+    if (owner !== uid && role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Not your handover');
+    }
+    await ref.delete();
+    await db.collection('auditLog').add({
+      action: 'cash_handover_cancelled',
+      entityType: 'cashHandover',
+      entityId: handoverId,
+      actorUid: uid,
+      payload: {
+        forAgentUid: owner,
+        day: h.day || null,
+        amount: h.amount || null,
+        handedTo: h.handedTo || null,
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return { ok: true };
+  }
+);
+
+// ── cancelBookingWithRefund (callable) ──────────────────────────────────
+// Customer self-service cancellation for an upcoming long-term booking.
+// Three branches keyed off paymentStatus + paidBy:
+//
+//   paid via Netopia          → paymentStatus 'refund-pending' (online refund
+//                               is handled out-of-band by admin since
+//                               Netopia's refund API isn't wired in yet).
+//   paid via admin-cash/card  → paymentStatus 'refund-pending' (cash refund
+//                               at the lot, surfaced in the cashbook queue).
+//   unpaid (pay-at-pickup)    → no money to refund; just cancel.
+//
+// In every branch we flip status to 'cancelled', release the reserved spot
+// (so the capacity map updates immediately), and write an audit log.
+// Staff/admin may cancel any booking; customers may cancel only their own.
+export const cancelBookingWithRefund = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated');
+    }
+    const callerUid = request.auth.uid;
+    const { bookingId } = request.data || {};
+    if (!bookingId) throw new HttpsError('invalid-argument', 'Missing bookingId');
+
+    const db = getFirestore();
+    const bookingRef = db.collection('bookings').doc(bookingId);
+    const snap = await bookingRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const booking = snap.data();
+
+    // Authorization: customer can cancel their own; backoffice users
+    // (admin/agent) can cancel any booking. Drivers explicitly excluded
+    // — paid-cancellation routes funds into the refund queue which is
+    // financially sensitive (v1.7 spec).
+    const ownsBooking = booking.customerId && booking.customerId === callerUid;
+    if (!ownsBooking) {
+      const userSnap = await db.collection('users').doc(callerUid).get();
+      const role = userSnap.exists ? userSnap.data().role : null;
+      if (!['admin', 'agent', 'staff'].includes(role)) {
+        throw new HttpsError('permission-denied', 'Not your booking');
+      }
+    }
+
+    if (booking.status === 'cancelled' || booking.status === 'no-show') {
+      // Idempotent for both terminal-states.
+      return { ok: true, alreadyCancelled: booking.status === 'cancelled', alreadyNoShow: booking.status === 'no-show' };
+    }
+    // v1.7 relaxes from upcoming-only → allow cancelling active bookings
+    // too (Check-out tab + Overdue tab need this for emergency aborts).
+    // Completed bookings stay locked.
+    if (!['upcoming', 'active'].includes(booking.status)) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Cannot cancel a booking in status ${booking.status}`,
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // v1.7 business rule: if the customer never arrived AND drop-off is
+    // more than 12h in the past, this isn't a cancellation — it's a
+    // no-show. Per company policy, paid no-shows forfeit the booking
+    // fee, so we route to the no-show terminal state (no refund flag).
+    // This mirrors the markNoShows scheduled function exactly; the
+    // schedule might just not have fired yet for the current row.
+    if (booking.status === 'upcoming' && (booking.dropoffAt || booking.startDate)) {
+      const dropMs = new Date(booking.dropoffAt || booking.startDate).getTime();
+      if (Number.isFinite(dropMs) && Date.now() > dropMs + 12 * 60 * 60 * 1000) {
+        await bookingRef.update({
+          status: 'no-show',
+          noShowAt: nowIso,
+          noShowDetectedBy: 'admin-cancel',
+          spotId: null,
+        });
+        // Release the spot (same logic as markNoShows / the cancel path below).
+        if (booking.spotId) {
+          try {
+            const spotRef = db.collection('spots').doc(booking.spotId);
+            const spotSnap = await spotRef.get();
+            if (spotSnap.exists && ['reserved', 'occupied'].includes(spotSnap.data().status)) {
+              await spotRef.update({ status: 'available', currentBookingId: null });
+            }
+          } catch (err) {
+            console.warn('cancelBookingWithRefund (no-show path) spot release failed', err?.message);
+          }
+        }
+        await db.collection('auditLog').add({
+          action: 'booking_no_show',
+          entityType: 'booking',
+          entityId: bookingId,
+          actorUid: callerUid,
+          payload: {
+            triggeredBy: 'admin-cancel',
+            wasPaid: booking.paymentStatus === 'paid',
+            paidBy: booking.paidBy || null,
+            // Explicitly note that no refund was issued for the paid case.
+            refundOutcome: 'forfeited',
+          },
+          timestamp: nowIso,
+        });
+        return { ok: true, noShow: true };
+      }
+    }
+
+    const paid = booking.paymentStatus === 'paid';
+    const paidViaNetopia = paid && booking.paidBy === 'netopia';
+    const paidViaAdmin = paid && (booking.paidBy === 'admin-cash' || booking.paidBy === 'admin-card');
+
+    const patch = {
+      status: 'cancelled',
+      cancelledAt: nowIso,
+      cancelledBy: callerUid,
+      spotId: null,
+    };
+    let refundOutcome = 'none';
+    if (paidViaNetopia || paidViaAdmin) {
+      patch.paymentStatus = 'refund-pending';
+      patch.refundRequestedAt = nowIso;
+      refundOutcome = paidViaNetopia ? 'netopia-pending' : 'cash-pending';
+    }
+    await bookingRef.update(patch);
+
+    // Release the spot so the capacity map flips it back to green.
+    // For upcoming bookings the spot is `reserved`; for active ones it's
+    // `occupied`. Both flip back to available.
+    if (booking.spotId) {
+      try {
+        const spotRef = db.collection('spots').doc(booking.spotId);
+        const spotSnap = await spotRef.get();
+        if (spotSnap.exists && ['reserved', 'occupied'].includes(spotSnap.data().status)) {
+          await spotRef.update({ status: 'available', currentBookingId: null });
+        }
+      } catch (err) {
+        console.warn('cancelBookingWithRefund: spot release failed', err?.message);
+      }
+    }
+
+    // For active bookings, also remove the activeCheckIns row so the
+    // plate stops showing up in the "in parking now" view and another
+    // car can use the same plate later if needed.
+    if (booking.status === 'active' && booking.licensePlate) {
+      try {
+        const plate = String(booking.licensePlate).toUpperCase().replace(/\s+/g, '');
+        await db.collection('activeCheckIns').doc(plate).delete().catch(() => {});
+      } catch (err) {
+        console.warn('cancelBookingWithRefund: activeCheckIns cleanup failed', err?.message);
+      }
+    }
+
+    // Mirror the cancel onto the pendingOrders doc (admin views key off it
+    // for the pay-at-pickup queue and the cashbook refund queue).
+    if (booking.paymentId) {
+      await db.collection('pendingOrders').doc(booking.paymentId)
+        .update({
+          status: 'cancelled',
+          cancelledAt: nowIso,
+          ...(refundOutcome !== 'none' ? { paymentStatus: 'refund-pending', refundRequestedAt: nowIso } : {}),
+        })
+        .catch((err) => console.warn('pendingOrders cancel mirror failed:', err?.message));
+    }
+
+    await db.collection('auditLog').add({
+      action: 'booking_cancelled',
+      entityType: 'booking',
+      entityId: bookingId,
+      actorUid: callerUid,
+      payload: {
+        wasPaid: paid,
+        paidBy: booking.paidBy || null,
+        refundOutcome,
+        bySelf: ownsBooking,
+      },
+      timestamp: nowIso,
+    });
+
+    return { ok: true, refundOutcome };
+  }
+);
+
+// ── adminMarkRefunded (callable) ────────────────────────────────────────
+// Flips a booking from `paymentStatus: 'refund-pending'` to `'refunded'`
+// after the admin has manually processed the refund (in Netopia admin
+// panel for online payments, or cash-back at the lot for admin-cash/card
+// payments). Stamps `refundedAt`, `refundedBy`, `refundedVia`, and an
+// optional `refundNotes`, mirrors onto `pendingOrders`, audit-logs the
+// action, and fires the customer-facing refund email via the Brevo
+// trigger collection.
+//
+// Idempotent: if the booking is already 'refunded', returns ok without
+// re-mailing.
+export const adminMarkRefunded = onCall(
+  { region: 'europe-west1', cors: true, secrets: [BREVO_API_KEY] },
+  async (request) => {
+    const { uid, role } = await assertStaff(request);
+    const { bookingId, refundedVia, notes } = request.data || {};
+    if (!bookingId) throw new HttpsError('invalid-argument', 'Missing bookingId');
+    const allowedVia = ['netopia-panel', 'cash-returned', 'card-terminal'];
+    if (!allowedVia.includes(refundedVia)) {
+      throw new HttpsError('invalid-argument', `refundedVia must be one of ${allowedVia.join('|')}`);
+    }
+
+    const db = getFirestore();
+    const ref = db.collection('bookings').doc(bookingId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const booking = snap.data();
+
+    if (booking.paymentStatus === 'refunded') {
+      return { ok: true, alreadyRefunded: true };
+    }
+    if (booking.paymentStatus !== 'refund-pending') {
+      throw new HttpsError(
+        'failed-precondition',
+        `Only refund-pending bookings can be marked refunded — current status: ${booking.paymentStatus}`
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const patch = {
+      paymentStatus: 'refunded',
+      refundedAt: nowIso,
+      refundedBy: uid,
+      refundedVia,
+      refundNotes: String(notes || '').trim() || null,
+    };
+    await ref.update(patch);
+
+    if (booking.paymentId) {
+      await db.collection('pendingOrders').doc(booking.paymentId)
+        .update({
+          paymentStatus: 'refunded',
+          refundedAt: nowIso,
+          refundedBy: uid,
+          refundedVia,
+        })
+        .catch((err) => console.warn('pendingOrders refund mirror failed:', err?.message));
+    }
+
+    await db.collection('auditLog').add({
+      action: 'booking_refunded',
+      entityType: 'booking',
+      entityId: bookingId,
+      actorUid: uid,
+      payload: {
+        refundedVia,
+        amount: booking.totalPrice || null,
+        paidBy: booking.paidBy || null,
+        notes: patch.refundNotes,
+      },
+      timestamp: nowIso,
+    });
+
+    // Fire customer email. Best-effort: if it fails, the refund stands.
+    try {
+      await sendRefundIssuedEmail(bookingId);
+    } catch (err) {
+      console.warn('refund email failed (booking still marked refunded):', err?.message);
+    }
+
+    return { ok: true };
+  }
+);
+
+// ── validateVoucherCode (callable) ──────────────────────────────────────
+// Client-side preview of voucher eligibility. Booking pages call this
+// when the user types/applies a code to surface the discount before pay.
+// Stateless — no redemption, no counter increment. createPayment
+// re-runs the same validation atomically when the payment is committed,
+// so a successful preview here is not a binding promise.
+export const validateVoucherCode = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { code, plate, baseAmount, orderType } = request.data || {};
+    const authedUid = request.auth?.uid || null;
+    const res = await resolveVoucher({ code, plate, baseAmount, authedUid });
+    if (!res.ok) return { ok: false, error: res.error };
+    return {
+      ok: true,
+      voucherCode: res.voucher.code,
+      name: res.voucher.name,
+      type: res.voucher.type,
+      value: res.voucher.value,
+      discountAmount: res.discountAmount,
+    };
+  }
+);
+
+// ── adminResendRefundEmail (callable) ───────────────────────────────────
+// Manual re-trigger of the customer-facing refund email. Used when the
+// automatic send from adminMarkRefunded failed (Brevo outage, template
+// ID was missing at the time, bad recipient that the admin has since
+// corrected, etc.) or when the customer claims they never received it.
+// Idempotent at the customer's mailbox level — sends another copy
+// regardless of prior status.
+export const adminResendRefundEmail = onCall(
+  { region: 'europe-west1', cors: true, secrets: [BREVO_API_KEY] },
+  async (request) => {
+    const { uid } = await assertStaff(request);
+    const { bookingId } = request.data || {};
+    if (!bookingId) throw new HttpsError('invalid-argument', 'Missing bookingId');
+
+    const db = getFirestore();
+    const ref = db.collection('bookings').doc(bookingId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const booking = snap.data();
+    if (booking.paymentStatus !== 'refunded') {
+      throw new HttpsError(
+        'failed-precondition',
+        `Only refunded bookings can resend the email — current status: ${booking.paymentStatus}`,
+      );
+    }
+
+    const result = await sendRefundIssuedEmail(bookingId);
+    await db.collection('auditLog').add({
+      action: 'refund_email_resent',
+      entityType: 'booking',
+      entityId: bookingId,
+      actorUid: uid,
+      payload: { ok: !!result?.ok, reason: result?.reason || null, recipient: result?.recipient || null },
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!result?.ok) {
+      throw new HttpsError('internal', `Email send failed: ${result?.reason || 'unknown'}`);
+    }
+    return { ok: true, recipient: result.recipient };
   }
 );
 
@@ -674,14 +1793,155 @@ export const adminMarkOrderPaid = onCall(
 // after collecting cash/card at the lot. No Netopia involvement. Reuses
 // the same creditTokens path as the IPN callback so the resulting docs
 // are shape-identical to an online purchase (with source='admin-cash').
+// ── adminCreateLongtermBooking (callable) ───────────────────────────────
+// Lets staff/admin record a long-term reservation paid in cash/card at
+// the lot — bypasses the Netopia flow entirely. Creates a paid booking
+// (status='upcoming', paymentStatus='paid', paidBy='admin-cash'|'admin-card')
+// without going through pendingOrders. The bookings doc still triggers
+// the booking-longterm-confirm email (paid branch).
+export const adminCreateLongtermBooking = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertStaff(request);
+    const {
+      plate, dropoffAt, pickupAt, days, totalPrice,
+      payerEmail, payerName, payerPhone,
+      customerId,
+      paidBy = 'cash',
+      autoCheckIn = false,  // walk-in flow: car is at the lot now
+    } = request.data || {};
+
+    if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
+    if (!dropoffAt || !pickupAt) throw new HttpsError('invalid-argument', 'Missing dates');
+    const d = Number(days);
+    const total = Number(totalPrice);
+    if (!Number.isFinite(d) || d <= 0) {
+      throw new HttpsError('invalid-argument', 'days must be positive');
+    }
+    if (!Number.isFinite(total) || total <= 0) {
+      throw new HttpsError('invalid-argument', 'totalPrice must be positive');
+    }
+    if (!['cash', 'card'].includes(paidBy)) {
+      throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
+    }
+
+    const db = getFirestore();
+    const nowIso = new Date().toISOString();
+    const bookingRef = await db.collection('bookings').add({
+      code: generateBookingCode('longTerm'),
+      type: 'longTerm',
+      customerId: customerId || null,
+      licensePlate: normalizePlate(plate),
+      startDate: dropoffAt,
+      endDate: pickupAt,
+      dropoffAt,
+      pickupAt,
+      days: d,
+      basePrice: total,
+      latePrice: 0,
+      totalPrice: total,
+      status: 'upcoming',
+      contact: {
+        name: payerName || '',
+        email: payerEmail || '',
+        phone: payerPhone || '',
+      },
+      billing: { type: 'PF' },
+      paymentId: null,
+      paymentMethod: 'admin',
+      paymentStatus: 'paid',
+      paidAt: nowIso,
+      paidBy: paidBy === 'cash' ? 'admin-cash' : 'admin-card',
+      spotId: null,
+      createdAt: nowIso,
+      completedAt: null,
+      source: 'admin',
+      createdBy: uid,
+    });
+
+    // Auto-reserve a spot — admin-created bookings are always paid, so the
+    // reservation is real immediately. Surfaces as a blue tile on the
+    // capacity map until check-in flips it to occupied.
+    const spotId = await reserveAvailableSpot(bookingRef.id);
+    if (spotId) {
+      await bookingRef.update({ spotId });
+    }
+
+    await db.collection('auditLog').add({
+      action: 'booking_created',
+      entityType: 'booking',
+      entityId: bookingRef.id,
+      actorUid: uid,
+      payload: { plate, days: d, totalPrice: total, paidBy, spotId, source: 'admin' },
+      timestamp: nowIso,
+    });
+
+    if (paidBy === 'cash') {
+      await recordCashEntry({
+        agentUid: uid,
+        amount: total,
+        source: 'longterm-direct',
+        plate: normalizePlate(plate),
+        payerName: payerName || null,
+        bookingId: bookingRef.id,
+      });
+    }
+
+    // Walk-in shortcut: customer is at the gate now, flip the booking to
+    // active and stamp checkinTimestamp. Spot is already assigned above
+    // (reservation auto-happens for paid admin bookings), so we just need
+    // to mark it occupied and write the activeCheckIns row.
+    let checkedIn = false;
+    if (autoCheckIn) {
+      const checkinIso = new Date().toISOString();
+      await bookingRef.update({
+        status: 'active',
+        checkinTimestamp: checkinIso,
+      });
+      if (spotId) {
+        try {
+          await db.collection('spots').doc(spotId)
+            .update({ status: 'occupied', currentBookingId: bookingRef.id })
+            .catch((err) => console.warn('walk-in spot occupy failed:', err?.message));
+        } catch (_) { /* swallow — booking still flipped */ }
+      }
+      try {
+        await db.collection('activeCheckIns').doc(normalizePlate(plate)).set({
+          plate: normalizePlate(plate),
+          bookingId: bookingRef.id,
+          type: 'longTerm',
+          customerId: customerId || null,
+          checkinTime: checkinIso,
+          checkinTimestamp: checkinIso,
+          source: 'walk-in',
+        });
+      } catch (err) {
+        console.warn('walk-in activeCheckIns write failed:', err?.message);
+      }
+      await db.collection('auditLog').add({
+        action: 'booking_checkin',
+        entityType: 'booking',
+        entityId: bookingRef.id,
+        actorUid: uid,
+        payload: { plate: normalizePlate(plate), spotId, source: 'walk-in' },
+        timestamp: checkinIso,
+      });
+      checkedIn = true;
+    }
+
+    return { bookingId: bookingRef.id, spotId, checkedIn };
+  }
+);
+
 export const grantCreditsForCash = onCall(
   { region: 'europe-west1', cors: true },
   async (request) => {
     const { uid } = await assertStaff(request);
     const {
-      plate, quantity, packId,
+      plate, quantity, packId, amount,
       payerEmail, payerName, payerPhone,
       paidBy = 'cash',
+      autoCheckIn = false,  // walk-in flow: consume one token immediately
     } = request.data || {};
     if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
     const qty = Number(quantity);
@@ -696,6 +1956,7 @@ export const grantCreditsForCash = onCall(
     const docId = await creditTokens({
       packId: packId || null,
       quantity: qty,
+      amount: Number(amount) || 0,
       customerData: {
         licensePlate: plate,
         email: payerEmail || '',
@@ -717,6 +1978,627 @@ export const grantCreditsForCash = onCall(
       timestamp: nowIso,
     });
 
-    return { ok: true, balanceDocId: docId };
+    if (paidBy === 'cash') {
+      await recordCashEntry({
+        agentUid: uid,
+        amount: Number(amount) || 0,
+        source: 'credits-direct',
+        plate: normalizePlate(plate),
+        payerName: payerName || null,
+        tokenBalanceDocId: docId,
+      });
+    }
+
+    // Walk-in shortcut: customer is at the gate now. Consume one token
+    // and create the activeCheckIns row in the same call so the agent
+    // doesn't have to switch screens.
+    let checkedIn = false;
+    if (autoCheckIn) {
+      const normPlate = normalizePlate(plate);
+      const existingActive = await getFirestore().collection('activeCheckIns').doc(normPlate).get();
+      if (!existingActive.exists) {
+        // Decrement balance.
+        try {
+          await getFirestore().collection('tokenBalances').doc(docId)
+            .update({ balance: FieldValue.increment(-1) });
+        } catch (err) {
+          console.warn('walk-in token decrement failed:', err?.message);
+        }
+        // Assign first available spot (best-effort — no spot = still allow check-in).
+        let assignedSpotId = null;
+        try {
+          const spotsSnap = await getFirestore().collection('spots')
+            .where('status', '==', 'available')
+            .limit(1)
+            .get();
+          if (!spotsSnap.empty) {
+            const spotDoc = spotsSnap.docs[0];
+            assignedSpotId = spotDoc.id;
+            await spotDoc.ref.update({ status: 'occupied', currentBookingId: null });
+          }
+        } catch (err) {
+          console.warn('walk-in spot assignment failed:', err?.message);
+        }
+        // activeCheckIns row keyed by plate (matches client pattern).
+        const checkinIso = new Date().toISOString();
+        await getFirestore().collection('activeCheckIns').doc(normPlate).set({
+          balanceDocId: docId,
+          licensePlate: normPlate,
+          spotId: assignedSpotId,
+          checkinTime: checkinIso,
+          source: 'walk-in',
+        });
+        // Transaction row so it shows up in ledger.
+        await getFirestore().collection('tokenTransactions').add({
+          customerId: docId.startsWith('plate_') ? null : docId,
+          licensePlate: normPlate,
+          type: 'use',
+          quantity: -1,
+          spotId: assignedSpotId,
+          timestamp: checkinIso,
+          source: 'walk-in',
+        });
+        checkedIn = true;
+      }
+    }
+
+    return { ok: true, balanceDocId: docId, checkedIn };
+  }
+);
+
+// ── checkInWithCredits (callable) ───────────────────────────────────────
+// Manual commuter (navetist) check-in that consumes EXISTING credits — no
+// money movement, no new credits granted. Used by the walk-in flow when an
+// agent/driver picks a customer who already has a balance. Mirrors the
+// walk-in branch of grantCreditsForCash (spot assignment + activeCheckIns +
+// `use` transaction) but deducts from the balance the customer already
+// holds. Allowed for any backoffice role (drivers included) since it's a
+// pure on-the-lot operation.
+export const checkInWithCredits = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertStaff(request);
+    const { plate, customerId = null, credits = 1 } = request.data || {};
+    if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
+    const qty = Number(credits);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw new HttpsError('invalid-argument', 'credits must be a positive integer');
+    }
+
+    const db = getFirestore();
+    const normPlate = normalizePlate(plate);
+
+    // Resolve the balance doc: prefer the registered customer's doc, then a
+    // plate-keyed guest doc, then a customer doc that merely tracks this
+    // plate in its `plates` array (matches the client lookupByPlate order).
+    let docId = null;
+    if (customerId) {
+      const snap = await db.collection('tokenBalances').doc(customerId).get();
+      if (snap.exists) docId = customerId;
+    }
+    if (!docId) {
+      const plateDocId = `plate_${normPlate}`;
+      const snap = await db.collection('tokenBalances').doc(plateDocId).get();
+      if (snap.exists) docId = plateDocId;
+    }
+    if (!docId) {
+      const arr = await db.collection('tokenBalances')
+        .where('plates', 'array-contains', normPlate)
+        .limit(1)
+        .get();
+      if (!arr.empty) docId = arr.docs[0].id;
+    }
+    if (!docId) throw new HttpsError('not-found', 'NO_BALANCE');
+
+    // Already on the lot — refuse rather than double-charge.
+    const existingActive = await db.collection('activeCheckIns').doc(normPlate).get();
+    if (existingActive.exists) {
+      throw new HttpsError('failed-precondition', 'ALREADY_CHECKED_IN');
+    }
+
+    // Deduct atomically so two agents can't overdraw the same balance.
+    const ref = db.collection('tokenBalances').doc(docId);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'NO_BALANCE');
+      const bal = Number(snap.data().balance || 0);
+      if (bal < qty) throw new HttpsError('failed-precondition', 'INSUFFICIENT_CREDITS');
+      tx.update(ref, { balance: FieldValue.increment(-qty) });
+    });
+
+    // Assign the first free spot (best-effort — no spot still allows
+    // check-in; mirrors the grantCreditsForCash walk-in branch).
+    let assignedSpotId = null;
+    try {
+      const spotsSnap = await db.collection('spots')
+        .where('status', '==', 'available')
+        .limit(1)
+        .get();
+      if (!spotsSnap.empty) {
+        assignedSpotId = spotsSnap.docs[0].id;
+        await spotsSnap.docs[0].ref.update({ status: 'occupied', currentBookingId: null });
+      }
+    } catch (err) {
+      console.warn('checkInWithCredits spot assignment failed:', err?.message);
+    }
+
+    const checkinIso = new Date().toISOString();
+    await db.collection('activeCheckIns').doc(normPlate).set({
+      balanceDocId: docId,
+      licensePlate: normPlate,
+      customerId: docId.startsWith('plate_') ? null : docId,
+      spotId: assignedSpotId,
+      checkinTime: checkinIso,
+      source: 'manual',
+    });
+
+    await db.collection('tokenTransactions').add({
+      customerId: docId.startsWith('plate_') ? null : docId,
+      licensePlate: normPlate,
+      type: 'use',
+      quantity: -qty,
+      spotId: assignedSpotId,
+      timestamp: checkinIso,
+      source: 'manual',
+    });
+
+    await db.collection('auditLog').add({
+      action: 'token_used',
+      entityType: 'tokenBalance',
+      entityId: docId,
+      actorUid: uid,
+      payload: { plate: normPlate, credits: qty, spotId: assignedSpotId, source: 'manual' },
+      timestamp: checkinIso,
+    });
+
+    return { ok: true, balanceDocId: docId, credits: qty, spotId: assignedSpotId, checkedIn: true };
+  }
+);
+
+// ── requestPasswordReset (callable) ──────────────────────────────────────
+// Replaces Firebase Auth's built-in password-reset email so we can use the
+// branded Brevo template. Uses Admin SDK to mint the action link, then
+// sends it via Brevo. Always returns ok — we never leak whether an email
+// is registered (timing-safe behavior matches Firebase Auth's default).
+export const requestPasswordReset = onCall(
+  { region: 'europe-west1', cors: true, secrets: [BREVO_API_KEY] },
+  async (request) => {
+    const { email } = request.data || {};
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      throw new HttpsError('invalid-argument', 'Missing or invalid email');
+    }
+    try {
+      const link = await getAuth().generatePasswordResetLink(email, {
+        url: 'https://mangoparking.ro/',
+        handleCodeInApp: false,
+      });
+      let displayName = '';
+      let locale = 'ro';
+      try {
+        const userRecord = await getAuth().getUserByEmail(email);
+        displayName = userRecord.displayName || '';
+        const u = await getFirestore().collection('users').doc(userRecord.uid).get();
+        if (u.exists) {
+          const data = u.data();
+          displayName = data.displayName || displayName;
+          if (data.locale === 'en') locale = 'en';
+        }
+      } catch (err) {
+        // User lookup failure — still send (the action link works on
+        // its own; we just use generic copy).
+      }
+      const firstName = (displayName || email.split('@')[0]).split(/\s+/)[0];
+      await sendBrevoEmail({
+        to: email,
+        name: displayName,
+        templateName: 'password-reset',
+        locale,
+        params: {
+          firstName,
+          resetLink: link,
+          expiresIn: locale === 'en' ? '1 hour' : '1 oră',
+        },
+      });
+    } catch (err) {
+      // Swallow — never reveal whether the email exists.
+      console.warn('requestPasswordReset:', err?.message);
+    }
+    return { ok: true };
+  }
+);
+
+// ── assertAdmin: stricter than assertStaff (admin role required) ────────
+async function assertAdmin(request) {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be authenticated');
+  }
+  const uid = request.auth.uid;
+  const snap = await getFirestore().collection('users').doc(uid).get();
+  const role = snap.exists ? snap.data().role : null;
+  if (role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Admin only');
+  }
+  return { uid, role };
+}
+
+// ── adminCreateUser (callable) ──────────────────────────────────────────
+// Admin creates a user with email + password directly, bypassing the
+// signup flow. Useful for back-office accounts (staff, ops) where the
+// person has no inbox they want to reveal.
+export const adminCreateUser = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid: actorUid } = await assertAdmin(request);
+    let { email, password, displayName, role = 'customer' } = request.data || {};
+    if (!email || !password) {
+      throw new HttpsError('invalid-argument', 'email + password required');
+    }
+    // Map legacy 'staff' → 'agent' so old admin UIs keep working.
+    if (role === 'staff') role = 'agent';
+    if (!['customer', 'agent', 'driver', 'admin'].includes(role)) {
+      throw new HttpsError('invalid-argument', `Invalid role: ${role}`);
+    }
+    if (String(password).length < 8) {
+      throw new HttpsError('invalid-argument', 'password must be at least 8 characters');
+    }
+
+    const userRecord = await getAuth().createUser({
+      email,
+      password,
+      displayName: displayName || email.split('@')[0],
+    });
+
+    const nowIso = new Date().toISOString();
+    await getFirestore().collection('users').doc(userRecord.uid).set({
+      email,
+      displayName: displayName || email.split('@')[0],
+      role,
+      locale: 'ro',
+      loyaltyPoints: 0,
+      loyaltyTier: 'bronze',
+      vehicles: [],
+      createdAt: nowIso,
+      createdBy: actorUid,
+    });
+
+    await getFirestore().collection('auditLog').add({
+      action: 'admin_user_created',
+      entityType: 'user',
+      entityId: userRecord.uid,
+      actorUid,
+      payload: { email, role },
+      timestamp: nowIso,
+    });
+
+    return { uid: userRecord.uid };
+  }
+);
+
+// ── adminDeleteUser (callable) ──────────────────────────────────────────
+// Removes a user from Firebase Auth + the users/{uid} doc. Their historical
+// data (bookings, tokenTransactions, tokenBalances) is left intact — those
+// reference customerId by uid and orphaning them is safer than cascading
+// deletes that could disturb financial records.
+//
+// Safety guards: an admin cannot delete their own account; we refuse to
+// delete the only remaining admin.
+export const adminDeleteUser = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid: actorUid } = await assertAdmin(request);
+    const { uid } = request.data || {};
+    if (!uid) throw new HttpsError('invalid-argument', 'Missing uid');
+    if (uid === actorUid) {
+      throw new HttpsError('failed-precondition', 'Cannot delete your own account');
+    }
+
+    const db = getFirestore();
+    const targetRef = db.collection('users').doc(uid);
+    const targetSnap = await targetRef.get();
+    const targetData = targetSnap.exists ? targetSnap.data() : null;
+
+    if (targetData?.role === 'admin') {
+      const admins = await db.collection('users').where('role', '==', 'admin').get();
+      if (admins.size <= 1) {
+        throw new HttpsError('failed-precondition', 'Cannot delete the last admin');
+      }
+    }
+
+    try {
+      await getAuth().deleteUser(uid);
+    } catch (err) {
+      // Orphaned Firestore doc (no matching Auth user) — continue.
+      console.warn('adminDeleteUser: Auth deleteUser:', err?.message);
+    }
+    if (targetSnap.exists) await targetRef.delete();
+
+    await db.collection('auditLog').add({
+      action: 'admin_user_deleted',
+      entityType: 'user',
+      entityId: uid,
+      actorUid,
+      payload: { email: targetData?.email || null, role: targetData?.role || null },
+      timestamp: new Date().toISOString(),
+    });
+
+    return { ok: true };
+  }
+);
+
+// ── adminChangeUserRole (callable) ──────────────────────────────────────
+// Admin updates the role on another user's profile. Allowed values:
+// 'admin' | 'agent' | 'driver' | 'customer'. The legacy 'staff' value is
+// silently mapped to 'agent' if a client somehow sends it.
+//
+// Refuses to demote the last admin (otherwise the org could lock itself
+// out) and refuses to change the caller's own role (use a second admin
+// for that — defense against accidental self-demotion).
+export const adminChangeUserRole = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid: actorUid } = await assertAdmin(request);
+    const { uid, role: requestedRole } = request.data || {};
+    if (!uid) throw new HttpsError('invalid-argument', 'Missing uid');
+    if (uid === actorUid) {
+      throw new HttpsError('failed-precondition', 'Cannot change your own role');
+    }
+    let role = String(requestedRole || '').trim();
+    if (role === 'staff') role = 'agent';
+    if (!['admin', 'agent', 'driver', 'customer'].includes(role)) {
+      throw new HttpsError('invalid-argument', `Invalid role: ${role}`);
+    }
+
+    const db = getFirestore();
+    const targetRef = db.collection('users').doc(uid);
+    const targetSnap = await targetRef.get();
+    if (!targetSnap.exists) throw new HttpsError('not-found', 'User not found');
+    const targetData = targetSnap.data();
+    const previousRole = targetData.role || 'customer';
+    if (previousRole === role) {
+      return { ok: true, unchanged: true };
+    }
+
+    // Last-admin guard: demoting the only admin would lock the org out.
+    if (previousRole === 'admin' && role !== 'admin') {
+      const admins = await db.collection('users').where('role', '==', 'admin').get();
+      if (admins.size <= 1) {
+        throw new HttpsError('failed-precondition', 'Cannot demote the last admin');
+      }
+    }
+
+    await targetRef.update({ role });
+    await db.collection('auditLog').add({
+      action: 'admin_user_role_changed',
+      entityType: 'user',
+      entityId: uid,
+      actorUid,
+      payload: { from: previousRole, to: role, email: targetData.email || null },
+      timestamp: new Date().toISOString(),
+    });
+
+    return { ok: true, role };
+  }
+);
+
+// ── adminSendInvite (callable) ──────────────────────────────────────────
+// Admin sends a magic-link signup invite. The recipient clicks the link
+// in their inbox, lands on /auth/finish-signup, sets a password, and is
+// signed in.
+export const adminSendInvite = onCall(
+  { region: 'europe-west1', cors: true, secrets: [BREVO_API_KEY] },
+  async (request) => {
+    const { uid: actorUid } = await assertAdmin(request);
+    let { email, displayName, role = 'customer', locale = 'ro' } = request.data || {};
+    if (!email || !email.includes('@')) {
+      throw new HttpsError('invalid-argument', 'valid email required');
+    }
+    if (role === 'staff') role = 'agent';
+    if (!['customer', 'agent', 'driver', 'admin'].includes(role)) {
+      throw new HttpsError('invalid-argument', `Invalid role: ${role}`);
+    }
+
+    const link = await getAuth().generateSignInWithEmailLink(email, {
+      url: `${SITE_URL}/auth/finish-signup?email=${encodeURIComponent(email)}`,
+      handleCodeInApp: true,
+    });
+
+    // Stash the assigned role so finish-signup can read it after the
+    // magic-link auth completes (no good way to pass it through the link
+    // body itself).
+    await getFirestore().collection('pendingInvites').doc(email.toLowerCase()).set({
+      email,
+      displayName: displayName || '',
+      role,
+      invitedBy: actorUid,
+      invitedAt: new Date().toISOString(),
+      locale,
+    });
+
+    // Resolve the inviter's display name for the email greeting — falls
+    // back to a generic "Mango Parking admin" when the profile is sparse.
+    let invitedByName = 'Mango Parking';
+    try {
+      const inviterSnap = await getFirestore().collection('users').doc(actorUid).get();
+      if (inviterSnap.exists) {
+        const data = inviterSnap.data();
+        invitedByName = data.displayName || data.email || invitedByName;
+      }
+    } catch (_) { /* swallow — email still useful without the name */ }
+
+    const firstName = (displayName || email.split('@')[0]).split(/\s+/)[0];
+    await sendBrevoEmail({
+      to: email,
+      name: displayName || '',
+      templateName: 'admin-invite',
+      locale: locale === 'en' ? 'en' : 'ro',
+      params: {
+        firstName,
+        signupLink: link,
+        invitedByName,
+        role,
+      },
+    });
+
+    await getFirestore().collection('auditLog').add({
+      action: 'admin_invite_sent',
+      entityType: 'invite',
+      entityId: email.toLowerCase(),
+      actorUid,
+      payload: { email, role },
+      timestamp: new Date().toISOString(),
+    });
+
+    return { ok: true };
+  }
+);
+
+// ── finishInviteSignup (callable) ───────────────────────────────────────
+// Called by the /auth/finish-signup page after the user completes the
+// magic-link auth handshake. Stamps users/{uid} with the role + display
+// name captured at invite time, then deletes the pendingInvites doc.
+// Idempotent — running twice is harmless.
+export const finishInviteSignup = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated');
+    }
+    const uid = request.auth.uid;
+    const email = (request.auth.token?.email || '').toLowerCase();
+    if (!email) return { ok: false, reason: 'no-email' };
+
+    const db = getFirestore();
+    const inviteRef = db.collection('pendingInvites').doc(email);
+    const inviteSnap = await inviteRef.get();
+    const invite = inviteSnap.exists ? inviteSnap.data() : null;
+
+    const role = invite?.role || 'customer';
+    const displayName = invite?.displayName || email.split('@')[0];
+    const nowIso = new Date().toISOString();
+
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    if (userSnap.exists) {
+      // Only patch role if the doc was a default-customer placeholder.
+      const data = userSnap.data();
+      const patch = {};
+      if (!data.role || data.role === 'customer') patch.role = role;
+      if (!data.displayName && displayName) patch.displayName = displayName;
+      if (Object.keys(patch).length > 0) await userRef.update(patch);
+    } else {
+      await userRef.set({
+        email,
+        displayName,
+        role,
+        locale: invite?.locale === 'en' ? 'en' : 'ro',
+        loyaltyPoints: 0,
+        loyaltyTier: 'bronze',
+        vehicles: [],
+        createdAt: nowIso,
+        createdBy: invite?.invitedBy || null,
+      });
+    }
+
+    if (inviteSnap.exists) {
+      await inviteRef.delete();
+    }
+
+    return { ok: true, role };
+  }
+);
+
+// ── repayOrder (HTTP) ────────────────────────────────────────────────────
+// Customer-facing self-service repay for a pay-at-pickup order. Looks up
+// the existing pendingOrders doc, validates it's still unpaid + pay-at-
+// pickup, recomputes the discounted online amount, and returns a fresh
+// Netopia handoff envelope. Reuses the same orderId so the IPN routes the
+// confirmation to the existing booking (the IPN handler now updates an
+// existing bookingId rather than creating a duplicate).
+//
+// No auth required — the orderId itself is the secret (delivered via the
+// confirmation email).
+export const repayOrder = onRequest(
+  {
+    cors: true,
+    secrets: [NETOPIA_SIGNATURE, NETOPIA_PUBLIC_KEY, NETOPIA_ENV],
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).send('Method not allowed');
+    const { orderId } = req.body || {};
+    if (!orderId) return res.status(400).json({ error: 'Missing orderId' });
+
+    const db = getFirestore();
+    const orderRef = db.collection('pendingOrders').doc(orderId);
+    const snap = await orderRef.get();
+    if (!snap.exists) return res.status(404).json({ error: 'Order not found' });
+    const pending = snap.data();
+
+    if (pending.paymentStatus === 'paid' || pending.status === 'paid') {
+      return res.status(409).json({ error: 'already_paid' });
+    }
+    if (pending.paymentMethod !== 'pay-at-pickup') {
+      return res.status(400).json({ error: 'not_repayable' });
+    }
+
+    // pending.amount is the gross-up (full lot price). Apply the live
+    // online-discount percent to land on what the customer would have
+    // paid originally — that's what we charge now.
+    const settingsSnap = await db.collection('settings').doc('global').get();
+    const discountPct = Number(settingsSnap.exists ? settingsSnap.data().onlineDiscountPercent : 10);
+    let amount = Number(pending.amount);
+    if (Number.isFinite(discountPct) && discountPct > 0 && discountPct < 100) {
+      amount = Math.round(amount * (1 - discountPct / 100));
+    }
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'bad_amount' });
+    }
+
+    const cd = pending.customerData || {};
+    const details = pending.orderType === 'longTerm'
+      ? `Mango Parking — parcare pe termen lung (${pending.days} zile)`
+      : `Mango Parking — pachet ${pending.quantity} credite`;
+
+    const [firstName, ...rest] = (cd.name || 'Customer').trim().split(/\s+/);
+    const lastName = rest.join(' ') || firstName;
+
+    const xml = buildRequestXml({
+      orderId,
+      amount,
+      currency: 'RON',
+      signature: NETOPIA_SIGNATURE.value(),
+      returnUrl: `${SITE_URL}/booking/return?orderId=${orderId}`,
+      confirmUrl: CALLBACK_URL,
+      details,
+      billing: {
+        first_name: firstName,
+        last_name: lastName,
+        email: cd.email || '',
+        mobile_phone: cd.phone || '',
+        address: 'N/A',
+      },
+    });
+
+    const encrypted = encryptRequest(NETOPIA_PUBLIC_KEY.value(), xml);
+    const env = (NETOPIA_ENV.value?.() || 'sandbox').toLowerCase();
+    const action = NETOPIA_ENDPOINTS[env] || NETOPIA_ENDPOINTS.sandbox;
+
+    // Stamp `repayInProgress` so the IPN knows this confirmation is a
+    // repay (and should patch the existing booking instead of creating a
+    // new one). Do NOT flip paymentMethod yet — only on IPN success.
+    // Abandoned repays leave the order in its original pay-at-pickup state.
+    await orderRef.update({
+      repayInProgress: true,
+      repayAmount: amount,
+      repayStartedAt: new Date().toISOString(),
+    });
+
+    return res.json({
+      action,
+      env_key: encrypted.env_key,
+      data: encrypted.data,
+      cipher: encrypted.cipher,
+      iv: encrypted.iv,
+      orderId,
+    });
   }
 );
