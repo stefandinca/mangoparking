@@ -119,8 +119,12 @@ function renderProcessing() {
 function renderSuccess(order) {
   const isLongTerm = order.orderType === 'longTerm';
   const isGuest = !getCurrentUser();
+  // `amount` is what was actually charged (post-voucher; 0 for a booking
+  // fully covered by a days voucher). Fall back to the gross totalPrice
+  // for older orders that predate the amount field on long-term docs.
+  const paidAmount = Number.isFinite(Number(order.amount)) ? Number(order.amount) : order.totalPrice;
   const detail = isLongTerm
-    ? `${order.days} ${t('longTerm.days')} · ${order.totalPrice} ${t('common.lei')}`
+    ? `${order.days} ${t('longTerm.days')} · ${paidAmount} ${t('common.lei')}`
     : `${order.quantity} ${t('credit.plural')} · ${order.amount} ${t('common.lei')}`;
 
   return `

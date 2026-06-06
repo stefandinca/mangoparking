@@ -34,6 +34,7 @@ function fmtDate(iso, locale) {
 function valueLabel(v) {
   if (v.type === 'fixed') return `-${v.value} ${t('common.lei')}`;
   if (v.type === 'percent') return `-${v.value}%`;
+  if (v.type === 'days') return t('voucher.valueDays', { value: v.value });
   return '—';
 }
 

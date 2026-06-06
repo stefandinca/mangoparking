@@ -115,13 +115,34 @@ export async function computeAuthoritativeLongTermTotal({ dropoffAt, pickupAt })
 //   • Today (Bucharest local day) is between startDate and endDate inclusive.
 //   • Private vouchers — caller's authedUid is in assignedUserIds.
 //   • Public vouchers — anyone (authed or guest with plate identity).
-//   • One redemption per identity (authedUid OR `plate:${plate}` for guests).
-//   • maxRedemptionsTotal not exceeded.
+//   • One redemption per identity (authedUid OR `plate:${plate}` for
+//     guests) for fixed/percent. Days vouchers are SPLITTABLE instead:
+//     each identity holds a day balance (the voucher value) that can be
+//     spent across multiple bookings — a 7-day voucher covers a 3-day
+//     stay now and a 4-day stay later. The balance lives in
+//     voucherDayBalances/{CODE}_{identityKey} (server-written; updated
+//     transactionally by createPayment).
+//   • maxRedemptionsTotal not exceeded. For days vouchers the cap counts
+//     DISTINCT holders (an identity's first redemption), so returning
+//     holders can keep splitting their remaining days after the cap fills.
+//   • Days vouchers — long-term orders only (orderType === 'longTerm').
 //
 // Discount calculation:
 //   • Fixed RON: min(value, baseAmount - 1) — keep order amount ≥ 1 RON.
 //   • Percent: round(baseAmount * value / 100), capped at baseAmount - 1.
-export async function resolveVoucher({ code, plate, baseAmount, authedUid }) {
+//   • Days: min(remaining days, bookedDays) × perDay — free days valued
+//     at the booking's own (tier/seasonal-aware) daily rate. May cover
+//     the WHOLE amount: a fully-covered order skips Netopia entirely
+//     (createPayment fulfils it immediately as paidBy='voucher').
+//
+// `days`/`perDay` context: createPayment passes the server-recomputed
+// values from computeAuthoritativeLongTermTotal (authoritative); the
+// validateVoucherCode preview callable passes client-supplied ones
+// (display-only — pay time always re-resolves with authoritative data).
+//
+// Days-voucher success extras: `daysUsed` (days this order consumes) and
+// `daysAvailable` (balance BEFORE this order) ride along on the result.
+export async function resolveVoucher({ code, plate, baseAmount, authedUid, orderType, days, perDay }) {
   if (!code) return { ok: false, error: 'no-code' };
   if (!Number.isFinite(Number(baseAmount)) || Number(baseAmount) <= 0) {
     return { ok: false, error: 'bad-base-amount' };
@@ -148,13 +169,17 @@ export async function resolveVoucher({ code, plate, baseAmount, authedUid }) {
     }
   }
 
-  if (Number.isFinite(Number(v.maxRedemptionsTotal)) && Number(v.maxRedemptionsTotal) > 0) {
-    if (Number(v.redeemedCount || 0) >= Number(v.maxRedemptionsTotal)) {
-      return { ok: false, error: 'sold-out' };
+  // Days vouchers only make sense on long-term bookings and need the
+  // booking's day count + daily rate to value the discount.
+  if (v.type === 'days') {
+    if (orderType !== 'longTerm') return { ok: false, error: 'longterm-only' };
+    if (!Number.isFinite(Number(days)) || Number(days) < 1
+        || !Number.isFinite(Number(perDay)) || Number(perDay) <= 0) {
+      return { ok: false, error: 'no-days-context' };
     }
   }
 
-  // Identity key for once-per-user enforcement. Registered users key off
+  // Identity key for redemption enforcement. Registered users key off
   // their uid; guests key off the normalized plate. Without a plate or
   // uid we cannot enforce the rule and must refuse.
   let identityKey = null;
@@ -166,20 +191,54 @@ export async function resolveVoucher({ code, plate, baseAmount, authedUid }) {
   }
   if (!identityKey) return { ok: false, error: 'no-identity' };
 
-  const dupSnap = await db.collection('voucherRedemptions')
-    .where('voucherCode', '==', normCode)
-    .where('identityKey', '==', identityKey)
-    .limit(1)
-    .get();
-  if (!dupSnap.empty) return { ok: false, error: 'already-used' };
+  // Usage check. Fixed/percent are one-shot per identity. Days vouchers
+  // hold a per-identity day balance that can be split across bookings —
+  // tracked in voucherDayBalances/{CODE}_{identityKey} (server-written,
+  // transactionally updated by createPayment so concurrent splits can't
+  // overdraw). Refuse only once the balance is gone.
+  let daysAvailable = null;
+  let isFirstUse = true;
+  if (v.type === 'days') {
+    const balSnap = await db.collection('voucherDayBalances')
+      .doc(`${normCode}_${identityKey}`)
+      .get();
+    const used = balSnap.exists ? Number(balSnap.data().daysUsed) || 0 : 0;
+    isFirstUse = !balSnap.exists;
+    daysAvailable = Math.max(0, Number(v.value) - used);
+    if (daysAvailable <= 0) return { ok: false, error: 'no-days-left' };
+  } else {
+    const dupSnap = await db.collection('voucherRedemptions')
+      .where('voucherCode', '==', normCode)
+      .where('identityKey', '==', identityKey)
+      .limit(1)
+      .get();
+    if (!dupSnap.empty) return { ok: false, error: 'already-used' };
+  }
+
+  // Total-cap check — counts one-shot redemptions, or distinct holders
+  // for days vouchers (so a returning holder can keep splitting their
+  // remaining days even after the cap fills).
+  if (isFirstUse
+      && Number.isFinite(Number(v.maxRedemptionsTotal)) && Number(v.maxRedemptionsTotal) > 0
+      && Number(v.redeemedCount || 0) >= Number(v.maxRedemptionsTotal)) {
+    return { ok: false, error: 'sold-out' };
+  }
 
   const base = Number(baseAmount);
   let discount = 0;
+  let daysUsed = null;
   if (v.type === 'fixed') {
     discount = Math.min(Number(v.value), base - 1);
   } else if (v.type === 'percent') {
     discount = Math.round((base * Number(v.value)) / 100);
     if (discount >= base) discount = base - 1;
+  } else if (v.type === 'days') {
+    // Free days valued at the booking's own daily rate; capped at the
+    // booked days so 3 remaining days on a 2-day booking spend only 2.
+    // Deliberately NOT capped at base-1 — full coverage means a free
+    // booking (createPayment short-circuits Netopia when amount hits 0).
+    daysUsed = Math.min(daysAvailable, Number(days));
+    discount = Math.min(daysUsed * Number(perDay), base);
   } else {
     return { ok: false, error: 'unknown-type' };
   }
@@ -195,6 +254,9 @@ export async function resolveVoucher({ code, plate, baseAmount, authedUid }) {
     },
     discountAmount: discount,
     identityKey,
+    daysUsed,
+    daysAvailable,
+    isFirstUse,
   };
 }
 

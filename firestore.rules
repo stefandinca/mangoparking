@@ -89,6 +89,14 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Per-identity day balances for splittable days vouchers — admin SDK
+    // only (createPayment transaction + resolveVoucher). Staff may read
+    // for support lookups.
+    match /voucherDayBalances/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if false;
+    }
+
     // Token balances - owner/guest read+write, staff full access
     match /tokenBalances/{docId} {
       allow read: if isStaff() || (isAuthenticated() && docId == request.auth.uid) || docId.matches('plate_.*');

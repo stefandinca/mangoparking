@@ -334,10 +334,35 @@ export default function BookingLongTerm(container) {
     // total subtracts the discount; the voucher amount is also passed
     // into createPayment which re-validates server-side.
     let finalTotal = displayTotal;
-    if (!isPickup && promoVoucher?.discountAmount) {
-      finalTotal = Math.max(1, displayTotal - promoVoucher.discountAmount);
+    if (!isPickup && promoVoucher) {
+      // Days vouchers depend on the live quote — re-derive the discount
+      // whenever dates change so the display matches what the server will
+      // charge (min(remaining days, booked days) × the booking's daily
+      // rate). `daysAvailable` is the identity's remaining balance — days
+      // vouchers are splittable across multiple bookings.
+      if (promoVoucher.type === 'days' && quote.days) {
+        const available = promoVoucher.daysAvailable ?? promoVoucher.value;
+        promoVoucher.daysGranted = Math.min(available, quote.days);
+        promoVoucher.discountAmount = Math.min(
+          promoVoucher.daysGranted * quote.perDay,
+          displayTotal
+        );
+      }
+      if (promoVoucher.discountAmount) {
+        // Days vouchers may cover the WHOLE total (free order — the server
+        // skips Netopia); fixed/percent keep the 1-leu Netopia floor.
+        const floor = promoVoucher.type === 'days' ? 0 : 1;
+        finalTotal = Math.max(floor, displayTotal - promoVoucher.discountAmount);
+      }
+      renderAppliedVoucher();
     }
-    totalEl.textContent = finalTotal || '—';
+    totalEl.textContent = quote.days ? String(finalTotal) : '—';
+    // Fully-covered booking (days voucher): no Netopia charge happens, so
+    // don't advertise Netopia on the submit button.
+    const payBtnEl = page.querySelector('[data-pay-btn]');
+    if (payBtnEl && !isPickup) {
+      payBtnEl.textContent = finalTotal === 0 ? t('longTerm.payNowFree') : t('longTerm.payNow');
+    }
     daysEl.textContent = quote.days || '—';
     perdayEl.textContent = displayPerDay || '—';
     hoursLineEl.textContent = hours > 0 ? t('longTerm.durationHours', { hours }) : '—';
@@ -477,9 +502,18 @@ export default function BookingLongTerm(container) {
     voucherInputWrap.classList.add('hidden');
     voucherAppliedEl.classList.remove('hidden');
     voucherAppliedName.textContent = `${promoVoucher.name} (${promoVoucher.code})`;
-    const detail = promoVoucher.type === 'percent'
-      ? t('voucher.appliedPercent', { value: promoVoucher.value, amount: promoVoucher.discountAmount })
-      : t('voucher.appliedFixed', { amount: promoVoucher.discountAmount });
+    let detail;
+    if (promoVoucher.type === 'percent') {
+      detail = t('voucher.appliedPercent', { value: promoVoucher.value, amount: promoVoucher.discountAmount });
+    } else if (promoVoucher.type === 'days') {
+      const granted = promoVoucher.daysGranted ?? promoVoucher.value;
+      const left = Math.max(0, (promoVoucher.daysAvailable ?? promoVoucher.value) - granted);
+      detail = t('voucher.appliedDays', { value: granted, amount: promoVoucher.discountAmount });
+      // Splittable balance — tell the customer what stays on the voucher.
+      if (left > 0) detail += ` · ${t('voucher.appliedDaysLeft', { left })}`;
+    } else {
+      detail = t('voucher.appliedFixed', { amount: promoVoucher.discountAmount });
+    }
     voucherAppliedDetail.textContent = detail;
   }
 
@@ -500,7 +534,9 @@ export default function BookingLongTerm(container) {
       applyBtn.disabled = true;
       applyBtn.textContent = t('common.loading');
       try {
-        const res = await previewVoucher({ code, plate, baseAmount: base, orderType: 'longTerm' });
+        // days/perDay context lets days-type vouchers compute their
+        // discount (N free days × this booking's daily rate).
+        const res = await previewVoucher({ code, plate, baseAmount: base, orderType: 'longTerm', days: quote.days, perDay: quote.perDay });
         if (res?.ok) {
           promoVoucher = {
             code: res.voucherCode,
@@ -508,6 +544,9 @@ export default function BookingLongTerm(container) {
             type: res.type,
             value: res.value,
             discountAmount: res.discountAmount,
+            // Days vouchers: remaining balance + days this booking uses.
+            daysAvailable: res.daysAvailable ?? null,
+            daysGranted: res.daysUsed ?? null,
           };
           renderAppliedVoucher();
           recompute();

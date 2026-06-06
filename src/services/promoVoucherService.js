@@ -8,8 +8,11 @@
 //   code:                 'BLACK50',                  // uppercased, A-Z 0-9
 //   name:                 'Black Friday 2026',
 //   active:               true,
-//   type:                 'fixed' | 'percent',
-//   value:                50,                         // RON for fixed, 1-100 for percent
+//   type:                 'fixed' | 'percent' | 'days',
+//   value:                50,                         // RON for fixed, 1-100 for percent,
+//                                                     // free days for days (long-term only;
+//                                                     // valued at the booking's daily rate,
+//                                                     // may cover the whole amount → free order)
 //   startDate:            'YYYY-MM-DD',               // inclusive
 //   endDate:              'YYYY-MM-DD',               // inclusive
 //   visibility:           'public' | 'private',
@@ -25,6 +28,14 @@
 //   • One redemption per user per code (enforced server-side via the
 //     voucherRedemptions ledger).
 //   • Vouchers cannot be combined. Only one applies per booking.
+//
+// Days vouchers (v1.9):
+//   • Long-term bookings only; discount = free days × the booking's
+//     daily rate. Full coverage skips Netopia (free order).
+//   • SPLITTABLE: each identity holds a day balance spendable across
+//     multiple bookings (7-day voucher → 3-day stay + 4-day stay),
+//     tracked server-side in voucherDayBalances/{CODE}_{identityKey}.
+//   • maxRedemptionsTotal counts distinct holders, not individual splits.
 
 import {
   getCollection,
@@ -90,13 +101,19 @@ export async function deleteVoucher(code) {
 // `{ ok, discountAmount, type, value, voucherCode, name }` on success or
 // `{ ok: false, error: '<reason>' }` on failure. Used by booking pages
 // to show the customer their applied discount before they pay.
-export async function previewVoucher({ code, plate, baseAmount, orderType }) {
+//
+// `days`/`perDay` (long-term only) let days-type vouchers preview their
+// discount (N free days × the booking's daily rate). Display-only — pay
+// time re-resolves with server-recomputed values.
+export async function previewVoucher({ code, plate, baseAmount, orderType, days, perDay }) {
   if (!code) return { ok: false, error: 'no-code' };
   const res = await validateVoucherCodeFn({
     code: normalizeCode(code),
     plate,
     baseAmount,
     orderType,
+    days,
+    perDay,
   });
   return res?.data || { ok: false, error: 'no-response' };
 }

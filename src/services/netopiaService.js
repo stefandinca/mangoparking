@@ -44,8 +44,16 @@ export async function startNetopiaPayment(payload) {
   }
 
   const responseBody = await resp.json();
-  const { action, env_key, data, cipher, iv, orderId, error, paymentMethod, redirectUrl } = responseBody;
+  const { action, env_key, data, cipher, iv, orderId, error, paymentMethod, redirectUrl, free } = responseBody;
   if (error) throw new Error(error);
+
+  // Free-order short-circuit: a days voucher covered the whole amount —
+  // the server already fulfilled the booking; just show the confirmation.
+  if (free) {
+    if (!redirectUrl) throw new Error('Missing redirectUrl from free-order handoff');
+    window.location.href = redirectUrl;
+    return orderId;
+  }
 
   // Pay-at-pickup short-circuit: just navigate. No form, no Netopia.
   if (paymentMethod === 'pay-at-pickup') {

@@ -221,7 +221,9 @@ async function createBookingFromOrder(orderId, order) {
     paymentMethod: isPickup ? 'pay-at-pickup' : 'online',
     paymentStatus: isPickup ? 'unpaid' : 'paid',
     paidAt: isPickup ? null : nowIso,
-    paidBy: isPickup ? null : 'netopia',
+    // 'voucher' when a days-type voucher fully covered the amount (free
+    // order — no Netopia charge happened); 'netopia' otherwise.
+    paidBy: isPickup ? null : (order.paidBy || 'netopia'),
     spotId: null,
     createdAt: nowIso,
     completedAt: null,
@@ -283,6 +285,10 @@ export const createPayment = onRequest(
     // gross up to the "original" anchor price.
     let amount;
     let details;
+    // Authoritative day-count + daily rate from the long-term recompute —
+    // consumed by days-type vouchers (N free days × this rate).
+    let authoritativeDays = null;
+    let authoritativePerDay = null;
     if (orderType === 'longTerm') {
       // Server-authoritative recomputation — re-derive the expected
       // online total from the canonical rates + seasonal periods and
@@ -308,6 +314,8 @@ export const createPayment = onRequest(
         });
       }
       amount = check.expected;
+      authoritativeDays = check.days;
+      authoritativePerDay = check.perDay;
       details = `Mango Parking — parcare pe termen lung (${check.days} zile)`;
     } else {
       // Credits — recompute against the canonical token pack to
@@ -380,11 +388,20 @@ export const createPayment = onRequest(
           plate: cd.licensePlate,
           baseAmount: amount,
           authedUid,
+          orderType,
+          days: authoritativeDays,
+          perDay: authoritativePerDay,
         });
         if (promoRes.ok) {
           voucherAmount = promoRes.discountAmount;
           promoVoucherCode = promoRes.voucher.code;
-          promoVoucherDoc = { ...promoRes.voucher, identityKey: promoRes.identityKey };
+          promoVoucherDoc = {
+            ...promoRes.voucher,
+            identityKey: promoRes.identityKey,
+            // Days vouchers: how many days this order consumes from the
+            // identity's balance (null for fixed/percent).
+            daysUsed: promoRes.daysUsed ?? null,
+          };
           amount = amount - voucherAmount;
         } else {
           // The booking page previewed the code, so a refusal here means
@@ -424,6 +441,7 @@ export const createPayment = onRequest(
       voucherId,                 // legacy signup voucher; null otherwise
       voucherAmount,             // RON discount, regardless of which voucher path
       promoVoucherCode,          // new promo voucher code; null when not used
+      voucherDaysUsed: promoVoucherDoc?.daysUsed ?? null, // days vouchers: days consumed by this order
       status: 'pending',
       paymentMethod,
       paymentStatus: 'unpaid',
@@ -444,18 +462,52 @@ export const createPayment = onRequest(
           const vSnap = await tx.get(voucherRef);
           if (!vSnap.exists) throw new HttpsError('not-found', 'voucher disappeared mid-flight');
           const vData = vSnap.data();
+          const isDays = promoVoucherDoc.type === 'days';
+
+          // Race-safe usage guard — resolveVoucher already checked but a
+          // concurrent createPayment from the same identity could slip.
+          // Fixed/percent: one redemption per identity. Days: the
+          // per-identity balance doc is read INSIDE the transaction so
+          // two concurrent splits can't overdraw (doc-level locking).
+          let isFirstUse = true;
+          let balanceRef = null;
+          let newDaysUsed = null;
+          if (isDays) {
+            balanceRef = getFirestore().collection('voucherDayBalances')
+              .doc(`${promoVoucherCode}_${promoVoucherDoc.identityKey}`);
+            const balSnap = await tx.get(balanceRef);
+            const used = balSnap.exists ? Number(balSnap.data().daysUsed) || 0 : 0;
+            isFirstUse = !balSnap.exists;
+            const grant = Number(promoVoucherDoc.daysUsed);
+            if (used + grant > Number(vData.value)) {
+              throw new HttpsError('already-exists', 'voucher day balance exhausted');
+            }
+            newDaysUsed = used + grant;
+          } else {
+            const dupSnap = await getFirestore().collection('voucherRedemptions')
+              .where('voucherCode', '==', promoVoucherCode)
+              .where('identityKey', '==', promoVoucherDoc.identityKey)
+              .limit(1)
+              .get();
+            if (!dupSnap.empty) throw new HttpsError('already-exists', 'voucher already redeemed by this identity');
+          }
+
+          // Total cap: counts one-shot redemptions, or distinct holders
+          // for days vouchers — a returning holder splitting their
+          // remaining days doesn't consume another cap slot.
           const cap = Number(vData.maxRedemptionsTotal);
-          if (Number.isFinite(cap) && cap > 0 && Number(vData.redeemedCount || 0) >= cap) {
+          if (isFirstUse && Number.isFinite(cap) && cap > 0 && Number(vData.redeemedCount || 0) >= cap) {
             throw new HttpsError('already-exists', 'voucher fully redeemed');
           }
-          // Race-safe duplicate guard — resolveVoucher already checked but
-          // a concurrent createPayment from the same identity could slip.
-          const dupSnap = await getFirestore().collection('voucherRedemptions')
-            .where('voucherCode', '==', promoVoucherCode)
-            .where('identityKey', '==', promoVoucherDoc.identityKey)
-            .limit(1)
-            .get();
-          if (!dupSnap.empty) throw new HttpsError('already-exists', 'voucher already redeemed by this identity');
+
+          if (isDays) {
+            tx.set(balanceRef, {
+              voucherCode: promoVoucherCode,
+              identityKey: promoVoucherDoc.identityKey,
+              daysUsed: newDaysUsed,
+              updatedAt: new Date().toISOString(),
+            });
+          }
 
           const redemptionRef = getFirestore().collection('voucherRedemptions').doc();
           tx.set(redemptionRef, {
@@ -468,14 +520,58 @@ export const createPayment = onRequest(
             amount: voucherAmount,
             type: promoVoucherDoc.type,
             value: promoVoucherDoc.value,
+            daysUsed: isDays ? Number(promoVoucherDoc.daysUsed) : null,
             redeemedAt: new Date().toISOString(),
           });
-          tx.update(voucherRef, { redeemedCount: (Number(vData.redeemedCount) || 0) + 1 });
+          if (isFirstUse) {
+            tx.update(voucherRef, { redeemedCount: (Number(vData.redeemedCount) || 0) + 1 });
+          }
         });
       } catch (err) {
         console.warn('createPayment voucher redemption failed:', err?.message);
         return res.status(409).json({ error: `voucher: ${err?.message || 'redemption-failed'}` });
       }
+    }
+
+    // Free-order short-circuit: a days-type voucher can cover the WHOLE
+    // amount (fixed/percent are capped at base-1, credits can never reach
+    // 0). Netopia refuses zero-amount charges, so fulfil immediately —
+    // create the booking as paid (paidBy='voucher'), mark the order paid,
+    // and send the client straight to the confirmation page. The
+    // redemption record was already written atomically above.
+    if (paymentMethod === 'online' && amount <= 0) {
+      if (orderType !== 'longTerm') {
+        // Defensive — resolveVoucher refuses days vouchers on credits.
+        console.warn('createPayment: zero amount on non-longTerm order refused', { orderId, orderType });
+        return res.status(400).json({ error: 'voucher: no-discount' });
+      }
+      const nowIso = new Date().toISOString();
+      const bookingId = await createBookingFromOrder(orderId, {
+        ...body,
+        paymentMethod: 'online',
+        paidBy: 'voucher',
+      });
+      pendingDoc.amount = 0;
+      pendingDoc.status = 'paid';
+      pendingDoc.paymentStatus = 'paid';
+      pendingDoc.paidAt = nowIso;
+      pendingDoc.paidBy = 'voucher';
+      pendingDoc.bookingId = bookingId;
+      await getFirestore().collection('pendingOrders').doc(orderId).set(pendingDoc);
+      // Stamp the redemption with the booking it produced (best-effort —
+      // the IPN handler does the same for paid-via-Netopia orders).
+      try {
+        const redSnap = await getFirestore().collection('voucherRedemptions')
+          .where('orderId', '==', orderId).limit(1).get();
+        if (!redSnap.empty) await redSnap.docs[0].ref.update({ bookingId });
+      } catch (err) {
+        console.warn('free-order redemption bookingId stamp failed:', err?.message);
+      }
+      return res.json({
+        orderId,
+        free: true,
+        redirectUrl: `${SITE_URL}/booking/return?orderId=${orderId}`,
+      });
     }
 
     // For pay-at-pickup longTerm bookings, create the booking doc now so
@@ -1730,9 +1826,11 @@ export const adminMarkRefunded = onCall(
 export const validateVoucherCode = onCall(
   { region: 'europe-west1', cors: true },
   async (request) => {
-    const { code, plate, baseAmount, orderType } = request.data || {};
+    const { code, plate, baseAmount, orderType, days, perDay } = request.data || {};
     const authedUid = request.auth?.uid || null;
-    const res = await resolveVoucher({ code, plate, baseAmount, authedUid });
+    // days/perDay are client-supplied here (preview only) — pay time
+    // re-resolves with the server-recomputed values inside createPayment.
+    const res = await resolveVoucher({ code, plate, baseAmount, authedUid, orderType, days, perDay });
     if (!res.ok) return { ok: false, error: res.error };
     return {
       ok: true,
@@ -1741,6 +1839,10 @@ export const validateVoucherCode = onCall(
       type: res.voucher.type,
       value: res.voucher.value,
       discountAmount: res.discountAmount,
+      // Days vouchers: days this booking would consume + balance available
+      // BEFORE consuming (splittable across bookings). Null otherwise.
+      daysUsed: res.daysUsed ?? null,
+      daysAvailable: res.daysAvailable ?? null,
     };
   }
 );
