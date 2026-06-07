@@ -1,117 +1,94 @@
 #!/usr/bin/env node
-// Prerender public routes to static HTML for SEO.
-// Runs AFTER `vite build` — serves dist/ via `vite preview`, drives puppeteer
-// through each route, waits for the router's `app-rendered` event, then writes
-// the fully-rendered HTML back into dist/ at the route path.
-// Client JS re-hydrates on load (content flashes briefly, acceptable for MVP).
+// No-browser prerender: inject per-route SEO into static HTML.
+//
+// Runs AFTER `vite build`. For each public route it takes the built
+// dist/index.html shell and rewrites the <head> (title, description, OG,
+// Twitter, canonical, hreflang, JSON-LD), writing dist/<route>/index.html.
+// Crawlers and social unfurlers get correct per-page tags; the client SPA
+// hydrates the body on load.
+//
+// Why not Puppeteer? Headless Chromium can't launch in Vercel's build
+// container (missing system libs; even @sparticuz/chromium fails), so a
+// browser-based prerender silently skips there. This pure-Node approach has
+// no native deps and works identically everywhere.
 
-import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { ROUTES, SITE_URL } from './seo-routes.mjs';
 
-const SITE_URL = process.env.SITE_URL || 'https://www.mangoparking.ro';
-const PORT = 4173;
-const HOST = `http://localhost:${PORT}`;
+const DIST = 'dist';
 
-// Launch Chromium. Locally we use the full `puppeteer` package (bundled
-// Chromium). On Vercel's build container there's no system Chromium and the
-// bundled one can't start (missing libnss3 etc.), so use `@sparticuz/chromium`
-// — a serverless Chromium build that ships the libs — via `puppeteer-core`.
-// Gated on the VERCEL env so dev machines keep using the simpler path.
-async function launchBrowser() {
-  if (process.env.VERCEL) {
-    const chromium = (await import('@sparticuz/chromium')).default;
-    const puppeteer = (await import('puppeteer-core')).default;
-    return puppeteer.launch({
-      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
-      executablePath: await chromium.executablePath(),
-      headless: 'new',
-    });
-  }
-  const puppeteer = (await import('puppeteer')).default;
-  return puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-const ROUTES = [
-  '/', '/pricing', '/promotions', '/shuttle', '/about', '/contact',
-  '/booking', '/booking/credits', '/booking/long-term', '/booking/return',
-  '/terms', '/privacy', '/gdpr', '/delivery', '/cancellation',
-  '/en', '/en/pricing', '/en/promotions', '/en/shuttle', '/en/about', '/en/contact',
-  '/en/booking', '/en/booking/credits', '/en/booking/long-term', '/en/booking/return',
-  '/en/terms', '/en/privacy', '/en/gdpr', '/en/delivery', '/en/cancellation',
-];
+function setMeta(html, selectorAttr, name, content) {
+  const re = new RegExp(`(<meta ${selectorAttr}="${name}" content=")[^"]*(">)`);
+  if (re.test(html)) return html.replace(re, `$1${esc(content)}$2`);
+  // Insert before </head> if the tag wasn't in the template.
+  return html.replace('</head>', `  <meta ${selectorAttr}="${name}" content="${esc(content)}">\n</head>`);
+}
 
-function waitForServer(url, timeoutMs = 15000) {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    (async function poll() {
-      while (Date.now() - start < timeoutMs) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) return resolve();
-        } catch {}
-        await new Promise(r => setTimeout(r, 250));
-      }
-      reject(new Error(`Preview server did not start within ${timeoutMs}ms`));
-    })();
-  });
+function buildHtml(template, { title, description, canonical, hreflang, jsonld, locale }) {
+  let html = template;
+  html = html.replace(/<html lang="[^"]*"/, `<html lang="${locale}"`);
+  html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(title)}</title>`);
+  html = setMeta(html, 'name', 'description', description);
+  html = setMeta(html, 'property', 'og:title', title);
+  html = setMeta(html, 'property', 'og:description', description);
+  html = setMeta(html, 'property', 'og:url', canonical);
+  html = setMeta(html, 'name', 'twitter:title', title);
+  html = setMeta(html, 'name', 'twitter:description', description);
+  html = html.replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${esc(canonical)}">`);
+
+  let inject = '';
+  for (const [lang, url] of Object.entries(hreflang)) {
+    inject += `\n  <link rel="alternate" hreflang="${lang}" href="${esc(url)}">`;
+  }
+  // data-structured so the client's setStructuredData() replaces (not duplicates) it.
+  if (jsonld) inject += `\n  <script type="application/ld+json" data-structured>${JSON.stringify(jsonld)}</script>`;
+  return html.replace('</head>', `${inject}\n</head>`);
 }
 
 async function main() {
-  console.log('▶ Starting vite preview...');
-  const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], {
-    stdio: ['ignore', 'pipe', 'inherit'],
-    shell: true,
-  });
+  const template = await readFile(join(DIST, 'index.html'), 'utf8');
+  let count = 0;
 
-  try {
-    await waitForServer(HOST);
-    console.log('✓ Preview server up at', HOST);
+  for (const route of ROUTES) {
+    const roUrl = SITE_URL + (route.path === '/' ? '/' : route.path);
+    const enUrl = SITE_URL + '/en' + (route.path === '/' ? '' : route.path);
+    const hreflang = { ro: roUrl, en: enUrl, 'x-default': roUrl };
 
-    const browser = await launchBrowser();
-    const page = await browser.newPage();
-
-    for (const route of ROUTES) {
-      const url = HOST + route;
-      process.stdout.write(`  prerendering ${route.padEnd(20)} `);
-
-      await page.goto(url, { waitUntil: 'load', timeout: 20000 });
-
-      // Router dispatches `app-rendered` after the page component mounts
-      await page.evaluate(() => new Promise(resolve => {
-        if (document.querySelector('#app')?.children.length) return resolve();
-        window.addEventListener('app-rendered', () => resolve(), { once: true });
-        setTimeout(resolve, 5000);
-      }));
-
-      // Small buffer for post-render meta/JSON-LD updates
-      await new Promise(r => setTimeout(r, 300));
-
-      let rendered = await page.content();
-      // Rewrite localhost refs so canonical/og:url/hreflang point at prod
-      rendered = rendered.split(HOST).join(SITE_URL);
-
-      const outDir = route === '/' ? 'dist' : join('dist', ...route.split('/').filter(Boolean));
+    for (const locale of ['ro', 'en']) {
+      const seo = route[locale];
+      if (!seo) continue;
+      const routePath = locale === 'en'
+        ? '/en' + (route.path === '/' ? '' : route.path)
+        : route.path;
+      const canonical = locale === 'en' ? enUrl : roUrl;
+      const html = buildHtml(template, {
+        title: seo.title,
+        description: seo.description,
+        canonical,
+        hreflang,
+        jsonld: route.jsonld,
+        locale,
+      });
+      const segments = routePath.split('/').filter(Boolean);
+      const outDir = segments.length ? join(DIST, ...segments) : DIST;
       await mkdir(outDir, { recursive: true });
-      await writeFile(join(outDir, 'index.html'), rendered, 'utf8');
-      console.log('✓');
+      await writeFile(join(outDir, 'index.html'), html, 'utf8');
+      count++;
     }
-
-    await browser.close();
-    console.log('\n✓ Prerender complete —', ROUTES.length, 'routes written.');
-  } finally {
-    server.kill();
   }
+
+  console.log(`✓ SEO meta injected — ${count} route files written.`);
 }
 
-main().catch(err => {
-  // Non-fatal: `vite build` already produced a working dist/. If Puppeteer
-  // can't run (e.g. missing Chromium libs in a CI/build container), skip
-  // prerendering rather than failing the whole deploy — the SPA still works,
-  // it just loses the per-route prerendered HTML for that build.
-  console.warn('\n⚠ Prerender skipped (build still succeeds):', err.message);
+main().catch((err) => {
+  // Non-fatal: the SPA still works without per-route HTML.
+  console.warn('⚠ SEO injection skipped (build still succeeds):', err.message);
   process.exit(0);
 });

@@ -11,12 +11,9 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@sparticuz/chromium": "^131.0.0",
     "@tailwindcss/postcss": "^4.2.1",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",
-    "puppeteer": "^23.11.1",
-    "puppeteer-core": "^23.11.1",
     "tailwindcss": "^4.2.1",
     "vite": "^7.3.1"
   },
