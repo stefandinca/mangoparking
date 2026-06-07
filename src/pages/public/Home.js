@@ -2,7 +2,7 @@ import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
-import { checkIcon, starIcon, planeIcon, clockIcon } from '../../components/widgets/icons.js';
+import { checkIcon, starIcon, planeIcon, peopleIcon } from '../../components/widgets/icons.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
 import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL } from '../../utils/constants.js';
 import { subscribeCapacity } from '../../services/capacityService.js';
@@ -115,8 +115,8 @@ export default function Home(container) {
 
             <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
               <div>
-                <p class="font-heading font-bold text-2xl tracking-tight">15<span class="text-dim text-base font-normal"> ${t('common.min')}</span></p>
-                <p class="text-[12px] text-dim uppercase tracking-wider mt-0.5">${t('hero.shuttleFreq')}</p>
+                <p class="font-heading font-bold text-2xl tracking-tight">${t('hero.shuttleFreeValue')}</p>
+                <p class="text-[12px] text-dim uppercase tracking-wider mt-0.5">${t('hero.shuttleFree')}</p>
               </div>
               <div class="w-px h-8 bg-frost-deep hidden sm:block"></div>
               <div>
@@ -221,7 +221,7 @@ export default function Home(container) {
             <div class="absolute -top-3 right-8 bg-mango text-charcoal text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
             <div class="flex items-center gap-3 mb-3">
               <div class="w-10 h-10 rounded-xl bg-mango flex items-center justify-center">
-                ${clockIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-charcoal"')}
+                ${peopleIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-charcoal"')}
               </div>
               <div>
                 <h3 class="text-white font-heading font-bold text-lg">${t('funnel.commuter.title')}</h3>
@@ -419,7 +419,7 @@ export default function Home(container) {
       return `
         <div class="card-solid rounded-3xl p-7">
           <div class="flex gap-0.5 mb-4">
-            ${Array(5).fill(0).map((_, j) => `<div class="w-6 h-1 rounded-full ${j < r.rating ? 'bg-mango' : 'bg-frost-deep'}"></div>`).join('')}
+            ${Array(5).fill(0).map((_, j) => `<svg class="w-5 h-5 ${j < r.rating ? 'text-mango' : 'text-frost-deep'}" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>`).join('')}
           </div>
           <p class="text-[15px] text-charcoal/60 leading-relaxed mb-6">${text}</p>
           <div class="flex items-center gap-3">
