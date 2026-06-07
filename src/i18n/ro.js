@@ -1262,6 +1262,9 @@ export default {
     createQuantity: 'Cantitate credite',
     createAmount: 'Sumă încasată (lei)',
     createPaidBy: 'Plătit prin',
+    paidByBroker: 'Broker / preplătit',
+    brokerNameLabel: 'Broker (preplătit)',
+    brokerNamePlaceholder: 'ex. ParkVia',
     createSubmit: 'Salvează',
     createSuccess: 'Tranzacție creată.',
     createInviteSent: 'Invitație trimisă clientului.',
@@ -1334,6 +1337,10 @@ export default {
     statusWaiting: 'Așteaptă',
     statusActive: 'Activă',
     statusNoShow: 'Neprezentat',
+    // Reservation-type chips
+    typeLongTerm: 'Termen lung',
+    typeCommuter: 'Navetist',
+    typeBroker: 'Broker',
     // Payment badges
     payPaid: 'Plătit',
     payUnpaid: 'Neplătit',

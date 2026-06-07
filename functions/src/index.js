@@ -1910,6 +1910,7 @@ export const adminCreateLongtermBooking = onCall(
       payerEmail, payerName, payerPhone,
       customerId,
       paidBy = 'cash',
+      brokerName,           // broker/prepaid reservations (e.g. ParkVia)
       autoCheckIn = false,  // walk-in flow: car is at the lot now
     } = request.data || {};
 
@@ -1923,9 +1924,18 @@ export const adminCreateLongtermBooking = onCall(
     if (!Number.isFinite(total) || total <= 0) {
       throw new HttpsError('invalid-argument', 'totalPrice must be positive');
     }
-    if (!['cash', 'card'].includes(paidBy)) {
-      throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
+    if (!['cash', 'card', 'broker'].includes(paidBy)) {
+      throw new HttpsError('invalid-argument', 'paidBy must be cash, card or broker');
     }
+
+    // paidBy → stored marker + booking source. Broker/prepaid reservations
+    // already collected the money off-lot (ParkVia et al.), so they carry a
+    // 'broker' marker (no cashbook entry) and a 'broker' source for separate
+    // tracking; cash/card walk-ins keep their admin- markers.
+    const storedPaidBy = paidBy === 'cash' ? 'admin-cash'
+      : paidBy === 'card' ? 'admin-card'
+      : 'broker';
+    const bookingSource = paidBy === 'broker' ? 'broker' : 'admin';
 
     const db = getFirestore();
     const nowIso = new Date().toISOString();
@@ -1950,14 +1960,15 @@ export const adminCreateLongtermBooking = onCall(
       },
       billing: { type: 'PF' },
       paymentId: null,
-      paymentMethod: 'admin',
+      paymentMethod: paidBy === 'broker' ? 'broker' : 'admin',
       paymentStatus: 'paid',
       paidAt: nowIso,
-      paidBy: paidBy === 'cash' ? 'admin-cash' : 'admin-card',
+      paidBy: storedPaidBy,
+      brokerName: paidBy === 'broker' ? (String(brokerName || '').trim() || null) : null,
       spotId: null,
       createdAt: nowIso,
       completedAt: null,
-      source: 'admin',
+      source: bookingSource,
       createdBy: uid,
     });
 
@@ -1974,10 +1985,12 @@ export const adminCreateLongtermBooking = onCall(
       entityType: 'booking',
       entityId: bookingRef.id,
       actorUid: uid,
-      payload: { plate, days: d, totalPrice: total, paidBy, spotId, source: 'admin' },
+      payload: { plate, days: d, totalPrice: total, paidBy, spotId, source: bookingSource, brokerName: brokerName || null },
       timestamp: nowIso,
     });
 
+    // Cash drawer only for physically-collected cash. Card is reconciled by
+    // the terminal; broker/prepaid money never touches the lot.
     if (paidBy === 'cash') {
       await recordCashEntry({
         agentUid: uid,

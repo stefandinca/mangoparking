@@ -198,7 +198,15 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
         <select name="paidBy" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <option value="cash">${t('checkins.payCash')}</option>
           <option value="card">${t('checkins.payCard')}</option>
+          <option value="broker" data-broker-opt>${t('transactions.paidByBroker')}</option>
         </select>
+      </div>
+
+      <!-- Broker / prepaid reservation name (long-term only, shown when paidBy=broker) -->
+      <div data-broker-wrap class="hidden">
+        <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.brokerNameLabel')}</label>
+        <input type="text" name="brokerName" placeholder="${escapeHtml(t('transactions.brokerNamePlaceholder'))}"
+          class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
       </div>
 
       ${allowWalkIn ? `
@@ -290,6 +298,9 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
   const crUse = qs('[data-cr-use]', contentEl);
   const creditModeToggle = qs('[data-credit-mode-toggle]', contentEl);
   const paidbyWrap = qs('[data-paidby-wrap]', contentEl);
+  const paidBySelect = qs('[name="paidBy"]', contentEl);
+  const brokerOpt = qs('[data-broker-opt]', contentEl);
+  const brokerWrap = qs('[data-broker-wrap]', contentEl);
   const autoCheckInWrap = qs('[data-autocheckin-wrap]', contentEl);
   const submitBtn = qs('[data-submit]', contentEl);
   const balanceDisplay = qs('[data-balance-display]', contentEl);
@@ -316,10 +327,22 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     // Money + walk-in affordances are irrelevant when spending existing credits.
     paidbyWrap?.classList.toggle('hidden', useExisting);
     autoCheckInWrap?.classList.toggle('hidden', useExisting);
+    // Broker/prepaid is a long-term-only payment route. Hide the option on
+    // the credit funnel (grantCreditsForCash only takes cash/card) and snap
+    // the selector back to cash if it was left on broker.
+    if (brokerOpt) brokerOpt.hidden = !isLT;
+    if (!isLT && paidBySelect?.value === 'broker') paidBySelect.value = 'cash';
+    if (brokerWrap) brokerWrap.classList.toggle('hidden', !(isLT && paidBySelect?.value === 'broker'));
     submitBtn.textContent = useExisting
       ? t('transactions.createCheckInSubmit')
       : t('transactions.createSubmit');
   }
+
+  // Toggle the broker-name field as the payment method changes.
+  paidBySelect?.addEventListener('change', () => {
+    const showBroker = getType() === 'longterm' && paidBySelect.value === 'broker';
+    brokerWrap?.classList.toggle('hidden', !showBroker);
+  });
 
   typeToggle.addEventListener('change', (e) => {
     if (!e.target.matches('input[name="tType"]')) return;
@@ -529,10 +552,13 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
           throw new Error(t('transactions.errorPickupBeforeDropoff'));
         }
         const days = Math.max(1, Math.ceil((Date.parse(pickupAt) - Date.parse(dropoffAt)) / 86_400_000));
+        const brokerName = paidBy === 'broker'
+          ? String(qs('[name="brokerName"]', contentEl)?.value || '').trim()
+          : '';
         result = await adminCreateLongtermBookingFn({
           plate, dropoffAt, pickupAt, days, totalPrice,
           payerEmail, payerName, customerId,
-          paidBy, autoCheckIn,
+          paidBy, brokerName, autoCheckIn,
         });
       } else {
         const qtyRaw = qs('[name="quantity"]', contentEl).value;
