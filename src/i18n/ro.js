@@ -865,6 +865,8 @@ export default {
     introPoint2: 'Creditele nu expiră niciodată',
     introPoint3: 'Se folosesc Luni–Vineri, 06:00–20:00',
     selectPack: 'Alege un pachet de credite',
+    select: 'Selectează',
+    selected: 'Selectat ✓',
     orCustom: 'Sau alege cantitatea dorită',
     customQty: 'Număr de credite',
     vehicleInfo: 'Informații Vehicul',

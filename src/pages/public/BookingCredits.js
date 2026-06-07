@@ -116,19 +116,30 @@ export default async function Booking(container) {
       const isBest = p.id === bestPack?.id;
       const isSelected = selectedPack?.id === p.id;
       const name = locale === 'ro' && p.nameRo ? p.nameRo : p.name;
+      const perDay = p.quantity > 0 ? Math.round(p.price / p.quantity) : p.price;
+      const orig = originalFromOnline(p.price, discount);
+      const showAnchor = orig != null && orig !== p.price;
       return `
-        <button data-pack-id="${p.id}" class="relative card-solid rounded-2xl p-6 text-left transition-all duration-200 border-[3px] ${isSelected ? 'border-mango shadow-lg ring-2 ring-mango/20' : 'border-transparent hover:border-mango/30'}">
-          ${isSelected ? `<div class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>` : ''}
-          ${isBest && !isSelected ? `<span class="absolute -top-3 right-4 text-[11px] font-bold bg-mango text-charcoal px-3 py-1 rounded-full">${t('credit.bestValue')}</span>` : ''}
-          <p class="font-heading font-bold text-2xl mb-1">${p.quantity} <span class="text-[16px] font-normal text-dim">${t('credit.plural')}</span></p>
-          ${(() => {
-            const orig = originalFromOnline(p.price, discount);
-            if (orig != null && orig !== p.price) {
-              return `<p class="font-mono text-[13px] text-dim line-through">${orig} lei</p>
-                <p data-price class="font-mono text-lg font-semibold ${isSelected ? 'text-mango' : 'text-charcoal/70'}">${p.price} lei</p>`;
-            }
-            return `<p data-price class="font-mono text-lg font-semibold ${isSelected ? 'text-mango' : 'text-charcoal/70'}">${p.price} lei</p>`;
-          })()}
+        <button data-pack-id="${p.id}" class="group relative overflow-hidden rounded-2xl bg-white border-2 ${isSelected ? 'border-mango ring-2 ring-mango/30' : 'border-frost-deep hover:border-blueberry/40'} shadow-sm text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+          <div data-stripe class="absolute inset-y-0 left-0 w-1.5 ${isSelected ? 'bg-mango' : 'bg-blueberry'}"></div>
+          ${isBest ? `<span data-best class="absolute top-3.5 right-4 text-[10px] font-bold uppercase tracking-wider bg-mango text-charcoal px-2.5 py-1 rounded-full ${isSelected ? 'hidden' : ''}">${t('credit.bestValue')}</span>` : ''}
+          <div data-check class="absolute top-3.5 right-4 w-7 h-7 rounded-full bg-mango items-center justify-center ${isSelected ? 'flex' : 'hidden'}"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>
+          <div class="p-5 pl-6">
+            ${name ? `<p class="text-[11px] uppercase tracking-wider text-dim font-mono truncate pr-16">${name}</p>` : ''}
+            <div class="flex items-baseline gap-1.5 mt-0.5">
+              <span class="font-heading font-bold text-4xl text-blueberry-deep leading-none">${p.quantity}</span>
+              <span class="text-dim text-[15px] font-medium">${t('credit.plural')}</span>
+            </div>
+            <p class="text-dim text-[13px] mt-1.5">≈ ${perDay} ${t('longTerm.perDay')}</p>
+            <div class="mt-4 pt-4 border-t border-frost-deep">
+              ${showAnchor ? `<p class="font-mono text-[13px] text-dim line-through leading-none mb-0.5">${orig} lei</p>` : ''}
+              <div class="flex items-baseline gap-1">
+                <span class="font-mono font-bold text-xl text-blueberry-deep">${p.price}</span>
+                <span class="text-dim text-[13px]">lei</span>
+              </div>
+            </div>
+            <span data-select-cta class="mt-4 block text-center font-semibold text-[14px] py-2.5 rounded-xl transition-colors ${isSelected ? 'bg-blueberry text-white' : 'bg-blueberry/5 text-blueberry border border-blueberry/30 group-hover:bg-blueberry/10'}">${isSelected ? t('credit.selected') : t('credit.select')}</span>
+          </div>
         </button>
       `;
     }).join('');
@@ -328,22 +339,27 @@ export default async function Booking(container) {
       pageEl.querySelectorAll('[data-pack-id]').forEach(card => {
         const isSel = card.dataset.packId === packId;
         card.classList.toggle('border-mango', isSel);
-        card.classList.toggle('shadow-lg', isSel);
         card.classList.toggle('ring-2', isSel);
-        card.classList.toggle('ring-mango/20', isSel);
-        card.classList.toggle('border-transparent', !isSel);
-        // Toggle checkmark
-        const existing = card.querySelector('[data-check]');
-        if (isSel && !existing) {
-          card.insertAdjacentHTML('afterbegin', `<div data-check class="absolute top-4 right-4 w-7 h-7 rounded-full bg-mango flex items-center justify-center"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>`);
-        } else if (!isSel && existing) {
-          existing.remove();
-        }
-        // Toggle price color
-        const price = card.querySelector('[data-price]');
-        if (price) {
-          price.classList.toggle('text-mango', isSel);
-          price.classList.toggle('text-charcoal/70', !isSel);
+        card.classList.toggle('ring-mango/30', isSel);
+        card.classList.toggle('border-frost-deep', !isSel);
+        // Accent stripe: mango when selected, blueberry otherwise.
+        const stripe = card.querySelector('[data-stripe]');
+        if (stripe) { stripe.classList.toggle('bg-mango', isSel); stripe.classList.toggle('bg-blueberry', !isSel); }
+        // Checkmark badge (hide the "best value" badge while selected).
+        const check = card.querySelector('[data-check]');
+        if (check) { check.classList.toggle('flex', isSel); check.classList.toggle('hidden', !isSel); }
+        const best = card.querySelector('[data-best]');
+        if (best) best.classList.toggle('hidden', isSel);
+        // Select CTA.
+        const cta = card.querySelector('[data-select-cta]');
+        if (cta) {
+          cta.textContent = isSel ? t('credit.selected') : t('credit.select');
+          cta.classList.toggle('bg-blueberry', isSel);
+          cta.classList.toggle('text-white', isSel);
+          cta.classList.toggle('bg-blueberry/5', !isSel);
+          cta.classList.toggle('text-blueberry', !isSel);
+          cta.classList.toggle('border', !isSel);
+          cta.classList.toggle('border-blueberry/30', !isSel);
         }
       });
       updateSummary(pageEl);

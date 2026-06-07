@@ -864,6 +864,8 @@ export default {
     introPoint2: 'Credits never expire',
     introPoint3: 'Used Mon–Fri, 6 AM–8 PM',
     selectPack: 'Select a credit pack',
+    select: 'Select',
+    selected: 'Selected ✓',
     orCustom: 'Or choose your own quantity',
     customQty: 'Number of credits',
     vehicleInfo: 'Vehicle Information',
