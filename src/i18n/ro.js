@@ -1407,7 +1407,14 @@ export default {
     toastCheckedIn: 'Check-in efectuat.',
     toastCheckedOut: 'Check-out efectuat.',
     toastMarkedPaid: 'Plată înregistrată.',
-    overstayPlaceholder: 'Funcție de taxare a depășirii — în curând.',
+    toastOverstayCharged: 'Depășire încasată ({amount} lei).',
+    // Overstay charge dialog
+    overstayTitle: 'Taxează depășirea',
+    overstayDaysLate: 'Depășire: {days} zile peste ora de plecare.',
+    overstayHint: 'Calculat: {days} zile × {perDay} lei/zi. Poți modifica suma.',
+    overstayAmountLabel: 'Sumă de încasat (lei)',
+    overstayConfirm: 'Încasează depășirea',
+    overstayNoAmount: 'Introdu o sumă validă.',
     // Errors
     errorInvalidPlate: 'Număr de înmatriculare invalid.',
     errorNoOrderId: 'Lipsește ID-ul comenzii.',

@@ -37,6 +37,7 @@ import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
 const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
+const adminChargeOverstayFn = httpsCallable(functions, 'adminChargeOverstay');
 
 const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
@@ -134,9 +135,20 @@ function matchesSearch(b, q) {
 
 function isOverdue(booking) {
   if (booking.status !== 'active') return false;
+  // Commuters (credit) have no scheduled pick-up — they park for the day and
+  // leave when they leave, so "overdue" doesn't apply.
+  if (booking.type === 'credit') return false;
   if (!booking.pickupAt && !booking.endDate) return false;
   const pickup = booking.pickupAt || booking.endDate;
   return Date.now() > new Date(pickup).getTime() + OVERDUE_THRESHOLD_MS;
+}
+
+// Which timestamp decides Check-out-tab window membership. A commuter
+// (credit) is checked out the day they checked in, so use their check-in
+// time (always inside the local "today" window, timezone-safe). Long-term
+// bookings use their scheduled pick-up.
+function checkoutDate(b) {
+  return b.type === 'credit' ? (b.checkinTimestamp || b.startDate) : (b.pickupAt || b.endDate);
 }
 
 function hoursOver(booking) {
@@ -424,7 +436,7 @@ export default async function AdminCheckIns(container) {
     const range = windowRange(activeWindow);
     const q = searchQuery;
     const checkin = bookings.filter((b) => b.status === 'upcoming' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
-    const checkout = bookings.filter((b) => b.status === 'active' && isInWindow(b.pickupAt || b.endDate, range) && matchesSearch(b, q)).length;
+    const checkout = bookings.filter((b) => b.status === 'active' && isInWindow(checkoutDate(b), range) && matchesSearch(b, q)).length;
     const overdue = bookings.filter((b) => isOverdue(b) && matchesSearch(b, q)).length;
     const noshow = bookings.filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
     return { checkin, checkout, overdue, noshow };
@@ -529,8 +541,8 @@ export default async function AdminCheckIns(container) {
     if (activeTab === 'checkout') {
       const range = windowRange(activeWindow);
       const rows = bookings
-        .filter((b) => b.status === 'active' && isInWindow(b.pickupAt || b.endDate, range) && matchesSearch(b, q))
-        .sort((a, b) => String(a.pickupAt || a.endDate || '').localeCompare(String(b.pickupAt || b.endDate || '')))
+        .filter((b) => b.status === 'active' && isInWindow(checkoutDate(b), range) && matchesSearch(b, q))
+        .sort((a, b) => String(checkoutDate(a) || '').localeCompare(String(checkoutDate(b) || '')))
         .map((b) => rowHtml(b, { tab: 'checkout', locale, canCancel }));
       bodyEl.innerHTML = renderTable(rows);
       return;
@@ -664,7 +676,7 @@ export default async function AdminCheckIns(container) {
         await cancelBookingFn({ bookingId });
         showToast(t('checkins.toastCancelled'), 'success');
       } else if (action === 'overstay') {
-        showToast(t('checkins.overstayPlaceholder'), 'info');
+        await openOverstayDialog({ booking });
       }
     } catch (err) {
       console.error(action, err);
@@ -788,6 +800,75 @@ function openCollectPaymentDialog({ orderId, booking }) {
         showToast(err?.message || t('common.error'), 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = t('checkins.confirmPayment');
+      }
+    });
+  });
+}
+
+// ── Overstay charge dialog ──────────────────────────────────────────────
+// Suggests an amount (extra days × the booking's own daily rate) and lets
+// the agent edit it before recording the charge (cash → cashbook).
+function openOverstayDialog({ booking }) {
+  return new Promise((resolve) => {
+    const info = overstayInfo(booking) || { daysLate: 1, perDay: 0, amount: 0 };
+    const form = html`<form class="space-y-4" data-overstay-form>
+      <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.overstayTitle')}</h3>
+      <div class="rounded-xl bg-mango/10 border border-mango/30 px-4 py-3">
+        <p class="text-[14px] font-semibold text-charcoal">${t('checkins.overstayDaysLate', { days: info.daysLate })}</p>
+        <p class="text-[12px] text-dim mt-0.5">${t('checkins.overstayHint', { days: info.daysLate, perDay: info.perDay })}</p>
+      </div>
+      <div>
+        <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('checkins.overstayAmountLabel')}</label>
+        <input name="amount" type="number" min="1" step="1" value="${info.amount || ''}" required class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono focus:outline-none focus:border-blueberry">
+      </div>
+      <div>
+        <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('checkins.paidBy')}</label>
+        <div class="grid grid-cols-2 gap-2" data-paidby>
+          <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-mango bg-mango/5 cursor-pointer">
+            <input type="radio" name="paidBy" value="cash" checked class="accent-mango">
+            <span class="text-[14px] font-medium">${t('checkins.payCash')}</span>
+          </label>
+          <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-frost-deep cursor-pointer">
+            <input type="radio" name="paidBy" value="card" class="accent-mango">
+            <span class="text-[14px] font-medium">${t('checkins.payCard')}</span>
+          </label>
+        </div>
+      </div>
+      <button type="submit" class="w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('checkins.overstayConfirm')}</button>
+    </form>`;
+    const modal = openModal(form, { onClose: () => resolve() });
+
+    form.querySelector('[data-paidby]').addEventListener('change', (e) => {
+      if (!e.target.matches('input[name="paidBy"]')) return;
+      form.querySelectorAll('[data-paidby] label').forEach((lbl) => {
+        const inp = lbl.querySelector('input');
+        lbl.classList.toggle('border-mango', inp.checked);
+        lbl.classList.toggle('bg-mango/5', inp.checked);
+        lbl.classList.toggle('border-frost-deep', !inp.checked);
+      });
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const amount = Math.round(Number(form.amount.value));
+      const paidBy = form.querySelector('input[name="paidBy"]:checked')?.value || 'cash';
+      if (!Number.isFinite(amount) || amount <= 0) {
+        showToast(t('checkins.overstayNoAmount'), 'error');
+        return;
+      }
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = t('common.loading');
+      try {
+        await adminChargeOverstayFn({ bookingId: booking.id, amount, paidBy });
+        showToast(t('checkins.toastOverstayCharged', { amount }), 'success');
+        modal.close();
+        resolve();
+      } catch (err) {
+        console.error('chargeOverstay', err);
+        showToast(err?.message || t('common.error'), 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = t('checkins.overstayConfirm');
       }
     });
   });

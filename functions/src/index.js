@@ -2186,21 +2186,20 @@ export const grantCreditsForCash = onCall(
 
 // Surface a credit (commuter) check-in as a `bookings` doc so it appears on
 // the Check-out tab and the capacity map (the dashboard reads `bookings`,
-// not `activeCheckIns`). Pickup is set to end-of-day so it lands in today's
-// check-out window. Returns the new booking id.
+// not `activeCheckIns`). The Check-out tab buckets commuters by their
+// check-in time (they leave the day they arrive), so dates are stamped at
+// "now" — no scheduled pick-up. Returns the new booking id.
 async function createCreditCheckInBooking(db, { plate, customerId, contact, spotId, source }) {
   const nowIso = new Date().toISOString();
-  const end = new Date(); end.setHours(23, 59, 0, 0);
-  const endIso = end.toISOString();
   const ref = await db.collection('bookings').add({
     code: generateBookingCode('credit'),
     type: 'credit',
     customerId: customerId || null,
     licensePlate: plate,
     startDate: nowIso,
-    endDate: endIso,
+    endDate: nowIso,
     dropoffAt: nowIso,
-    pickupAt: endIso,
+    pickupAt: nowIso,
     days: 1,
     basePrice: 0,
     latePrice: 0,
@@ -2345,6 +2344,79 @@ export const checkInWithCredits = onCall(
     });
 
     return { ok: true, balanceDocId: docId, credits: qty, spotId: assignedSpotId, bookingId, checkedIn: true };
+  }
+);
+
+// ── adminChargeOverstay (callable) ──────────────────────────────────────
+// Records an overstay (late-pickup) charge on a booking. The client suggests
+// an amount (extra days × the booking's own daily rate) but the agent can
+// edit it. Adds to the booking's latePrice, writes a `lateFee` ledger row,
+// records a cash-drawer entry when paid in cash, and audit-logs. Money op →
+// agent gate (drivers excluded).
+export const adminChargeOverstay = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertAgent(request);
+    const { bookingId, amount, paidBy = 'cash' } = request.data || {};
+    if (!bookingId) throw new HttpsError('invalid-argument', 'Missing bookingId');
+    const amt = Math.round(Number(amount));
+    if (!Number.isFinite(amt) || amt <= 0) {
+      throw new HttpsError('invalid-argument', 'amount must be a positive number');
+    }
+    if (!['cash', 'card'].includes(paidBy)) {
+      throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
+    }
+
+    const db = getFirestore();
+    const ref = db.collection('bookings').doc(bookingId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const b = snap.data();
+    const nowIso = new Date().toISOString();
+    const storedPaidBy = paidBy === 'cash' ? 'admin-cash' : 'admin-card';
+    const newLate = (Number(b.latePrice) || 0) + amt;
+
+    await ref.update({
+      latePrice: newLate,
+      overstayChargedAt: nowIso,
+      overstayChargedBy: uid,
+      overstayPaidBy: storedPaidBy,
+    });
+
+    // Ledger row (shows in /admin/transactions as a late-fee).
+    await db.collection('tokenTransactions').add({
+      customerId: b.customerId || null,
+      licensePlate: b.licensePlate || null,
+      bookingId,
+      type: 'lateFee',
+      amount: amt,
+      paidBy: storedPaidBy,
+      timestamp: nowIso,
+      source: 'overstay',
+    });
+
+    // Cash drawer only for physically-collected cash.
+    if (paidBy === 'cash') {
+      await recordCashEntry({
+        agentUid: uid,
+        amount: amt,
+        source: 'overstay',
+        plate: b.licensePlate || null,
+        payerName: b.contact?.name || null,
+        bookingId,
+      });
+    }
+
+    await db.collection('auditLog').add({
+      action: 'booking_overstay_charged',
+      entityType: 'booking',
+      entityId: bookingId,
+      actorUid: uid,
+      payload: { amount: amt, paidBy, latePrice: newLate },
+      timestamp: nowIso,
+    });
+
+    return { ok: true, latePrice: newLate };
   }
 );
 
