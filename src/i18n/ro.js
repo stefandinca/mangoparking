@@ -402,6 +402,8 @@ export default {
     hoursLabel: 'Program',
     directions: 'Indicații',
     getDirections: 'Deschide în Google Maps',
+    copyAddress: 'Copiază adresa',
+    addressCopied: 'Adresă copiată',
     operator: 'Operator',
     operatorNote: 'Adresa de mai sus este adresa parcării (Otopeni). Adresa legală a firmei este cea înregistrată la Registrul Comerțului.',
     registeredAddress: 'Sediu social',

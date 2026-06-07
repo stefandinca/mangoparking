@@ -401,6 +401,8 @@ export default {
     hoursLabel: 'Hours',
     directions: 'Directions',
     getDirections: 'Open in Google Maps',
+    copyAddress: 'Copy address',
+    addressCopied: 'Address copied',
     operator: 'Operator',
     operatorNote: 'The address above is the parking location (Otopeni). The company\'s legal address is the one registered with the Trade Register.',
     registeredAddress: 'Registered office',

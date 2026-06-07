@@ -5,8 +5,11 @@ import { html, delegate } from '../../utils/dom.js';
 import { checkIcon, starIcon, planeIcon, peopleIcon, shuttleIcon } from '../../components/widgets/icons.js';
 import { initCarousel } from '../../components/widgets/Carousel.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
-import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL } from '../../utils/constants.js';
+import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL, GOOGLE_MAPS_EMBED } from '../../utils/constants.js';
 import { subscribeCapacity } from '../../services/capacityService.js';
+import { submitContactMessage } from '../../services/contactService.js';
+import { isValidEmail, required } from '../../utils/validators.js';
+import { showToast } from '../../components/core/Toast.js';
 import { getLongTermRates } from '../../services/longTermService.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { getPublishedReviews } from '../../services/reviewService.js';
@@ -354,19 +357,74 @@ export default function Home(container) {
       </div>
     </section>
 
-    <!-- CTA -->
-    <section class="py-20">
-      <div class="max-w-5xl mx-auto px-6">
-        <div class="rounded-[32px] shadow-lg relative min-h-[400px] flex items-center bg-blueberry-deep overflow-hidden">
-          <img src="/images/logo.png" alt="" aria-hidden="true" class="absolute -right-10 -bottom-10 w-80 h-80 object-contain rotate-[8deg] pointer-events-none select-none hidden md:block" />
-          <div class="relative z-10 p-6 sm:p-10 md:p-16 max-w-lg">
-            <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-[-0.02em] mb-4 text-white">${t('cta.title')}</h2>
-            <p class="text-white/70 text-[16px] mb-8">${t('cta.subtitle')}</p>
-            <div class="flex flex-col sm:flex-row gap-3">
-              <a href="${localePath('/booking')}" class="bg-white hover:bg-frost text-blueberry-deep font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">${t('cta.book')}</a>
-              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(CONTACT_ADDRESS)}" target="_blank" rel="noopener" class="border-2 border-white/40 hover:bg-white/10 text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
+    <!-- READY TO PARK -->
+    <section class="py-20 bg-frost">
+      <div class="max-w-3xl mx-auto px-6">
+        <div class="text-center mb-10">
+          <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-[-0.02em] mb-3 text-blueberry-deep">${t('cta.title')}</h2>
+          <p class="text-dim text-[16px]">${t('cta.subtitle')}</p>
+        </div>
+
+        <!-- 1. Book your spot -->
+        <a href="${localePath('/booking')}" class="block text-center bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[17px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md mb-6">${t('cta.book')}</a>
+
+        <!-- 2. Get Directions (map preview) -->
+        <div class="card-solid rounded-3xl overflow-hidden mb-6">
+          <iframe src="${GOOGLE_MAPS_EMBED}" width="100%" height="240" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="ManGO Parking — ${CONTACT_ADDRESS}"></iframe>
+          <div class="p-4">
+            <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(CONTACT_ADDRESS)}" target="_blank" rel="noopener" class="block text-center bg-white border-2 border-blueberry hover:bg-blueberry/5 text-blueberry font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('contact.getDirections')} →</a>
+          </div>
+        </div>
+
+        <!-- 3. Contact info (copy button on the parking address) -->
+        <div class="card-solid rounded-3xl p-6 sm:p-8 mb-6">
+          <h3 class="font-heading font-bold text-lg mb-5 text-blueberry-deep">${t('contact.info')}</h3>
+          <div class="space-y-4">
+            <div>
+              <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('contact.phone')}</p>
+              <a href="tel:${CONTACT_PHONE.replace(/\s/g, '')}" class="text-[16px] font-medium hover:text-blueberry transition-colors">${CONTACT_PHONE}</a>
+            </div>
+            <div>
+              <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('contact.emailLabel')}</p>
+              <a href="mailto:${CONTACT_EMAIL}" class="text-[16px] font-medium hover:text-blueberry transition-colors">${CONTACT_EMAIL}</a>
+            </div>
+            <div>
+              <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('contact.address')}</p>
+              <div class="flex items-start gap-2">
+                <p class="text-[16px] font-medium" data-parking-address>${CONTACT_ADDRESS}</p>
+                <button type="button" data-copy-address title="${t('contact.copyAddress')}" aria-label="${t('contact.copyAddress')}" class="shrink-0 p-1.5 -mt-0.5 rounded-lg text-dim hover:text-blueberry hover:bg-frost transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/></svg>
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+
+        <!-- 4. Contact form -->
+        <div class="card-solid rounded-3xl p-6 sm:p-8">
+          <h3 class="font-heading font-bold text-lg mb-5 text-blueberry-deep">${t('contact.heroTitle')}</h3>
+          <form data-home-contact-form class="space-y-4">
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.name')} *</label>
+                <input type="text" name="name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry" required>
+              </div>
+              <div>
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.email')} *</label>
+                <input type="email" name="email" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry" required>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.subject')}</label>
+              <input type="text" name="subject" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+            </div>
+            <div>
+              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.message')} *</label>
+              <textarea name="message" rows="4" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry resize-none" required></textarea>
+            </div>
+            <button type="submit" class="w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md">${t('contact.form.send')}</button>
+            <div data-home-contact-success class="hidden text-leaf text-[15px] text-center font-medium mt-1">${t('contact.form.sent')}</div>
+          </form>
         </div>
       </div>
     </section>
@@ -399,6 +457,40 @@ export default function Home(container) {
   // Carousels (amenities + parking cards) — swipeable on small screens, a
   // plain row on desktop (dots auto-hide when the track doesn't overflow).
   const carouselCleanups = Array.from(page.querySelectorAll('[data-carousel]')).map(initCarousel);
+
+  // Copy the parking address to the clipboard (Ready-to-park section).
+  const copyBtn = page.querySelector('[data-copy-address]');
+  copyBtn?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(CONTACT_ADDRESS);
+      showToast(t('contact.addressCopied'), 'success');
+    } catch {
+      showToast(t('common.error'), 'error');
+    }
+  });
+
+  // Contact form in the Ready-to-park section (mirrors the /contact page).
+  const homeContactForm = page.querySelector('[data-home-contact-form]');
+  homeContactForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(homeContactForm);
+    const name = fd.get('name');
+    const email = fd.get('email');
+    const message = fd.get('message');
+    if (!required(name) || !isValidEmail(email) || !required(message)) {
+      showToast(t('common.error'), 'error');
+      return;
+    }
+    try {
+      await submitContactMessage({ name, email, subject: fd.get('subject') || '', message });
+      homeContactForm.reset();
+      page.querySelector('[data-home-contact-success]')?.classList.remove('hidden');
+      showToast(t('contact.form.sent'), 'success');
+    } catch (err) {
+      console.error(err);
+      showToast(t('common.error'), 'error');
+    }
+  });
 
   // "Starting from" price badges in the pricing preview section
   Promise.all([getLongTermRates(), getTokenPacks()]).then(([rates, packs]) => {
