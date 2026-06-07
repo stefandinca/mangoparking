@@ -50,7 +50,11 @@ async function main() {
     await waitForServer(HOST);
     console.log('✓ Preview server up at', HOST);
 
-    const browser = await puppeteer.launch({ headless: 'new' });
+    // --no-sandbox is required in CI / serverless build containers (Vercel).
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
     const page = await browser.newPage();
 
     for (const route of ROUTES) {
@@ -87,6 +91,10 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error('\n✗ Prerender failed:', err.message);
-  process.exit(1);
+  // Non-fatal: `vite build` already produced a working dist/. If Puppeteer
+  // can't run (e.g. missing Chromium libs in a CI/build container), skip
+  // prerendering rather than failing the whole deploy — the SPA still works,
+  // it just loses the per-route prerendered HTML for that build.
+  console.warn('\n⚠ Prerender skipped (build still succeeds):', err.message);
+  process.exit(0);
 });
