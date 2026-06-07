@@ -222,8 +222,10 @@ export default {
     lastUpdated: 'Ultima actualizare',
     backHome: '← Înapoi la pagina principală',
     contactForQuestions: 'Pentru întrebări scrie-ne la',
-    acceptTerms: 'Sunt de acord cu <a href="/terms" target="_blank" class="text-blueberry hover:underline">Termenii și condițiile</a>, <a href="/privacy" target="_blank" class="text-blueberry hover:underline">Politica de confidențialitate</a> și <a href="/cancellation" target="_blank" class="text-blueberry hover:underline">Politica de anulare</a>.',
-    acceptTermsRequired: 'Trebuie să accepți termenii pentru a continua.',
+    acceptTerms: 'Sunt de acord cu <a href="/terms" target="_blank" class="text-blueberry hover:underline">Termenii și condițiile</a> și <a href="/cancellation" target="_blank" class="text-blueberry hover:underline">Politica de anulare</a>.',
+    acceptTermsRequired: 'Trebuie să accepți termenii și politica de anulare pentru a continua.',
+    acceptPrivacy: 'Sunt de acord cu <a href="/privacy" target="_blank" class="text-blueberry hover:underline">Politica de confidențialitate</a> și prelucrarea datelor mele conform <a href="/gdpr" target="_blank" class="text-blueberry hover:underline">GDPR</a>.',
+    acceptPrivacyRequired: 'Trebuie să accepți politica de confidențialitate pentru a continua.',
     // Terms
     termsTitle: 'Termeni și condiții',
     termsIntro: 'Acești termeni reglementează utilizarea serviciilor ManGO Parking și achiziționarea de credite prin site-ul {site}. Prin plasarea unei comenzi confirmi că ai citit și accepți acești termeni.',
@@ -854,6 +856,10 @@ export default {
     buyTokens: 'Cumpără Credite',
     // Purchase page
     pageTitle: 'Cumpără Credite de Parcare',
+    introLead: 'Creditele sunt pentru navetiști: cumperi un pachet o singură dată și parchezi oricând ai nevoie, fără să rezervi de fiecare dată.',
+    introPoint1: 'Un credit = o zi de parcare',
+    introPoint2: 'Creditele nu expiră niciodată',
+    introPoint3: 'Se folosesc Luni–Vineri, 06:00–20:00',
     selectPack: 'Alege un pachet de credite',
     orCustom: 'Sau alege cantitatea dorită',
     customQty: 'Număr de credite',

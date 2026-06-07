@@ -61,7 +61,24 @@ export default async function Booking(container) {
       <div data-navbar></div>
       <section class="pt-32 pb-20">
         <div class="max-w-3xl mx-auto px-6">
-          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-4">${t('credit.pageTitle')}</h1>
+          <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${t('credit.pageTitle')}</h1>
+          ${confirmed ? '' : `
+            <p class="text-dim text-[17px] mb-5">${t('credit.introLead')}</p>
+            <div class="bg-blueberry/5 border border-blueberry/15 rounded-2xl p-4 mb-8 grid sm:grid-cols-3 gap-3">
+              <div class="flex items-center gap-2.5">
+                <span class="font-heading font-bold text-2xl text-blueberry-deep shrink-0">1=1</span>
+                <span class="text-[13px] text-charcoal/80">${t('credit.introPoint1')}</span>
+              </div>
+              <div class="flex items-center gap-2.5">
+                <span class="font-heading font-bold text-2xl text-blueberry-deep shrink-0">∞</span>
+                <span class="text-[13px] text-charcoal/80">${t('credit.introPoint2')}</span>
+              </div>
+              <div class="flex items-center gap-2.5">
+                <span class="font-heading font-bold text-2xl text-blueberry-deep shrink-0">L–V</span>
+                <span class="text-[13px] text-charcoal/80">${t('credit.introPoint3')}</span>
+              </div>
+            </div>
+          `}
           ${confirmed ? renderConfirmation() : renderForm()}
         </div>
       </section>
@@ -244,8 +261,13 @@ export default async function Booking(container) {
         </div>
 
         <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
-          <input type="checkbox" name="acceptTerms" required class="accent-mango w-4 h-4 mt-1 shrink-0">
+          <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
           <span>${t('legal.acceptTerms')}</span>
+        </label>
+
+        <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
+          <input type="checkbox" name="acceptPrivacy" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
+          <span>${t('legal.acceptPrivacy')}</span>
         </label>
 
         <button type="submit" data-pay-btn class="w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
@@ -509,9 +531,13 @@ export default async function Booking(container) {
         return;
       }
 
-      // Terms must be agreed before any payment intent is created.
+      // Terms + privacy must each be agreed before any payment intent is created.
       if (!form.elements.acceptTerms?.checked) {
         showToast(t('legal.acceptTermsRequired'), 'error');
+        return;
+      }
+      if (!form.elements.acceptPrivacy?.checked) {
+        showToast(t('legal.acceptPrivacyRequired'), 'error');
         return;
       }
 

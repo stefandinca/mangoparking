@@ -221,13 +221,17 @@ export default function BookingLongTerm(container) {
             <p class="hidden mt-2 text-[13px] text-red-500" data-voucher-error></p>
           </div>
 
-          <!-- Terms agreement + pay -->
-          <div class="md:col-span-2 flex flex-col items-end gap-4" data-step="terms">
+          <!-- Terms + privacy agreement (separate consents) + pay -->
+          <div class="md:col-span-2 flex flex-col items-start gap-3" data-step="terms">
             <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer max-w-full">
-              <input type="checkbox" name="acceptTerms" required class="accent-mango w-4 h-4 mt-1 shrink-0">
+              <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
               <span>${t('legal.acceptTerms')}</span>
             </label>
-            <button type="submit" data-pay-btn class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
+            <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer max-w-full">
+              <input type="checkbox" name="acceptPrivacy" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
+              <span>${t('legal.acceptPrivacy')}</span>
+            </label>
+            <button type="submit" data-pay-btn class="mt-2 bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
           </div>
         </form>
 
@@ -696,6 +700,10 @@ export default function BookingLongTerm(container) {
     // toast instead of the browser's tooltip if they tab past it.
     if (!form.acceptTerms?.checked) {
       showToast(t('legal.acceptTermsRequired'), 'error');
+      return;
+    }
+    if (!form.acceptPrivacy?.checked) {
+      showToast(t('legal.acceptPrivacyRequired'), 'error');
       return;
     }
     if (hasError) {

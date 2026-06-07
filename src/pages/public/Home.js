@@ -361,7 +361,7 @@ export default function Home(container) {
             <p class="text-white/70 text-[16px] mb-8">${t('cta.subtitle')}</p>
             <div class="flex flex-col sm:flex-row gap-3">
               <a href="${localePath('/booking')}" class="bg-white hover:bg-frost text-blueberry-deep font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">${t('cta.book')}</a>
-              <a href="${localePath('/contact')}" class="border-2 border-white/40 hover:bg-white/10 text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(CONTACT_ADDRESS)}" target="_blank" rel="noopener" class="border-2 border-white/40 hover:bg-white/10 text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
             </div>
           </div>
         </div>

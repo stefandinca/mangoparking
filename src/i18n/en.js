@@ -222,8 +222,10 @@ export default {
     lastUpdated: 'Last updated',
     backHome: '← Back to home',
     contactForQuestions: 'For questions, write to',
-    acceptTerms: 'I agree to the <a href="/en/terms" target="_blank" class="text-blueberry hover:underline">Terms and Conditions</a>, <a href="/en/privacy" target="_blank" class="text-blueberry hover:underline">Privacy Policy</a>, and <a href="/en/cancellation" target="_blank" class="text-blueberry hover:underline">Cancellation Policy</a>.',
-    acceptTermsRequired: 'You must accept the terms to continue.',
+    acceptTerms: 'I agree to the <a href="/en/terms" target="_blank" class="text-blueberry hover:underline">Terms and Conditions</a> and the <a href="/en/cancellation" target="_blank" class="text-blueberry hover:underline">Cancellation Policy</a>.',
+    acceptTermsRequired: 'You must accept the terms and cancellation policy to continue.',
+    acceptPrivacy: 'I agree to the <a href="/en/privacy" target="_blank" class="text-blueberry hover:underline">Privacy Policy</a> and the processing of my data under <a href="/en/gdpr" target="_blank" class="text-blueberry hover:underline">GDPR</a>.',
+    acceptPrivacyRequired: 'You must accept the privacy policy to continue.',
     // Terms
     termsTitle: 'Terms and Conditions',
     termsIntro: 'These terms govern the use of ManGO Parking services and the purchase of credits through {site}. By placing an order you confirm that you have read and accept these terms.',
@@ -853,6 +855,10 @@ export default {
     buyTokens: 'Buy Credits',
     // Purchase page
     pageTitle: 'Buy Parking Credits',
+    introLead: 'Credits are for commuters: buy a pack once and park whenever you need to — no booking each time.',
+    introPoint1: 'One credit = one parking day',
+    introPoint2: 'Credits never expire',
+    introPoint3: 'Used Mon–Fri, 6 AM–8 PM',
     selectPack: 'Select a credit pack',
     orCustom: 'Or choose your own quantity',
     customQty: 'Number of credits',
