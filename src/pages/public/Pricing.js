@@ -48,13 +48,21 @@ export default async function Pricing(container) {
   const packCards = packs.map(p => {
     const isBest = p.id === bestPack?.id;
     const name = locale === 'ro' && p.nameRo ? p.nameRo : p.name;
+    const perDay = p.quantity > 0 ? Math.round(p.price / p.quantity) : p.price;
     return `
-      <div class="relative card-solid rounded-2xl p-8 text-center flex flex-col ${isBest ? 'ring-2 ring-mango shadow-md' : ''}">
-        ${isBest ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-bold uppercase tracking-wider bg-mango text-charcoal px-4 py-1 rounded-full shadow-sm">${t('credit.bestValue')}</span>` : ''}
-        <p class="font-heading font-bold text-5xl tracking-tight text-blueberry-deep leading-none mb-1">${p.quantity}</p>
-        <p class="text-dim text-[14px] mb-6">${t('credit.plural')}</p>
-        <div class="mb-6 mt-auto">${priceBlock(p.price)}</div>
-        <a href="${localePath('/booking/credits')}" class="block w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('credit.buyTokens')}</a>
+      <div class="relative overflow-hidden rounded-2xl bg-white border ${isBest ? 'border-mango ring-1 ring-mango' : 'border-frost-deep'} shadow-sm flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+        <div class="absolute inset-y-0 left-0 w-1.5 ${isBest ? 'bg-mango' : 'bg-blueberry'}"></div>
+        ${isBest ? `<span class="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wider bg-mango text-charcoal px-2.5 py-1 rounded-full">${t('credit.bestValue')}</span>` : ''}
+        <div class="p-6 pl-7 flex flex-col flex-1">
+          ${name ? `<p class="text-[11px] uppercase tracking-wider text-dim font-mono truncate ${isBest ? 'pr-24' : ''}">${name}</p>` : ''}
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span class="font-heading font-bold text-5xl text-blueberry-deep leading-none">${p.quantity}</span>
+            <span class="text-dim text-[15px] font-medium">${t('credit.plural')}</span>
+          </div>
+          <p class="text-dim text-[13px] mt-2">≈ ${perDay} ${t('longTerm.perDay')}</p>
+          <div class="mt-5 pt-5 border-t border-frost-deep">${priceBlock(p.price)}</div>
+          <a href="${localePath('/booking/credits')}" class="mt-6 block text-center bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('credit.buyTokens')}</a>
+        </div>
       </div>
     `;
   }).join('');
@@ -76,12 +84,15 @@ export default async function Pricing(container) {
             const showAnchor = original != null && original !== tier.perDay;
             const range = `${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}`;
             return `
-            <div class="card-solid rounded-2xl p-6 flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-              <span class="text-[11px] font-mono font-semibold uppercase tracking-wider text-blueberry bg-blueberry/5 px-3 py-1 rounded-full mb-5">${range}</span>
-              ${showAnchor ? `<p class="font-mono text-[14px] text-dim line-through leading-none mb-1">${original}</p>` : ''}
-              <div class="flex items-baseline gap-1">
-                <span class="font-heading font-bold text-5xl text-blueberry-deep leading-none">${tier.perDay}</span>
-                <span class="text-dim text-[14px]">${t('longTerm.perDay')}</span>
+            <div class="relative overflow-hidden rounded-2xl bg-white border border-frost-deep shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+              <div class="absolute inset-y-0 left-0 w-1.5 bg-blueberry"></div>
+              <div class="p-5 pl-6">
+                <p class="text-[11px] uppercase tracking-wider text-dim font-mono">${range}</p>
+                ${showAnchor ? `<p class="font-mono text-[13px] text-dim line-through leading-none mt-2.5">${original}</p>` : ''}
+                <div class="flex items-baseline gap-1 ${showAnchor ? 'mt-0.5' : 'mt-2.5'}">
+                  <span class="font-heading font-bold text-4xl text-blueberry-deep leading-none">${tier.perDay}</span>
+                  <span class="text-dim text-[14px]">${t('longTerm.perDay')}</span>
+                </div>
               </div>
             </div>
           `;}).join('')}
