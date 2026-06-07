@@ -263,6 +263,14 @@ export const commuter7PMCheck = onSchedule(
 // Why 12h: per v1.7 plan. Long enough to absorb late drop-offs (some
 // customers running ~hours late from a delayed flight) without leaving
 // the spot blocked for a customer who is clearly never coming.
+//
+// Date handling: we query only on status and filter the drop-off cutoff
+// in memory on `dropoffAt || startDate`. A Firestore range query on
+// `dropoffAt` silently EXCLUDES docs where that field is null — and web
+// bookings written by createBookingFromOrder store `dropoffAt: null`
+// (only startDate/endDate are set), so the old range query never flagged
+// them and they sat in the Check-in tab forever. The bookings collection
+// is small at our scale, so the in-memory scan is fine.
 export const markNoShows = onSchedule(
   {
     schedule: 'every 60 minutes',
@@ -274,16 +282,25 @@ export const markNoShows = onSchedule(
     const cutoff = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
     const snap = await db.collection('bookings')
       .where('status', '==', 'upcoming')
-      .where('dropoffAt', '<', cutoff)
       .get();
 
     const nowIso = new Date().toISOString();
     let flagged = 0;
+    let scanned = 0;
     for (const doc of snap.docs) {
       const data = doc.data();
+      // Long-term reservations only — credit bookings are created already
+      // 'active', never 'upcoming', so this is belt-and-suspenders.
+      if (data.type && data.type !== 'longTerm') continue;
+      // Drop-off cutoff, in memory so null dropoffAt falls back to startDate.
+      const dropoff = data.dropoffAt || data.startDate;
+      if (!dropoff || dropoff >= cutoff) continue;
+      scanned++;
       // Defensive re-check: if a manual check-in raced in between the
-      // query and now, skip. activeCheckIns is keyed by normalized plate.
-      const plate = String(data.licensePlate || '').toUpperCase().replace(/\s+/g, '');
+      // query and now, skip. activeCheckIns is keyed by normalized plate
+      // (spaces AND hyphens stripped — must match normalizePlate exactly,
+      // else a hyphenated plate that DID check in gets falsely flagged).
+      const plate = String(data.licensePlate || '').toUpperCase().replace(/[\s-]/g, '');
       if (plate) {
         const activeSnap = await db.collection('activeCheckIns').doc(plate).get();
         if (activeSnap.exists) continue;
@@ -324,7 +341,7 @@ export const markNoShows = onSchedule(
       });
       flagged++;
     }
-    console.log(`markNoShows: flagged=${flagged} scanned=${snap.size}`);
+    console.log(`markNoShows: flagged=${flagged} pastCutoff=${scanned} upcoming=${snap.size}`);
   }
 );
 

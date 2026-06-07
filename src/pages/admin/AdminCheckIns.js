@@ -23,7 +23,7 @@ import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js
 import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { subscribeCollection, getCollection, where } from '../../firebase/db.js';
+import { subscribeCollection, getCollection, getDocument, where } from '../../firebase/db.js';
 import { showToast } from '../../components/core/Toast.js';
 import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { checkInBooking, checkOutBooking } from '../../services/bookingService.js';
@@ -146,6 +146,25 @@ function hoursOver(booking) {
   return Math.max(0, Math.floor(diffMs / 3_600_000));
 }
 
+// Extra days owed when a car is checked out after its pick-up time. Uses
+// the same 2h end-of-booking grace as the billing engine, and values each
+// extra day at the booking's own daily rate (totalPrice / days). Returns
+// null when there's nothing extra to collect. Drives the late-check-out
+// warning so an agent never silently completes an overstay.
+function overstayInfo(b) {
+  const pickup = b.pickupAt || b.endDate;
+  if (!pickup) return null;
+  const pickMs = new Date(pickup).getTime();
+  if (!Number.isFinite(pickMs)) return null;
+  const overMs = Date.now() - pickMs - OVERDUE_THRESHOLD_MS;
+  if (overMs <= 0) return null;
+  const daysLate = Math.max(1, Math.ceil(overMs / 86_400_000));
+  const days = Number(b.days) || 0;
+  const total = Number(b.totalPrice) || 0;
+  const perDay = days > 0 ? Math.round(total / days) : 0;
+  return { daysLate, perDay, amount: daysLate * perDay };
+}
+
 // ── Badges ──────────────────────────────────────────────────────────────
 
 function paymentStatusBadge(b) {
@@ -212,20 +231,30 @@ function rowHtml(b, { tab, locale, canCancel }) {
 
   const actions = [];
   if (tab === 'checkin') {
-    actions.push(actionButton({ key: 'checkin', label: t('checkins.actionCheckIn'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
+    // Payment-first: only offer Check-in once the booking is paid. Unpaid
+    // rows show the Collect button instead (added below); checking in is
+    // re-enabled by the live subscription the moment payment is recorded.
+    if (!unpaid) {
+      actions.push(actionButton({ key: 'checkin', label: t('checkins.actionCheckIn'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
+    } else {
+      actions.push(`<span class="text-[11px] text-red-600 font-medium self-center mr-1">${t('checkins.collectFirst')}</span>`);
+    }
   } else if (tab === 'checkout') {
     actions.push(actionButton({ key: 'checkout', label: t('checkins.actionCheckOut'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
   }
-  if (unpaid) {
+  // Collect is irrelevant on the no-show tab — the customer never parked.
+  if (unpaid && tab !== 'noshow') {
     actions.push(actionButton({ key: 'collect', label: t('checkins.actionCollect'), variant: 'warning', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-order="${escapeHtml(b.paymentId || '')}"` }));
   }
   if (canCancel && cancellable) {
     actions.push(actionButton({ key: 'cancel', label: t('checkins.actionCancelReservation'), variant: 'danger', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(code)}"` }));
   }
 
-  const statusCell = tab === 'checkin'
-    ? `<span class="text-[12px] text-dim">${t('checkins.statusWaiting')}</span>`
-    : `<span class="text-[12px] uppercase tracking-wider font-mono font-semibold text-leaf">${t('checkins.statusActive')}</span>`;
+  const statusCell = tab === 'noshow'
+    ? `<span class="text-[12px] uppercase tracking-wider font-mono font-semibold text-red-600">${t('checkins.statusNoShow')}</span>`
+    : tab === 'checkin'
+      ? `<span class="text-[12px] text-dim">${t('checkins.statusWaiting')}</span>`
+      : `<span class="text-[12px] uppercase tracking-wider font-mono font-semibold text-leaf">${t('checkins.statusActive')}</span>`;
 
   return `
     <tr class="border-t border-frost-deep" data-row data-booking-id="${escapeHtml(b.id)}">
@@ -319,7 +348,7 @@ export default async function AdminCheckIns(container) {
   // 'YYYY-MM-DD..YYYY-MM-DD' range string.
   const params = new URLSearchParams(window.location.search);
   let activeTab = params.get('tab') || 'checkin';
-  if (!['checkin', 'checkout', 'overdue'].includes(activeTab)) activeTab = 'checkin';
+  if (!['checkin', 'checkout', 'overdue', 'noshow'].includes(activeTab)) activeTab = 'checkin';
   const rawWindow = params.get('window') || 'today';
   let activeWindow = parseWindowParam(rawWindow);
   let searchQuery = (params.get('q') || '').trim().toLowerCase();
@@ -376,15 +405,17 @@ export default async function AdminCheckIns(container) {
     const checkin = bookings.filter((b) => b.status === 'upcoming' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
     const checkout = bookings.filter((b) => b.status === 'active' && isInWindow(b.pickupAt || b.endDate, range) && matchesSearch(b, q)).length;
     const overdue = bookings.filter((b) => isOverdue(b) && matchesSearch(b, q)).length;
-    return { checkin, checkout, overdue };
+    const noshow = bookings.filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
+    return { checkin, checkout, overdue, noshow };
   }
 
   function renderTabs() {
-    const { checkin, checkout, overdue } = counts();
+    const { checkin, checkout, overdue, noshow } = counts();
     tabsEl.innerHTML = [
       tabPill('checkin', activeTab, t('checkins.tabCheckIn'), checkin),
       tabPill('checkout', activeTab, t('checkins.tabCheckOut'), checkout),
       tabPill('overdue', activeTab, t('checkins.tabOverdue'), overdue),
+      tabPill('noshow', activeTab, t('checkins.tabNoShow'), noshow),
     ].join('');
   }
 
@@ -483,6 +514,19 @@ export default async function AdminCheckIns(container) {
       bodyEl.innerHTML = renderTable(rows);
       return;
     }
+    if (activeTab === 'noshow') {
+      const range = windowRange(activeWindow);
+      const rows = bookings
+        .filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q))
+        .sort((a, b) => String(b.dropoffAt || b.startDate || '').localeCompare(String(a.dropoffAt || a.startDate || '')))
+        .map((b) => rowHtml(b, { tab: 'noshow', locale, canCancel }));
+      if (!rows.length) {
+        bodyEl.innerHTML = `<div class="card-solid rounded-2xl p-10 text-center text-dim">${t('checkins.noShowEmpty')}</div>`;
+        return;
+      }
+      bodyEl.innerHTML = renderTable(rows);
+      return;
+    }
     // overdue
     const rows = bookings
       .filter((b) => isOverdue(b) && matchesSearch(b, q))
@@ -566,9 +610,21 @@ export default async function AdminCheckIns(container) {
 
     try {
       if (action === 'checkin') {
+        if (booking.paymentStatus === 'unpaid') {
+          showToast(t('checkins.errorUnpaidCheckin'), 'error');
+          return;
+        }
         await checkInBooking(bookingId);
         showToast(t('checkins.toastCheckedIn'), 'success');
       } else if (action === 'checkout') {
+        const over = overstayInfo(booking);
+        if (over) {
+          const ok = await confirmModal(
+            t('checkins.lateCheckoutWarn', { days: over.daysLate, amount: over.amount }),
+            { danger: true, confirmText: t('checkins.lateCheckoutConfirm') },
+          );
+          if (!ok) return;
+        }
         await checkOutBooking(bookingId);
         showToast(t('checkins.toastCheckedOut'), 'success');
       } else if (action === 'collect') {
@@ -591,7 +647,8 @@ export default async function AdminCheckIns(container) {
       }
     } catch (err) {
       console.error(action, err);
-      showToast(err?.message || t('common.error'), 'error');
+      const msg = String(err?.message || '');
+      showToast(msg === 'UNPAID_BOOKING' ? t('checkins.errorUnpaidCheckin') : (msg || t('common.error')), 'error');
     } finally {
       btn.disabled = false;
     }
@@ -623,9 +680,17 @@ export default async function AdminCheckIns(container) {
 function openCollectPaymentDialog({ orderId, booking }) {
   return new Promise((resolve) => {
     const initialBilling = booking?.billing || {};
+    // Best available amount immediately; refined from the pending order's
+    // authoritative `amount` (which carries any pay-at-pickup gross-up) once
+    // it loads below.
+    const initialAmount = Number(booking?.totalPrice || 0);
     const form = html`<form class="space-y-3" data-collect-form>
       <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.collectTitle')}</h3>
-      <p class="text-[13px] text-charcoal/70">${t('checkins.collectHint', { plate: booking?.licensePlate || '—', amount: Number(booking?.totalPrice || 0) })}</p>
+      <div class="rounded-xl bg-mango/10 border border-mango/30 px-4 py-3 text-center">
+        <p class="text-[11px] uppercase tracking-wider text-charcoal/60 font-mono">${t('checkins.amountDue')}</p>
+        <p class="font-heading font-bold text-3xl text-blueberry-deep mt-0.5"><span data-amount-due>${initialAmount}</span> ${t('common.lei')}</p>
+        <p class="text-[12px] text-dim mt-1">${t('checkins.collectPlate', { plate: booking?.licensePlate || '—' })}</p>
+      </div>
 
       <div class="grid sm:grid-cols-2 gap-2">
         <input name="firstName" type="text" placeholder="${escapeHtml(t('billing.firstName'))} *" value="${escapeHtml(initialBilling.firstName || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
@@ -651,6 +716,18 @@ function openCollectPaymentDialog({ orderId, booking }) {
       <button type="submit" class="w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('checkins.confirmPayment')}</button>
     </form>`;
     const modal = openModal(form, { onClose: () => resolve() });
+
+    // Refine the displayed amount from the pending order — its `amount`
+    // includes any pay-at-pickup gross-up, so it's the figure actually owed.
+    if (orderId) {
+      getDocument('pendingOrders', orderId).then((order) => {
+        const due = Number(order?.amount);
+        if (Number.isFinite(due) && due > 0) {
+          const el = form.querySelector('[data-amount-due]');
+          if (el) el.textContent = String(due);
+        }
+      }).catch(() => { /* keep the booking total fallback */ });
+    }
 
     form.querySelector('[data-paidby]').addEventListener('change', (e) => {
       if (!e.target.matches('input[name="paidBy"]')) return;

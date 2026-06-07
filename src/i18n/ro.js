@@ -1258,6 +1258,7 @@ export default {
     createPickup: 'Data și ora plecare',
     createDays: 'Zile',
     createTotal: 'Total (lei)',
+    priceComputed: 'Preț calculat: {total} lei ({days} zile × {perDay} lei/zi) — îl poți modifica',
     createQuantity: 'Cantitate credite',
     createAmount: 'Sumă încasată (lei)',
     createPaidBy: 'Plătit prin',
@@ -1313,6 +1314,7 @@ export default {
     tabCheckIn: 'Check-in',
     tabCheckOut: 'Check-out',
     tabOverdue: 'Întârziate',
+    tabNoShow: 'Neprezentări',
     windowLabel: 'Interval',
     windowToday: 'Astăzi',
     windowWeek: 'Săptămâna asta',
@@ -1320,6 +1322,7 @@ export default {
     emptyTab: 'Nicio rezervare în acest interval.',
     overdueSubtitle: 'Toate mașinile aflate în parcare care au depășit ora de plecare cu cel puțin 2 ore.',
     overdueEmpty: 'Nicio depășire. ✓',
+    noShowEmpty: 'Nicio neprezentare în acest interval. ✓',
     // Columns
     colTimes: 'Sosire / Plecare',
     colCustomer: 'Client',
@@ -1330,6 +1333,7 @@ export default {
     // Status cells
     statusWaiting: 'Așteaptă',
     statusActive: 'Activă',
+    statusNoShow: 'Neprezentat',
     // Payment badges
     payPaid: 'Plătit',
     payUnpaid: 'Neplătit',
@@ -1356,6 +1360,9 @@ export default {
     // Collect-payment modal
     collectTitle: 'Încasează plata',
     collectHint: 'Pentru placa {plate}, suma {amount} lei.',
+    amountDue: 'Sumă de încasat',
+    collectPlate: 'Placa {plate}',
+    collectFirst: 'Încasează întâi',
     paidBy: 'Metodă plată',
     confirmPayment: 'Confirmă plata',
     payCash: 'Numerar',
@@ -1363,6 +1370,9 @@ export default {
     // Walk-in modal
     walkInAutoCheckIn: 'Walk-in — fă check-in imediat',
     walkInDoneCheckedIn: 'Walk-in înregistrat și check-in efectuat.',
+    // Late check-out warning
+    lateCheckoutWarn: 'Clientul a depășit cu {days} zile. Mai sunt de încasat ~{amount} lei. Încasează suplimentul, apoi confirmă check-out-ul.',
+    lateCheckoutConfirm: 'Confirmă check-out',
     // Toasts
     toastCheckedIn: 'Check-in efectuat.',
     toastCheckedOut: 'Check-out efectuat.',
@@ -1371,6 +1381,7 @@ export default {
     // Errors
     errorInvalidPlate: 'Număr de înmatriculare invalid.',
     errorNoOrderId: 'Lipsește ID-ul comenzii.',
+    errorUnpaidCheckin: 'Rezervarea nu este plătită. Încasează plata înainte de check-in.',
   },
 
   // Cashbook (admin)

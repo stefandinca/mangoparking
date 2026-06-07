@@ -7,6 +7,18 @@ import { functions } from '../../firebase/config.js';
 import { isValidEmail, isValidLicensePlate } from '../../utils/validators.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getBalance, lookupByPlate } from '../../services/tokenService.js';
+import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
+import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
+
+// Billing rule mirror of BookingLongTerm: 1 day = 24h from drop-off with a
+// single 2h grace at the end. Kept in sync so a walk-in priced here matches
+// what the customer would have paid online for the same dates.
+const WALKIN_GRACE_MS = 2 * 60 * 60 * 1000;
+function walkInBillingDays(dropoffMs, pickupMs) {
+  const duration = pickupMs - dropoffMs;
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  return Math.max(1, Math.ceil((duration - WALKIN_GRACE_MS) / 86_400_000));
+}
 
 // Reusable "Create transaction" modal.
 //
@@ -132,6 +144,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
           <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createTotal')} *</label>
           <input type="number" name="totalPrice" min="1" step="1" required placeholder="120"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
+          <p data-price-hint class="text-[12px] text-dim mt-1.5 hidden"></p>
         </div>
       </div>
 
@@ -212,6 +225,64 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
   // they render above the modal without z-index drama.
   wireDateTime(contentEl);
 
+  // ── Walk-in price auto-compute (long-term) ──
+  // Pre-fill the total from the booked dates using the same tier + seasonal
+  // engine the public booking page uses, so the agent gets the correct
+  // price by default but can still override it (e.g. add an extra service).
+  // The field stays the source of truth — we only auto-fill until the agent
+  // edits it manually, then we never clobber their value.
+  const totalInput = qs('[name="totalPrice"]', contentEl);
+  const priceHintEl = qs('[data-price-hint]', contentEl);
+  let ltRates = null;
+  let ltSeasonal = [];
+  let priceTouched = false;
+
+  totalInput?.addEventListener('input', () => { priceTouched = true; });
+
+  function computeWalkInPrice() {
+    if (!ltRates) return null;
+    const dropoffRaw = qs('[name="dropoffAt"]', contentEl)?.value;
+    const pickupRaw = qs('[name="pickupAt"]', contentEl)?.value;
+    if (!dropoffRaw || !pickupRaw) return null;
+    const dropMs = new Date(String(dropoffRaw).replace(' ', 'T')).getTime();
+    const pickMs = new Date(String(pickupRaw).replace(' ', 'T')).getTime();
+    const days = walkInBillingDays(dropMs, pickMs);
+    if (!days) return null;
+    // Pick-up day drives the seasonal override (matches BookingLongTerm).
+    const pickupDay = String(pickupRaw).slice(0, 10);
+    const eff = getEffectiveRates(ltSeasonal, pickupDay, ltRates);
+    const ratesForQuote = eff.tiers?.length ? { tiers: eff.tiers } : ltRates;
+    const quote = calculateLongTermCost(days, ratesForQuote);
+    return { ...quote, period: eff.period || null };
+  }
+
+  function refreshWalkInPrice() {
+    if (!priceHintEl || !totalInput) return;
+    if (getType() !== 'longterm') { priceHintEl.classList.add('hidden'); return; }
+    const q = computeWalkInPrice();
+    if (!q || !q.total) { priceHintEl.classList.add('hidden'); return; }
+    const seasonalNote = q.period ? ` · ${t('seasonal.appliedBadge', { name: q.period.name })}` : '';
+    priceHintEl.textContent = t('transactions.priceComputed', {
+      total: q.total, days: q.days, perDay: q.perDay,
+    }) + seasonalNote;
+    priceHintEl.classList.remove('hidden');
+    if (!priceTouched) totalInput.value = String(q.total);
+  }
+
+  // flatpickr dispatches a native 'change' on the underlying input when a
+  // date is chosen; recompute on either field changing.
+  qs('[name="dropoffAt"]', contentEl)?.addEventListener('change', refreshWalkInPrice);
+  qs('[name="pickupAt"]', contentEl)?.addEventListener('change', refreshWalkInPrice);
+
+  Promise.all([
+    getLongTermRates().catch(() => null),
+    listSeasonalPeriods().catch(() => []),
+  ]).then(([rates, seasonal]) => {
+    ltRates = rates;
+    ltSeasonal = Array.isArray(seasonal) ? seasonal : [];
+    refreshWalkInPrice();
+  });
+
   const typeToggle = qs('[data-type-toggle]', contentEl);
   const ltFields = qs('[data-lt-fields]', contentEl);
   const crFields = qs('[data-cr-fields]', contentEl);
@@ -260,6 +331,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     });
     applyVisibility();
     if (isCreditUse()) refreshBalance();
+    refreshWalkInPrice();
   });
 
   creditModeToggle?.addEventListener('change', (e) => {
@@ -475,7 +547,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
         }
         result = await grantCreditsForCashFn({
           plate, quantity, amount,
-          payerEmail, payerName,
+          payerEmail, payerName, customerId,
           paidBy, autoCheckIn,
         });
       }

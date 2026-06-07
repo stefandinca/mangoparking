@@ -2042,6 +2042,7 @@ export const grantCreditsForCash = onCall(
     const {
       plate, quantity, packId, amount,
       payerEmail, payerName, payerPhone,
+      customerId,
       paidBy = 'cash',
       autoCheckIn = false,  // walk-in flow: consume one token immediately
     } = request.data || {};
@@ -2060,6 +2061,7 @@ export const grantCreditsForCash = onCall(
       quantity: qty,
       amount: Number(amount) || 0,
       customerData: {
+        customerId: customerId || null,
         licensePlate: plate,
         email: payerEmail || '',
         name: payerName || '',
@@ -2076,7 +2078,16 @@ export const grantCreditsForCash = onCall(
       entityType: 'tokenBalance',
       entityId: docId,
       actorUid: uid,
-      payload: { plate, quantity: qty, packId, paidBy, payerEmail },
+      // Coerce optionals to null — Firestore rejects `undefined`, and the
+      // walk-in modal omits packId entirely (that omission was the original
+      // 500: "Cannot use undefined ... in field payload.packId").
+      payload: {
+        plate,
+        quantity: qty,
+        packId: packId || null,
+        paidBy,
+        payerEmail: payerEmail || null,
+      },
       timestamp: nowIso,
     });
 

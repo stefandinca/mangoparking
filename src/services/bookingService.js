@@ -73,6 +73,14 @@ export async function checkInBooking(bookingId, spotId = null) {
   const old = await getDocument('bookings', bookingId);
   if (!old) throw new Error(`Booking ${bookingId} not found`);
 
+  // Payment-first rule: a booking that hasn't been collected yet must not
+  // be checked in. Pay-at-pickup web bookings land here as 'unpaid' — the
+  // agent collects (Încasează) first, which flips paymentStatus to 'paid'.
+  // Coded message so the UI can show a friendly localized string.
+  if (old.paymentStatus === 'unpaid') {
+    throw new Error('UNPAID_BOOKING');
+  }
+
   let assignedSpot = spotId;
   if (!assignedSpot && old.spotId) {
     // Booking already has a reserved spot — flip that one to occupied
