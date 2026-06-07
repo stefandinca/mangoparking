@@ -2130,25 +2130,36 @@ export const grantCreditsForCash = onCall(
         } catch (err) {
           console.warn('walk-in token decrement failed:', err?.message);
         }
-        // Assign first available spot (best-effort — no spot = still allow check-in).
+        // Find the first available spot (best-effort — no spot = still allow check-in).
         let assignedSpotId = null;
         try {
           const spotsSnap = await getFirestore().collection('spots')
             .where('status', '==', 'available')
             .limit(1)
             .get();
-          if (!spotsSnap.empty) {
-            const spotDoc = spotsSnap.docs[0];
-            assignedSpotId = spotDoc.id;
-            await spotDoc.ref.update({ status: 'occupied', currentBookingId: null });
-          }
+          if (!spotsSnap.empty) assignedSpotId = spotsSnap.docs[0].id;
         } catch (err) {
-          console.warn('walk-in spot assignment failed:', err?.message);
+          console.warn('walk-in spot lookup failed:', err?.message);
+        }
+        const checkinIso = new Date().toISOString();
+        // Booking doc so the commuter shows on the Check-out tab + capacity map.
+        const bookingId = await createCreditCheckInBooking(getFirestore(), {
+          plate: normPlate,
+          customerId: customerId || (docId.startsWith('plate_') ? null : docId),
+          contact: { name: payerName || '', email: payerEmail || '', phone: payerPhone || '' },
+          spotId: assignedSpotId,
+          source: 'walk-in',
+        });
+        if (assignedSpotId) {
+          try {
+            await getFirestore().collection('spots').doc(assignedSpotId)
+              .update({ status: 'occupied', currentBookingId: bookingId });
+          } catch (err) { console.warn('walk-in spot occupy failed:', err?.message); }
         }
         // activeCheckIns row keyed by plate (matches client pattern).
-        const checkinIso = new Date().toISOString();
         await getFirestore().collection('activeCheckIns').doc(normPlate).set({
           balanceDocId: docId,
+          bookingId,
           licensePlate: normPlate,
           spotId: assignedSpotId,
           checkinTime: checkinIso,
@@ -2161,6 +2172,7 @@ export const grantCreditsForCash = onCall(
           type: 'use',
           quantity: -1,
           spotId: assignedSpotId,
+          bookingId,
           timestamp: checkinIso,
           source: 'walk-in',
         });
@@ -2171,6 +2183,44 @@ export const grantCreditsForCash = onCall(
     return { ok: true, balanceDocId: docId, checkedIn };
   }
 );
+
+// Surface a credit (commuter) check-in as a `bookings` doc so it appears on
+// the Check-out tab and the capacity map (the dashboard reads `bookings`,
+// not `activeCheckIns`). Pickup is set to end-of-day so it lands in today's
+// check-out window. Returns the new booking id.
+async function createCreditCheckInBooking(db, { plate, customerId, contact, spotId, source }) {
+  const nowIso = new Date().toISOString();
+  const end = new Date(); end.setHours(23, 59, 0, 0);
+  const endIso = end.toISOString();
+  const ref = await db.collection('bookings').add({
+    code: generateBookingCode('credit'),
+    type: 'credit',
+    customerId: customerId || null,
+    licensePlate: plate,
+    startDate: nowIso,
+    endDate: endIso,
+    dropoffAt: nowIso,
+    pickupAt: endIso,
+    days: 1,
+    basePrice: 0,
+    latePrice: 0,
+    totalPrice: 0,
+    status: 'active',
+    contact: contact || {},
+    billing: { type: 'PF' },
+    paymentId: null,
+    paymentMethod: 'credit',
+    paymentStatus: 'paid',
+    paidAt: nowIso,
+    paidBy: 'credit',
+    checkinTimestamp: nowIso,
+    spotId: spotId || null,
+    createdAt: nowIso,
+    completedAt: null,
+    source: source || 'admin',
+  });
+  return ref.id;
+}
 
 // ── checkInWithCredits (callable) ───────────────────────────────────────
 // Manual commuter (navetist) check-in that consumes EXISTING credits — no
@@ -2232,38 +2282,55 @@ export const checkInWithCredits = onCall(
       tx.update(ref, { balance: FieldValue.increment(-qty) });
     });
 
-    // Assign the first free spot (best-effort — no spot still allows
-    // check-in; mirrors the grantCreditsForCash walk-in branch).
+    // Find the first free spot (best-effort — no spot still allows check-in).
     let assignedSpotId = null;
     try {
       const spotsSnap = await db.collection('spots')
         .where('status', '==', 'available')
         .limit(1)
         .get();
-      if (!spotsSnap.empty) {
-        assignedSpotId = spotsSnap.docs[0].id;
-        await spotsSnap.docs[0].ref.update({ status: 'occupied', currentBookingId: null });
-      }
+      if (!spotsSnap.empty) assignedSpotId = spotsSnap.docs[0].id;
     } catch (err) {
-      console.warn('checkInWithCredits spot assignment failed:', err?.message);
+      console.warn('checkInWithCredits spot lookup failed:', err?.message);
     }
 
     const checkinIso = new Date().toISOString();
+    const bookingCustomerId = customerId || (docId.startsWith('plate_') ? null : docId);
+    // Contact from the balance doc (best-effort) for a friendlier check-out row.
+    let contact = {};
+    try {
+      const bd = (await ref.get()).data() || {};
+      contact = { name: bd.displayName || '', email: bd.email || '', phone: bd.phone || '' };
+    } catch (_) { /* swallow */ }
+
+    // Booking doc so the commuter shows on the Check-out tab + capacity map.
+    const bookingId = await createCreditCheckInBooking(db, {
+      plate: normPlate, customerId: bookingCustomerId, contact, spotId: assignedSpotId, source: 'manual',
+    });
+    if (assignedSpotId) {
+      try {
+        await db.collection('spots').doc(assignedSpotId)
+          .update({ status: 'occupied', currentBookingId: bookingId });
+      } catch (err) { console.warn('checkInWithCredits spot occupy failed:', err?.message); }
+    }
+
     await db.collection('activeCheckIns').doc(normPlate).set({
       balanceDocId: docId,
+      bookingId,
       licensePlate: normPlate,
-      customerId: docId.startsWith('plate_') ? null : docId,
+      customerId: bookingCustomerId,
       spotId: assignedSpotId,
       checkinTime: checkinIso,
       source: 'manual',
     });
 
     await db.collection('tokenTransactions').add({
-      customerId: docId.startsWith('plate_') ? null : docId,
+      customerId: bookingCustomerId,
       licensePlate: normPlate,
       type: 'use',
       quantity: -qty,
       spotId: assignedSpotId,
+      bookingId,
       timestamp: checkinIso,
       source: 'manual',
     });
@@ -2277,7 +2344,7 @@ export const checkInWithCredits = onCall(
       timestamp: checkinIso,
     });
 
-    return { ok: true, balanceDocId: docId, credits: qty, spotId: assignedSpotId, checkedIn: true };
+    return { ok: true, balanceDocId: docId, credits: qty, spotId: assignedSpotId, bookingId, checkedIn: true };
   }
 );
 

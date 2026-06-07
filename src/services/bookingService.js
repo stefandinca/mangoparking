@@ -1,4 +1,4 @@
-import { addDocument, getCollection, getDocument, updateDocument, query, where, orderBy, limit } from '../firebase/db.js';
+import { addDocument, getCollection, getDocument, updateDocument, removeDocument, query, where, orderBy, limit } from '../firebase/db.js';
 import { getCurrentUser } from '../firebase/auth.js';
 import { auditLog } from './auditService.js';
 import { getAllSpots, updateSpotStatus } from './capacityService.js';
@@ -125,6 +125,12 @@ export async function checkOutBooking(bookingId) {
     await updateSpotStatus(old.spotId, 'available').catch((err) => {
       console.warn('checkOutBooking: spot status update failed', err?.message);
     });
+  }
+  // Clear the activeCheckIns row — commuter/walk-in check-ins live there too,
+  // and a stale row blocks the plate from a future credit check-in.
+  if (old.licensePlate) {
+    const normPlate = String(old.licensePlate).toUpperCase().replace(/[\s-]/g, '');
+    if (normPlate) await removeDocument('activeCheckIns', normPlate).catch(() => {});
   }
   await auditLog('booking_checkout', 'booking', bookingId, { status: old.status }, { status: 'completed' });
 }
