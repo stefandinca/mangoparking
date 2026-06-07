@@ -15,7 +15,7 @@
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
+import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
 
 const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
 
@@ -477,3 +477,71 @@ async function handleUse(tx) {
     });
   }
 }
+
+// ── Contact form → email rezervari@ ──────────────────────────────────────
+// Every contactMessages doc (from the homepage + /contact forms) emails the
+// reservations inbox so submissions aren't a silent Firestore dead-drop.
+// Reply-To is set to the customer, so staff can reply straight from the
+// notification. Raw HTML send — no Brevo template needed.
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+  ));
+}
+
+export const onContactMessageCreated = onDocumentCreated(
+  { document: 'contactMessages/{id}', region: 'europe-west1', secrets: [BREVO_API_KEY] },
+  async (event) => {
+    const m = event.data?.data();
+    if (!m) return;
+
+    // Idempotency — v2 triggers can fire more than once.
+    const db = getFirestore();
+    const ref = db.collection('contactMessages').doc(event.params.id);
+    const claimed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return false;
+      if (snap.data().notifiedAt) return false;
+      tx.update(ref, { notifiedAt: FieldValue.serverTimestamp() });
+      return true;
+    }).catch((err) => {
+      console.warn('onContactMessageCreated: claim failed', err?.message);
+      return false;
+    });
+    if (!claimed) {
+      console.log('onContactMessageCreated: skip (duplicate)', event.params.id);
+      return;
+    }
+
+    const name = escHtml(m.name) || '—';
+    const email = escHtml(m.email) || '—';
+    const subject = (m.subject && String(m.subject).trim()) ? escHtml(m.subject) : '(fără subiect)';
+    const message = escHtml(m.message).replace(/\n/g, '<br>');
+
+    const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1A1A1A;line-height:1.5">
+        <h2 style="color:#0F2D66;margin:0 0 16px">Mesaj nou de contact</h2>
+        <table cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+          <tr><td style="padding:4px 16px 4px 0;color:#4B5563"><strong>Nume</strong></td><td style="padding:4px 0">${name}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;color:#4B5563"><strong>Email</strong></td><td style="padding:4px 0"><a href="mailto:${email}">${email}</a></td></tr>
+          <tr><td style="padding:4px 16px 4px 0;color:#4B5563"><strong>Subiect</strong></td><td style="padding:4px 0">${subject}</td></tr>
+        </table>
+        <div style="margin:16px 0;padding:16px;background:#FFF8E8;border:1px solid #EDE3CC;border-radius:12px;white-space:pre-wrap">${message}</div>
+        <p style="font-size:13px;color:#4B5563;margin:8px 0 0">Răspunde direct la acest email pentru a-i scrie clientului.</p>
+      </div>`;
+
+    const replyTo = (m.email && String(m.email).includes('@'))
+      ? { email: String(m.email), name: m.name || String(m.email) }
+      : undefined;
+
+    console.log(`onContactMessageCreated: notifying rezervari@ for ${event.params.id} from=${email}`);
+    await sendBrevoRaw({
+      to: 'rezervari@mangoparking.ro',
+      name: 'Mango Parking Rezervări',
+      subject: `Contact site: ${subject}`,
+      html,
+      replyTo,
+      tags: ['contact-form'],
+    });
+  }
+);

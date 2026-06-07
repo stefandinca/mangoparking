@@ -41,7 +41,7 @@ import { sendRepayPaidEmail, sendRefundIssuedEmail } from './emails.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
-export { onUserCreated, onBookingCreated, onTokenTransactionCreated } from './emails.js';
+export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated } from './emails.js';
 
 // ANAF CUI lookup callable (Phase B4).
 export { lookupCui } from './cui.js';

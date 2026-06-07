@@ -80,3 +80,47 @@ export async function sendBrevoEmail({
   console.log(`sendBrevoEmail: ok template=${templateName}-${locale} id=${id} to=${to} msg=${data.messageId}`);
   return { ok: true, messageId: data.messageId };
 }
+
+// Raw transactional send — subject + HTML body, no Brevo template. For
+// internal/staff notifications (e.g. contact-form alerts) where maintaining
+// a Brevo template is overkill. Same swallow-on-failure contract as above.
+export async function sendBrevoRaw({ to, name = '', subject, html, replyTo, tags = [] }) {
+  if (!to || !to.includes?.('@')) {
+    console.warn('sendBrevoRaw: invalid recipient', { to });
+    return { skipped: true, reason: 'invalid-recipient' };
+  }
+  const body = {
+    to: [{ email: to, name: name || undefined }],
+    sender: SENDER,
+    replyTo: (replyTo && replyTo.email && replyTo.email.includes('@')) ? replyTo : SENDER,
+    subject: String(subject || 'Mango Parking'),
+    htmlContent: String(html || ''),
+    tags: (Array.isArray(tags) ? tags : []).filter(Boolean),
+  };
+
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'api-key': BREVO_API_KEY.value(),
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    console.error('sendBrevoRaw: network error', err?.message, { to });
+    return { skipped: true, reason: 'network-error' };
+  }
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    console.error(`sendBrevoRaw: Brevo ${res.status}`, { to, detail });
+    return { skipped: true, reason: `brevo-${res.status}` };
+  }
+
+  const data = await res.json().catch(() => ({}));
+  console.log(`sendBrevoRaw: ok to=${to} subject="${subject}" msg=${data.messageId}`);
+  return { ok: true, messageId: data.messageId };
+}
