@@ -103,7 +103,7 @@ export default function Home(container) {
 
             <h1 class="font-heading text-[clamp(3rem,6vw,5.5rem)] font-bold leading-[1.02] tracking-[-0.03em] mb-6 text-blueberry-deep">
               ${t('hero.title1')}<br>
-              <span class="text-mango-deep">${t('hero.title2')}</span>
+              <span class="text-mango">${t('hero.title2')}</span>
             </h1>
 
             <p class="text-[17px] text-dim leading-relaxed max-w-md mb-10">${t('hero.subtitle')}</p>
