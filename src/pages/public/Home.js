@@ -2,7 +2,7 @@ import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
-import { checkIcon, starIcon, planeIcon, peopleIcon } from '../../components/widgets/icons.js';
+import { checkIcon, starIcon, planeIcon, peopleIcon, shuttleIcon } from '../../components/widgets/icons.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
 import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL } from '../../utils/constants.js';
 import { subscribeCapacity } from '../../services/capacityService.js';
@@ -109,8 +109,8 @@ export default function Home(container) {
             <p class="text-[17px] text-dim leading-relaxed max-w-md mb-10">${t('hero.subtitle')}</p>
 
             <div class="flex flex-col sm:flex-row gap-3 mb-14">
-              <a href="${localePath('/booking/long-term')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('funnel.longTerm.cta')}</a>
-              <a href="${localePath('/booking/credits')}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-8 py-4 rounded-2xl transition-all duration-200 text-center shadow-sm hover:shadow-md">${t('funnel.commuter.cta')}</a>
+              <a href="${localePath('/booking/long-term')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[17px] px-8 py-4 rounded-2xl transition-all duration-200 text-left sm:text-center shadow-sm hover:shadow-md">${t('funnel.longTerm.cta')}</a>
+              <a href="${localePath('/booking/credits')}" class="bg-white border-2 border-blueberry hover:bg-blueberry/5 text-blueberry font-semibold text-[17px] px-8 py-4 rounded-2xl transition-all duration-200 text-left sm:text-center shadow-sm hover:shadow-md">${t('funnel.commuter.cta')}</a>
             </div>
 
             <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -213,7 +213,7 @@ export default function Home(container) {
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking/long-term')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors">${t('funnel.longTerm.cta')}</a>
+            <a href="${localePath('/booking/long-term')}" class="block text-center bg-white hover:bg-frost text-blueberry-deep font-semibold text-[16px] py-4 rounded-2xl transition-colors">${t('funnel.longTerm.cta')}</a>
           </div>
 
           <!-- Commuter / Credits (right) -->
@@ -241,7 +241,7 @@ export default function Home(container) {
                 </li>
               `).join('')}
             </ul>
-            <a href="${localePath('/booking/credits')}" class="block text-center bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md">${t('funnel.commuter.cta')}</a>
+            <a href="${localePath('/booking/credits')}" class="block text-center bg-white hover:bg-frost text-blueberry-deep font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md">${t('funnel.commuter.cta')}</a>
           </div>
         </div>
         <p class="text-center mt-8"><a href="${localePath('/pricing')}" class="text-white/25 hover:text-white/50 text-[14px] transition-colors">${t('pricing.viewAll')}</a></p>
@@ -271,24 +271,21 @@ export default function Home(container) {
       </div>
     </section>
 
-    <!-- SHUTTLE PREVIEW -->
+    <!-- SHUTTLE (on-demand) -->
     <section class="py-16 md:py-28">
       <div class="max-w-3xl mx-auto px-6">
-        <div class="text-center mb-14">
+        <div class="text-center mb-12">
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('shuttle.label')}</p>
-          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('shuttle.title')}</h2>
+          <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('shuttle.homeHeading')}</h2>
         </div>
-        <div class="card-solid rounded-3xl overflow-hidden">
-          <div class="grid grid-cols-3 text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-4 sm:px-8 py-4 border-b border-frost-deep">
-            <span>${t('shuttle.route')}</span>
-            <span class="text-center">${t('shuttle.departs')}</span>
-            <span class="text-right">${t('shuttle.status')}</span>
-          </div>
-          <div class="divide-y divide-frost-deep/60" data-shuttle-rows>
-            <div class="px-4 sm:px-8 py-8 text-center text-dim text-[15px]">...</div>
+        <div class="card-solid rounded-3xl p-8 md:p-10 flex flex-col sm:flex-row items-start gap-5">
+          <div class="w-12 h-12 rounded-2xl bg-mango/15 flex items-center justify-center shrink-0">${shuttleIcon.replace('class="w-5 h-5"', 'class="w-6 h-6 text-blueberry-deep"')}</div>
+          <div>
+            <p class="font-heading font-bold text-xl text-blueberry-deep mb-2">${t('shuttle.onDemandTitle')}</p>
+            <p class="text-dim text-[16px] leading-relaxed">${t('shuttle.onDemandBody')}</p>
           </div>
         </div>
-        <p class="text-center mt-6"><a href="${localePath('/shuttle')}" class="text-mango hover:text-mango-hover text-[14px] font-semibold transition-colors">${t('shuttle.viewFull')}</a></p>
+        <p class="mt-6"><a href="${localePath('/shuttle')}" class="text-blueberry hover:text-blueberry-hover text-[14px] font-semibold transition-colors">${t('shuttle.homeLink')}</a></p>
       </div>
     </section>
 
@@ -363,8 +360,8 @@ export default function Home(container) {
             <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-[-0.02em] mb-4 text-white">${t('cta.title')}</h2>
             <p class="text-white/70 text-[16px] mb-8">${t('cta.subtitle')}</p>
             <div class="flex flex-col sm:flex-row gap-3">
-              <a href="${localePath('/booking')}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">${t('cta.book')}</a>
-              <a href="${localePath('/contact')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-medium text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
+              <a href="${localePath('/booking')}" class="bg-white hover:bg-frost text-blueberry-deep font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 shadow-md text-center">${t('cta.book')}</a>
+              <a href="${localePath('/contact')}" class="border-2 border-white/40 hover:bg-white/10 text-white font-semibold text-[16px] px-10 py-4 rounded-2xl transition-all duration-200 text-center">${t('cta.directions')}</a>
             </div>
           </div>
         </div>
