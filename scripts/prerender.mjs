@@ -8,11 +8,32 @@
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import puppeteer from 'puppeteer';
 
-const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
+const SITE_URL = process.env.SITE_URL || 'https://www.mangoparking.ro';
 const PORT = 4173;
 const HOST = `http://localhost:${PORT}`;
+
+// Launch Chromium. Locally we use the full `puppeteer` package (bundled
+// Chromium). On Vercel's build container there's no system Chromium and the
+// bundled one can't start (missing libnss3 etc.), so use `@sparticuz/chromium`
+// — a serverless Chromium build that ships the libs — via `puppeteer-core`.
+// Gated on the VERCEL env so dev machines keep using the simpler path.
+async function launchBrowser() {
+  if (process.env.VERCEL) {
+    const chromium = (await import('@sparticuz/chromium')).default;
+    const puppeteer = (await import('puppeteer-core')).default;
+    return puppeteer.launch({
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: await chromium.executablePath(),
+      headless: 'new',
+    });
+  }
+  const puppeteer = (await import('puppeteer')).default;
+  return puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+}
 
 const ROUTES = [
   '/', '/pricing', '/promotions', '/shuttle', '/about', '/contact',
@@ -50,11 +71,7 @@ async function main() {
     await waitForServer(HOST);
     console.log('✓ Preview server up at', HOST);
 
-    // --no-sandbox is required in CI / serverless build containers (Vercel).
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    const browser = await launchBrowser();
     const page = await browser.newPage();
 
     for (const route of ROUTES) {
