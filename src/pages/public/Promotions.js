@@ -21,9 +21,10 @@ function isCurrentlyValid(v, todayStr) {
   return true;
 }
 
-function valueLabel(v) {
-  if (v.type === 'fixed') return `-${v.value} ${t('common.lei')}`;
-  if (v.type === 'percent') return `-${v.value}%`;
+// Human-readable headline phrase for the voucher's value.
+function valueHeadline(v) {
+  if (v.type === 'fixed') return t('voucher.valueFixed', { value: v.value });
+  if (v.type === 'percent') return t('voucher.valuePercent', { value: v.value });
   if (v.type === 'days') return t('voucher.valueDays', { value: v.value });
   return '—';
 }
@@ -38,16 +39,17 @@ function voucherCardHtml(v, locale) {
     } catch { return iso; }
   };
   return `
-    <div class="card-solid rounded-3xl p-6 border-2 border-mango/40 bg-gradient-to-br from-mango/5 to-frost">
-      <div class="flex items-start justify-between gap-3 mb-3">
-        <div class="min-w-0">
-          <p class="text-[12px] uppercase tracking-wider text-dim font-mono">${escapeHtml(v.name || '')}</p>
-          <p class="font-heading font-bold text-3xl text-blueberry-deep mt-1 font-mono">${escapeHtml(v.code)}</p>
+    <div class="relative overflow-hidden rounded-2xl bg-white border border-frost-deep shadow-sm flex flex-col">
+      <div class="absolute inset-y-0 left-0 w-1.5 bg-mango"></div>
+      <div class="p-6 pl-7 flex flex-col flex-1">
+        <p class="text-[11px] uppercase tracking-wider text-dim font-mono truncate">${escapeHtml(v.name || '')}</p>
+        <p class="font-heading font-bold text-2xl text-blueberry-deep mt-0.5 leading-tight mb-4">${valueHeadline(v)}</p>
+        <div class="flex items-center justify-between gap-2 rounded-xl border border-dashed border-blueberry/30 bg-blueberry/[0.04] px-3 py-2.5">
+          <span class="font-mono font-bold tracking-[0.12em] text-blueberry-deep text-[16px] truncate">${escapeHtml(v.code)}</span>
         </div>
-        <span class="font-mono font-bold text-2xl text-mango shrink-0">${valueLabel(v)}</span>
+        <p class="text-[12px] text-dim font-mono mt-3 mb-4">${fmt(v.startDate)} → ${fmt(v.endDate)}</p>
+        <button type="button" data-copy-code="${escapeHtml(v.code)}" class="mt-auto w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-2.5 rounded-xl transition-colors">${t('promotions.copyCode')}</button>
       </div>
-      <p class="text-[12px] text-dim font-mono mb-4">${fmt(v.startDate)} → ${fmt(v.endDate)}</p>
-      <button type="button" data-copy-code="${escapeHtml(v.code)}" class="w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-2.5 rounded-xl transition-colors">${t('promotions.copyCode')}</button>
     </div>
   `;
 }

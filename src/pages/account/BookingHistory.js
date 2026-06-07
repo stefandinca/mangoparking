@@ -254,7 +254,7 @@ function renderPendingCreditOrder(o, locale) {
         <div class="min-w-0">
           <div class="flex items-center gap-2 mb-1.5">
             <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-mango/15 text-charcoal">${t('account.pendingCreditOrder')}</span>
-            <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-danger/10 text-danger">${t('checkins.unpaid')}</span>
+            <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-danger/10 text-danger">${t('checkins.payUnpaid')}</span>
             ${o.id ? `<span class="text-[12px] font-mono text-dim">${o.id.slice(0, 8)}</span>` : ''}
           </div>
           <p class="text-[14px] text-charcoal">

@@ -31,12 +31,15 @@ function fmtDate(iso, locale) {
   } catch { return iso; }
 }
 
-function valueLabel(v) {
-  if (v.type === 'fixed') return `-${v.value} ${t('common.lei')}`;
-  if (v.type === 'percent') return `-${v.value}%`;
+// Human-readable headline phrase for the voucher's value.
+function valueHeadline(v) {
+  if (v.type === 'fixed') return t('voucher.valueFixed', { value: v.value });
+  if (v.type === 'percent') return t('voucher.valuePercent', { value: v.value });
   if (v.type === 'days') return t('voucher.valueDays', { value: v.value });
   return '—';
 }
+
+const COPY_ICON = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/></svg>';
 
 // Returns 'active' | 'upcoming' | 'expired' | 'used' | 'inactive'.
 function voucherStatus(v, redemptionsByCode) {
@@ -56,7 +59,7 @@ function statusBadge(status) {
     expired:  'bg-red-100 text-red-500',
     inactive: 'bg-gray-100 text-dim',
   }[status] || 'bg-gray-100 text-dim';
-  const label = t(`account.vouchers.status.${status}`);
+  const label = t(`accountVouchers.status.${status}`);
   return `<span class="text-[11px] uppercase tracking-wider font-mono font-semibold px-2 py-0.5 rounded-full ${cls}">${label}</span>`;
 }
 
@@ -64,21 +67,26 @@ function promoCardHtml(v, redemptionsByCode, locale) {
   const status = voucherStatus(v, redemptionsByCode);
   const isUsable = status === 'active';
   return `
-    <div class="border border-frost-deep rounded-2xl p-5 bg-white ${isUsable ? '' : 'opacity-70'}" data-voucher-card="${escapeHtml(v.code)}">
-      <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
-        <div class="min-w-0 flex-1">
-          <p class="text-[12px] uppercase tracking-wider text-dim font-mono">${escapeHtml(v.name || '—')}</p>
-          <p class="font-heading font-bold text-2xl text-blueberry-deep mt-0.5 font-mono">${escapeHtml(v.code)}</p>
+    <div class="relative overflow-hidden rounded-2xl bg-white border border-frost-deep shadow-sm ${isUsable ? '' : 'opacity-60'}" data-voucher-card="${escapeHtml(v.code)}">
+      <div class="absolute inset-y-0 left-0 w-1.5 bg-mango"></div>
+      <div class="p-5 pl-6">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div class="min-w-0">
+            <p class="text-[11px] uppercase tracking-wider text-dim font-mono truncate">${escapeHtml(v.name || '—')}</p>
+            <p class="font-heading font-bold text-xl text-blueberry-deep mt-0.5 leading-tight">${valueHeadline(v)}</p>
+          </div>
+          ${statusBadge(status)}
         </div>
-        ${statusBadge(status)}
+        <div class="flex items-center justify-between gap-2 rounded-xl border border-dashed border-blueberry/30 bg-blueberry/[0.04] px-3 py-2.5">
+          <span class="font-mono font-bold tracking-[0.12em] text-blueberry-deep text-[15px] truncate">${escapeHtml(v.code)}</span>
+          ${isUsable ? `
+            <button type="button" data-copy-code="${escapeHtml(v.code)}" title="${t('accountVouchers.copyCode')}" class="shrink-0 inline-flex items-center gap-1 text-[12px] font-semibold text-blueberry hover:text-blueberry-hover transition-colors">
+              ${COPY_ICON}<span class="hidden sm:inline">${t('accountVouchers.copyCode')}</span>
+            </button>
+          ` : ''}
+        </div>
+        <p class="text-[12px] text-dim font-mono mt-3">${fmtDate(v.startDate, locale)} → ${fmtDate(v.endDate, locale)}</p>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <p class="font-mono font-bold text-[18px] text-mango">${valueLabel(v)}</p>
-        <p class="text-[12px] text-dim font-mono">${fmtDate(v.startDate, locale)} → ${fmtDate(v.endDate, locale)}</p>
-      </div>
-      ${isUsable ? `
-        <button type="button" data-copy-code="${escapeHtml(v.code)}" class="mt-4 w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-2.5 rounded-xl transition-colors">${t('accountVouchers.copyCode')}</button>
-      ` : ''}
     </div>
   `;
 }
@@ -88,17 +96,17 @@ function legacyCardHtml(legacy, locale) {
   // at checkout. Status comes straight from the doc.
   const status = legacy.status === 'unused' ? 'active' : 'used';
   return `
-    <div class="border border-frost-deep rounded-2xl p-5 bg-white ${status === 'active' ? '' : 'opacity-70'}">
-      <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
-        <div class="min-w-0 flex-1">
-          <p class="text-[12px] uppercase tracking-wider text-dim font-mono">${t('accountVouchers.legacyName')}</p>
-          <p class="font-heading font-bold text-xl text-blueberry-deep mt-0.5">${t('accountVouchers.legacyTitle')}</p>
+    <div class="relative overflow-hidden rounded-2xl bg-white border border-frost-deep shadow-sm ${status === 'active' ? '' : 'opacity-60'}">
+      <div class="absolute inset-y-0 left-0 w-1.5 bg-leaf"></div>
+      <div class="p-5 pl-6">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <div class="min-w-0">
+            <p class="text-[11px] uppercase tracking-wider text-dim font-mono">${t('accountVouchers.legacyName')}</p>
+            <p class="font-heading font-bold text-xl text-blueberry-deep mt-0.5 leading-tight">${t('voucher.valueFixed', { value: legacy.amount })}</p>
+          </div>
+          ${statusBadge(status)}
         </div>
-        ${statusBadge(status)}
-      </div>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <p class="font-mono font-bold text-[18px] text-mango">-${legacy.amount} ${t('common.lei')}</p>
-        <p class="text-[12px] text-dim">${t('accountVouchers.legacyHint')}</p>
+        <p class="text-[13px] text-dim">${t('accountVouchers.legacyHint')}</p>
       </div>
     </div>
   `;

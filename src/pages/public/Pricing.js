@@ -25,31 +25,36 @@ export default async function Pricing(container) {
   ]);
   const bestPack = packs.reduce((best, p) => (!best || p.quantity > best.quantity) ? p : best, null);
 
-  // Render an online price with optional strikethrough "original" anchor.
+  // Render an online price with an optional strikethrough "original" anchor.
+  // The discount is explained once per section (below), not crammed into
+  // each card, so the cards stay clean.
   function priceBlock(online, suffix = 'lei') {
     const original = originalFromOnline(online, discount);
-    if (original == null || original === online) {
-      return `<p class="font-mono text-2xl font-bold text-mango-deep">${online} ${suffix}</p>`;
-    }
+    const hasAnchor = original != null && original !== online;
     return `
-      <div>
-        <p class="font-mono text-[15px] text-dim line-through">${original} ${suffix}</p>
-        <p class="font-mono text-2xl font-bold text-mango">${online} ${suffix}</p>
-        <p class="text-[12px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</p>
-      </div>
+      ${hasAnchor ? `<p class="font-mono text-[14px] text-dim line-through leading-none mb-1">${original} ${suffix}</p>` : ''}
+      <p class="font-mono text-2xl font-bold text-blueberry-deep leading-none">${online} ${suffix}</p>
     `;
   }
+
+  // A single green "online discount" caption, shown under each priced grid.
+  const discountNote = discount > 0
+    ? `<p class="text-[13px] text-leaf font-medium mb-6 flex items-center gap-1.5">
+         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+         <span>${t('discount.online', { percent: discount })}</span>
+       </p>`
+    : '';
 
   const packCards = packs.map(p => {
     const isBest = p.id === bestPack?.id;
     const name = locale === 'ro' && p.nameRo ? p.nameRo : p.name;
     return `
-      <div class="relative card-solid rounded-2xl p-8 text-center ${isBest ? 'ring-2 ring-mango shadow-lg' : ''}">
-        ${isBest ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-bold bg-mango text-charcoal px-4 py-1 rounded-full">${t('credit.bestValue')}</span>` : ''}
-        <p class="font-heading font-bold text-4xl tracking-tight mb-1">${p.quantity}</p>
-        <p class="text-dim text-[14px] mb-4">${t('credit.plural')}</p>
-        <div class="mb-4">${priceBlock(p.price)}</div>
-        <a href="${localePath('/booking/credits')}" class="inline-block w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('credit.buyTokens')}</a>
+      <div class="relative card-solid rounded-2xl p-8 text-center flex flex-col ${isBest ? 'ring-2 ring-mango shadow-md' : ''}">
+        ${isBest ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-bold uppercase tracking-wider bg-mango text-charcoal px-4 py-1 rounded-full shadow-sm">${t('credit.bestValue')}</span>` : ''}
+        <p class="font-heading font-bold text-5xl tracking-tight text-blueberry-deep leading-none mb-1">${p.quantity}</p>
+        <p class="text-dim text-[14px] mb-6">${t('credit.plural')}</p>
+        <div class="mb-6 mt-auto">${priceBlock(p.price)}</div>
+        <a href="${localePath('/booking/credits')}" class="block w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('credit.buyTokens')}</a>
       </div>
     `;
   }).join('');
@@ -65,27 +70,33 @@ export default async function Pricing(container) {
         <!-- Long-term tiers -->
         <h2 class="font-heading font-bold text-2xl text-blueberry-deep mb-2">${t('funnel.longTerm.title')}</h2>
         <p class="text-dim text-[15px] mb-6">${t('longTerm.tierNote')}</p>
-        <div class="grid sm:grid-cols-3 gap-4 mb-12">
-          ${rates.tiers.map((tier, i) => {
+        <div class="grid sm:grid-cols-3 gap-4 mb-6">
+          ${rates.tiers.map((tier) => {
             const original = originalFromOnline(tier.perDay, discount);
             const showAnchor = original != null && original !== tier.perDay;
+            const range = `${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}`;
             return `
-            <div class="card-solid rounded-2xl p-6 text-center">
-              <p class="text-[13px] font-mono uppercase text-dim tracking-wider mb-2">${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}</p>
-              ${showAnchor ? `<p class="font-mono text-[15px] text-dim line-through">${original}</p>` : ''}
-              <p class="font-heading font-bold text-4xl text-blueberry-deep">${tier.perDay} <span class="text-[15px] font-normal text-dim">${t('longTerm.perDay')}</span></p>
-              ${showAnchor ? `<p class="text-[12px] font-bold uppercase tracking-wider text-leaf mt-1.5">${t('discount.online', { percent: discount })}</p>` : ''}
-              ${i === 0 ? `<a href="${localePath('/booking/long-term')}" class="inline-block w-full mt-5 bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-2.5 rounded-xl transition-colors">${t('funnel.longTerm.cta')} →</a>` : ''}
+            <div class="card-solid rounded-2xl p-6 flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+              <span class="text-[11px] font-mono font-semibold uppercase tracking-wider text-blueberry bg-blueberry/5 px-3 py-1 rounded-full mb-5">${range}</span>
+              ${showAnchor ? `<p class="font-mono text-[14px] text-dim line-through leading-none mb-1">${original}</p>` : ''}
+              <div class="flex items-baseline gap-1">
+                <span class="font-heading font-bold text-5xl text-blueberry-deep leading-none">${tier.perDay}</span>
+                <span class="text-dim text-[14px]">${t('longTerm.perDay')}</span>
+              </div>
             </div>
           `;}).join('')}
         </div>
+        ${discountNote}
+        <a href="${localePath('/booking/long-term')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-8 py-3.5 rounded-xl transition-colors shadow-sm mb-14">${t('funnel.longTerm.cta')} →</a>
 
         <!-- Credit packs -->
         <h2 class="font-heading font-bold text-2xl text-blueberry-deep mb-2">${t('funnel.commuter.title')}</h2>
         <p class="text-dim text-[15px] mb-6">${t('credit.pricingSubtitle')}</p>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
           ${packCards}
         </div>
+        ${discountNote}
+        <div class="mb-12"></div>
 
         <!-- How tokens work -->
         <div class="card-solid rounded-2xl p-8 mb-16">
