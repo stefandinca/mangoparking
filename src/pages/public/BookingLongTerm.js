@@ -1,7 +1,7 @@
 import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
-import { html, setFieldError, clearErrorOnInput } from '../../utils/dom.js';
+import { html, setFieldError, clearErrorOnInput, escapeHtml } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
 import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
@@ -58,6 +58,7 @@ export default function BookingLongTerm(container) {
 
   const user = getCurrentUser();
   const profile = getUserProfile();
+  const profileVehicles = profile?.vehicles || [];
 
   // Default suggestion: drop-off tomorrow 10:00, pick-up the day after at 10:00.
   // Stored as local-time-formatted strings for the datetime-local input.
@@ -110,7 +111,7 @@ export default function BookingLongTerm(container) {
             <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>
             <p class="text-[12px] text-dim mt-1">${t('longTerm.tierNote')}</p>
             <div class="flex justify-end mt-5">
-              <button type="button" data-next-step="vehicle" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+              <button type="button" data-next-step="details" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
             </div>
           </div>
 
@@ -141,33 +142,50 @@ export default function BookingLongTerm(container) {
             <p class="text-[13px] text-mango mt-2 hidden" data-voucher-line></p>
           </div>
 
-          <!-- Vehicle -->
-          <div class="card-solid rounded-3xl p-6" data-step="vehicle">
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.vehicleInfo')}</h3>
-            <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
-            <input type="text" name="licensePlate" required placeholder="B 123 ABC" value="${profile?.vehicles?.[0]?.plate || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
-            <div class="flex justify-end mt-5">
-              <button type="button" data-next-step="contact" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+          <!-- Vehicle + contact (one step). Contact precedes billing so the
+               "same as contact" checkbox can prefill the billing name. -->
+          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-step="details">
+            <!-- Vehicle -->
+            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-3">${t('longTerm.vehicleInfo')}</h3>
+            ${user && profileVehicles.length > 0 ? `
+              <div class="space-y-2 mb-3" data-vehicle-options>
+                ${profileVehicles.map((v, i) => `
+                  <label class="flex items-center gap-3 p-3 rounded-xl border-2 ${i === 0 ? 'border-blueberry bg-blueberry/5' : 'border-frost-deep'} hover:border-blueberry/40 cursor-pointer transition-colors">
+                    <input type="radio" name="vehicleChoice" value="${i}" class="accent-blueberry w-4 h-4" ${i === 0 ? 'checked' : ''}>
+                    <span class="font-mono font-semibold text-[15px]">${escapeHtml(v.plate || '')}</span>
+                    ${(v.make || v.model) ? `<span class="text-dim text-[14px]">${escapeHtml(((v.make || '') + ' ' + (v.model || '')).trim())}</span>` : ''}
+                  </label>
+                `).join('')}
+                <label class="flex items-center gap-3 p-3 rounded-xl border-2 border-frost-deep hover:border-blueberry/40 cursor-pointer transition-colors">
+                  <input type="radio" name="vehicleChoice" value="new" class="accent-blueberry w-4 h-4">
+                  <span class="text-[15px] font-medium">${locale === 'ro' ? '+ Vehicul nou' : '+ New vehicle'}</span>
+                </label>
+              </div>
+              <div class="hidden" data-new-vehicle-fields>
+            ` : `
+              <div data-new-vehicle-fields>
+            `}
+              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
+              <input type="text" name="licensePlate" placeholder="B 123 ABC" value="${(user && profileVehicles.length > 0) ? '' : escapeHtml(profile?.vehicles?.[0]?.plate || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
             </div>
-          </div>
 
-          <!-- Contact (comes before billing so "same as contact" can prefill it) -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-step="contact">
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.contactInfo')}</h3>
+            <!-- Contact -->
+            <h3 class="font-heading font-bold text-lg text-blueberry-deep mt-6 mb-3">${t('longTerm.contactInfo')}</h3>
             <div class="space-y-3">
               <div>
                 <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.name')} *</label>
-                <input type="text" name="name" required value="${profile?.displayName || user?.displayName || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                <input type="text" name="name" required value="${escapeHtml(profile?.displayName || user?.displayName || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
               </div>
               <div>
                 <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.email')} *</label>
-                <input type="email" name="email" required value="${profile?.email || user?.email || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                <input type="email" name="email" required value="${escapeHtml(profile?.email || user?.email || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
               </div>
               <div>
                 <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')}</label>
-                <input type="tel" name="phone" value="${profile?.phone || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                <input type="tel" name="phone" value="${escapeHtml(profile?.phone || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
               </div>
             </div>
+
             <div class="flex justify-end mt-5">
               <button type="button" data-next-step="billing" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
             </div>
@@ -458,6 +476,23 @@ export default function BookingLongTerm(container) {
   ['dropoffAt', 'pickupAt', 'licensePlate', 'name', 'email', 'phone']
     .forEach(name => clearErrorOnInput(form[name]));
 
+  // Saved-vehicle picker (logged-in users): selecting a plate hides the
+  // new-plate field; "+ New vehicle" reveals it. Mirrors /booking/credits.
+  const vehicleOptions = form.querySelector('[data-vehicle-options]');
+  const newVehicleFields = form.querySelector('[data-new-vehicle-fields]');
+  if (vehicleOptions && newVehicleFields) {
+    vehicleOptions.addEventListener('change', (e) => {
+      if (!e.target.matches('input[name="vehicleChoice"]')) return;
+      newVehicleFields.classList.toggle('hidden', e.target.value !== 'new');
+      vehicleOptions.querySelectorAll('label').forEach((lbl) => {
+        const inp = lbl.querySelector('input');
+        lbl.classList.toggle('border-blueberry', inp.checked);
+        lbl.classList.toggle('bg-blueberry/5', inp.checked);
+        lbl.classList.toggle('border-frost-deep', !inp.checked);
+      });
+    });
+  }
+
   // Wire the PF/PJ toggle.
   wireBillingToggle(form);
 
@@ -588,7 +623,7 @@ export default function BookingLongTerm(container) {
       setVoucherError('');
       const code = normalizeCode(voucherInput.value);
       if (!code) { setVoucherError(t('voucher.errorEmpty')); return; }
-      const plate = form.licensePlate.value.trim();
+      const plate = resolvePlate();
       if (!plate) { setVoucherError(t('voucher.errorNeedPlate')); return; }
       const base = voucherEligibleBase();
       if (!base) { setVoucherError(t('voucher.errorNoBase')); return; }
@@ -654,10 +689,16 @@ export default function BookingLongTerm(container) {
       if (pickMs - dropMs < 60 * 60 * 1000) { setFieldError(form.pickupAt, true); showToast(t('longTerm.minDuration'), 'error'); return false; }
       return true;
     }
-    if (step === 'vehicle') {
-      const ok = isValidLicensePlate(form.licensePlate.value.trim());
-      setFieldError(form.licensePlate, !ok);
-      if (!ok) { showToast(t('common.error'), 'error'); return false; }
+    if (step === 'details') {
+      const plate = resolvePlate();
+      const plateOk = isValidLicensePlate(plate);
+      const plateInput = form.querySelector('input[name="licensePlate"]');
+      if (plateInput && isPlateInputActive()) setFieldError(plateInput, !plateOk);
+      const nameOk = required(form.name.value.trim());
+      const emailOk = isValidEmail(form.email.value.trim());
+      setFieldError(form.name, !nameOk);
+      setFieldError(form.email, !emailOk);
+      if (!plateOk || !nameOk || !emailOk) { showToast(t('common.error'), 'error'); return false; }
       return true;
     }
     if (step === 'billing') {
@@ -669,15 +710,22 @@ export default function BookingLongTerm(container) {
       // Radio has a default; nothing to block on.
       return true;
     }
-    if (step === 'contact') {
-      const nameOk = required(form.name.value.trim());
-      const emailOk = isValidEmail(form.email.value.trim());
-      setFieldError(form.name, !nameOk);
-      setFieldError(form.email, !emailOk);
-      if (!nameOk || !emailOk) { showToast(t('common.error'), 'error'); return false; }
-      return true;
-    }
     return true;
+  }
+
+  // Plate resolution — from the selected saved vehicle, or the typed input
+  // when the customer is a guest or chose "new vehicle".
+  function isPlateInputActive() {
+    const choice = form.querySelector('input[name="vehicleChoice"]:checked');
+    return !choice || choice.value === 'new';
+  }
+  function resolvePlate() {
+    const choice = form.querySelector('input[name="vehicleChoice"]:checked');
+    if (choice && choice.value !== 'new') {
+      const idx = parseInt(choice.value, 10);
+      return String(profileVehicles[idx]?.plate || '').trim();
+    }
+    return String(form.querySelector('input[name="licensePlate"]')?.value || '').trim();
   }
 
   function focusFirstField(stepEl) {
@@ -730,13 +778,14 @@ export default function BookingLongTerm(container) {
     const days = billingDays(dropoffMs, pickupMs);
     if (days < 1) { showToast(t('longTerm.invalidDates'), 'error'); return; }
 
-    const licensePlate = form.licensePlate.value.trim();
+    const licensePlate = resolvePlate();
     const name = form.name.value.trim();
     const email = form.email.value.trim();
     const phone = form.phone.value.trim();
 
+    const plateInput = form.querySelector('input[name="licensePlate"]');
     const checks = [
-      [form.licensePlate, isValidLicensePlate(licensePlate)],
+      [isPlateInputActive() ? plateInput : null, isValidLicensePlate(licensePlate)],
       [form.name, required(name)],
       [form.email, isValidEmail(email)],
     ];
