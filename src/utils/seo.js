@@ -2,14 +2,14 @@
  * Update document head meta tags for SEO
  */
 export function updateMeta({ title, description, ogTitle, ogDescription, ogImage, canonical, lang, hreflang }) {
-  document.title = title || 'Mango Parking';
+  document.title = title || 'ManGO Parking';
   document.documentElement.lang = lang || 'ro';
 
   setMeta('description', description);
   setMeta('og:title', ogTitle || title, 'property');
   setMeta('og:description', ogDescription || description, 'property');
   setMeta('og:type', 'website', 'property');
-  setMeta('og:site_name', 'Mango Parking', 'property');
+  setMeta('og:site_name', 'ManGO Parking', 'property');
   if (ogImage) setMeta('og:image', ogImage, 'property');
 
   // Canonical

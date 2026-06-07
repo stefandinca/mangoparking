@@ -1,5 +1,5 @@
 export const TOTAL_CAPACITY = 110;
-export const SITE_NAME = 'Mango Parking';
+export const SITE_NAME = 'ManGO Parking';
 export const SITE_TAGLINE = 'safe & smart parking';
 export const SITE_URL = 'https://mangoparking.ro';
 export const LOGO_MASCOT = '/images/logo.png';

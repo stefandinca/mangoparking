@@ -34,8 +34,8 @@ export default function Home(container) {
   // SEO
   updateMeta({
     title: locale === 'ro'
-      ? 'Mango Parking — Parcare Aeroport Otopeni | Credite Parcare Zilnică & Microbuz'
-      : 'Mango Parking — Otopeni Airport Parking | Daily Parking Credits & Shuttle',
+      ? 'ManGO Parking — Parcare Aeroport Otopeni | Credite Parcare Zilnică & Microbuz'
+      : 'ManGO Parking — Otopeni Airport Parking | Daily Parking Credits & Shuttle',
     description: locale === 'ro'
       ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără credite, parchează flexibil. Microbuz gratuit, securitate 24/7.'
       : 'Secure parking near Henri Coandă Otopeni Airport. Buy credits, park flexibly. Free shuttle, 24/7 security.',
@@ -47,7 +47,7 @@ export default function Home(container) {
   setStructuredData({
     '@context': 'https://schema.org',
     '@type': ['ParkingFacility', 'LocalBusiness'],
-    name: 'Mango Parking',
+    name: 'ManGO Parking',
     description: 'Secure daily parking near Otopeni Airport with free shuttle service. Flexible credit system.',
     url: SITE_URL,
     telephone: CONTACT_PHONE,

@@ -23,7 +23,7 @@ import { showToast } from '../../components/core/Toast.js';
 
 export default async function AdminPricing(container) {
   const locale = getLocale();
-  updateMeta({ title: `${t('admin.pricing')} — Admin — Mango Parking`, description: t('admin.pricingSubtitle') });
+  updateMeta({ title: `${t('admin.pricing')} — Admin — ManGO Parking`, description: t('admin.pricingSubtitle') });
 
   const [packs, rates, policy, discount, seasonalPeriods] = await Promise.all([
     getAllTokenPacks().catch(() => []),

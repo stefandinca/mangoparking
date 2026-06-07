@@ -113,7 +113,7 @@ function rowHtml(b, locale) {
 export default async function AdminRefunds(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('refunds.pageTitle')} — Admin — Mango Parking`,
+    title: `${t('refunds.pageTitle')} — Admin — ManGO Parking`,
     description: t('refunds.subtitle'),
     lang: locale,
   });

@@ -35,7 +35,7 @@ export default async function Vehicles(container) {
   const vehicles = profile?.vehicles || [];
 
   updateMeta({
-    title: `${t('account.vehicles')} — Mango Parking`,
+    title: `${t('account.vehicles')} — ManGO Parking`,
     description: t('account.vehiclesSubtitle'),
     lang: locale,
   });

@@ -81,7 +81,7 @@ function voucherRowHtml(v, locale) {
 export default async function AdminVouchers(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('vouchers.pageTitle')} — Admin — Mango Parking`,
+    title: `${t('vouchers.pageTitle')} — Admin — ManGO Parking`,
     description: t('vouchers.subtitle'),
     lang: locale,
   });

@@ -105,7 +105,7 @@ export default function Subscription(container) {
   const locale = getLocale();
 
   updateMeta({
-    title: `${t('account.subscription')} — Mango Parking`,
+    title: `${t('account.subscription')} — ManGO Parking`,
     description: t('account.subManage'),
     lang: locale,
   });

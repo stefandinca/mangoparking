@@ -8,10 +8,10 @@ import { getShuttleSchedule, getTrainSchedule, getPopularFlights, getRouteKey } 
 export default async function Shuttle(container) {
   const locale = getLocale();
   updateMeta({
-    title: locale === 'ro' ? 'Program Shuttle — Mango Parking' : 'Shuttle Schedule — Mango Parking',
+    title: locale === 'ro' ? 'Program Shuttle — ManGO Parking' : 'Shuttle Schedule — ManGO Parking',
     description: locale === 'ro'
-      ? 'Program naveta gratuită Mango Parking. Curse la fiecare 15 minute către aeroport și gara de tren.'
-      : 'Free shuttle schedule from Mango Parking. Runs every 15 minutes to airport and train station.',
+      ? 'Program naveta gratuită ManGO Parking. Curse la fiecare 15 minute către aeroport și gara de tren.'
+      : 'Free shuttle schedule from ManGO Parking. Runs every 15 minutes to airport and train station.',
     lang: locale,
   });
 

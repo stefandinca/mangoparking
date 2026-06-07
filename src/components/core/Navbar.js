@@ -17,8 +17,8 @@ export function Navbar() {
       <div class="max-w-7xl mx-auto px-3 sm:px-6 pt-4">
         <div class="glass-strong rounded-2xl px-4 sm:px-6 h-14 flex items-center justify-between shadow-sm">
           <a href="${localePath('/')}" class="flex items-center gap-2.5">
-            <img src="/images/logo.png" alt="Mango Parking" class="w-10 h-10 object-contain -my-1" />
-            <span class="font-heading font-bold text-[17px] tracking-tight">Mango Parking</span>
+            <img src="/images/logo.png" alt="ManGO Parking" class="w-10 h-10 object-contain -my-1" />
+            <span class="font-heading font-bold text-[17px] tracking-tight">ManGO Parking</span>
           </a>
           <div class="hidden md:flex items-center gap-8 text-[14px] font-medium text-charcoal/40">
             <a href="${localePath('/')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.howItWorks')}</a>

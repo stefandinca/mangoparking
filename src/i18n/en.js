@@ -73,7 +73,7 @@ export default {
       '24/7 security included',
     ],
     subscribeNow: 'Subscribe Now',
-    onlyAtMango: 'Only at Mango',
+    onlyAtMango: 'Only at ManGO',
     viewAll: 'View all pricing tiers →',
     pageTitle: 'Pricing & Plans',
     pageSubtitle: 'Choose the right plan for you. Transparent pricing, no hidden fees.',
@@ -198,7 +198,7 @@ export default {
     parking247: 'Parking: 24/7',
     office: 'Office: 6 AM – 10 PM',
     shuttleEvery15: 'Shuttle: on demand',
-    copyright: 'Mango Parking © {year}. All rights reserved.',
+    copyright: 'ManGO Parking © {year}. All rights reserved.',
     legal: 'Legal',
     terms: 'Terms and conditions',
     privacy: 'Privacy policy',
@@ -226,22 +226,22 @@ export default {
     acceptTermsRequired: 'You must accept the terms to continue.',
     // Terms
     termsTitle: 'Terms and Conditions',
-    termsIntro: 'These terms govern the use of Mango Parking services and the purchase of credits through {site}. By placing an order you confirm that you have read and accept these terms.',
+    termsIntro: 'These terms govern the use of ManGO Parking services and the purchase of credits through {site}. By placing an order you confirm that you have read and accept these terms.',
     termsSectionService: '1. The service',
-    termsServiceBody: 'Mango Parking operates a daily parking facility near Henri Coandă Otopeni Airport and provides a free shuttle between the parking lot, the airport terminal and the train station. Customers buy credits online (1 credit = 1 parking day, Mon–Fri, 6 AM – 8 PM). Credits do not expire and are not tied to fixed calendar dates.',
+    termsServiceBody: 'ManGO Parking operates a daily parking facility near Henri Coandă Otopeni Airport and provides a free shuttle between the parking lot, the airport terminal and the train station. Customers buy credits online (1 credit = 1 parking day, Mon–Fri, 6 AM – 8 PM). Credits do not expire and are not tied to fixed calendar dates.',
     termsSectionPrice: '2. Prices and payment',
     termsPriceBody: 'Prices are displayed in RON (Romanian lei) and include VAT. Payment is processed online by Netopia Payments. A fiscal invoice is issued with the details provided at checkout.',
     termsSectionAccount: '3. Account and vehicle',
-    termsAccountBody: 'Purchases can be made as a guest (license plate only) or with a Mango Parking account (email + password, or Google sign-in). Passwords are stored hashed by Firebase Authentication — we never see the plain text. Billing data (PF or PJ) entered at checkout is saved to your profile so future purchases can be pre-filled; you can edit or delete it any time from your account or by request to {dpo}. Credits are credited to the provided license plate and can be used on arrival at the lot.',
+    termsAccountBody: 'Purchases can be made as a guest (license plate only) or with a ManGO Parking account (email + password, or Google sign-in). Passwords are stored hashed by Firebase Authentication — we never see the plain text. Billing data (PF or PJ) entered at checkout is saved to your profile so future purchases can be pre-filled; you can edit or delete it any time from your account or by request to {dpo}. Credits are credited to the provided license plate and can be used on arrival at the lot.',
     termsSectionObligations: '4. Customer obligations',
-    termsObligationsBody: 'The customer agrees to provide accurate data, follow the parking rules, staff instructions and the shuttle schedule. Mango Parking may refuse entry if the vehicle does not match the registered plate.',
+    termsObligationsBody: 'The customer agrees to provide accurate data, follow the parking rules, staff instructions and the shuttle schedule. ManGO Parking may refuse entry if the vehicle does not match the registered plate.',
     termsSectionLiability: '5. Liability',
-    termsLiabilityBody: 'Mango Parking is responsible for vehicles parked on the premises per its internal rules and insurance. We are not responsible for items left inside the vehicle. We are not responsible for flight or train delays.',
+    termsLiabilityBody: 'ManGO Parking is responsible for vehicles parked on the premises per its internal rules and insurance. We are not responsible for items left inside the vehicle. We are not responsible for flight or train delays.',
     termsSectionLaw: '6. Applicable law',
     termsLawBody: 'This contract is governed by Romanian law. Any dispute shall be resolved by negotiation or, failing that, through ADR/ODR procedures (see footer links) or by the competent courts in Ilfov county.',
     // Privacy
     privacyTitle: 'Privacy policy',
-    privacyIntro: '{company} ("Mango Parking") processes your personal data in accordance with Regulation (EU) 2016/679 (GDPR) and applicable Romanian law.',
+    privacyIntro: '{company} ("ManGO Parking") processes your personal data in accordance with Regulation (EU) 2016/679 (GDPR) and applicable Romanian law.',
     privacySectionData: '1. Data we collect',
     privacyDataBody: 'Depending on how you use the service we collect: (a) Account data — email, password (stored hashed by Firebase Authentication), display name, preferred language; (b) Billing data for individuals (PF) — ID document type (CNP, CI series or passport) and number, first name, last name, home address (required to issue fiscal invoices under Romanian tax law); (c) Billing data for companies (PJ) — company name, fiscal code (CUI), trade-register number (optional), registered address; (d) Contact data — email, phone; (e) Vehicle data — license plate, booking and credit-usage history; (f) Payment data — handled exclusively by Netopia Payments (we do not store card numbers); for pay-on-arrival orders we only record the payment status (paid, unpaid, who confirmed it); (g) Technical data — IP, browser/device type, access logs, essential cookies.',
     privacySectionWhy: '2. Purpose and legal basis',
@@ -267,7 +267,7 @@ export default {
     gdprComplaintBody: 'If you suspect a breach of your rights, you may contact us at {dpo} or file a complaint with ANSPDCP (anspdcp.ro).',
     // Delivery
     deliveryTitle: 'Delivery policy',
-    deliveryIntro: 'Mango Parking sells digital products (parking "credits"). There is no physical delivery.',
+    deliveryIntro: 'ManGO Parking sells digital products (parking "credits"). There is no physical delivery.',
     deliverySectionInstant: '1. Instant delivery',
     deliveryInstantBody: 'Once Netopia confirms payment, credits are credited immediately to the account associated with the provided license plate. You receive a confirmation email with the purchase details.',
     deliverySectionFailure: '2. On failure',
@@ -357,11 +357,11 @@ export default {
 
   // About page
   about: {
-    pageTitle: 'About Mango Parking',
+    pageTitle: 'About ManGO Parking',
     heroTitle: 'Parking with attention to detail.',
     heroSubtitle: 'We\'re the first parking facility near Otopeni serving both travelers and daily commuters.',
     story: 'Our Story',
-    storyText: 'Mango Parking was founded with a simple mission: to provide the most convenient and secure parking experience near Henri Coandă Airport. We noticed an unaddressed need — daily commuters using the nearby train station had no quality parking option. That\'s how Mango Parking was born, the first facility serving both segments with a shared shuttle service.',
+    storyText: 'ManGO Parking was founded with a simple mission: to provide the most convenient and secure parking experience near Henri Coandă Airport. We noticed an unaddressed need — daily commuters using the nearby train station had no quality parking option. That\'s how ManGO Parking was born, the first facility serving both segments with a shared shuttle service.',
     securityTitle: 'Top-tier security',
     securityFeatures: [
       '24/7 on-site security guards',
@@ -375,7 +375,7 @@ export default {
   // Floating WhatsApp button (site-wide)
   whatsapp: {
     label: 'Contact us on WhatsApp',
-    message: 'Hi! I\'d like more info about Mango Parking.',
+    message: 'Hi! I\'d like more info about ManGO Parking.',
   },
 
   // Contact page
@@ -566,7 +566,7 @@ export default {
   // Admin
   admin: {
     // Shared
-    mangoAdmin: 'Mango Admin',
+    mangoAdmin: 'ManGO Admin',
     backToSite: 'Back to site',
     // Sidebar
     dashboard: 'Dashboard',
@@ -994,7 +994,7 @@ export default {
 
   // Customer-facing voucher page (/account/vouchers)
   accountVouchers: {
-    subtitle: 'Vouchers and discounts you’ve received from Mango Parking.',
+    subtitle: 'Vouchers and discounts you’ve received from ManGO Parking.',
     copyCode: 'Copy code',
     copied: 'Code {code} copied.',
     emptyTitle: 'No vouchers yet',
@@ -1020,7 +1020,7 @@ export default {
   promotions: {
     pretitle: 'Promotions & deals',
     defaultTitle: 'Promotions and offers',
-    defaultIntro: 'Current deals at Mango Parking.',
+    defaultIntro: 'Current deals at ManGO Parking.',
     activeTitle: 'Available codes',
     activeSubtitle: 'Apply the code at checkout.',
     copyCode: 'Copy code',
@@ -1431,7 +1431,7 @@ export default {
     reportEntries: 'Entries',
     reportTotal: 'Total',
     reportTitle: 'Cashbook report',
-    reportFooter: 'Generated by Mango Parking · keep this report for accounting records.',
+    reportFooter: 'Generated by ManGO Parking · keep this report for accounting records.',
     viewReport: 'View report',
     printBtn: 'Print',
   },

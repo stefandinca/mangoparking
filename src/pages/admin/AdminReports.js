@@ -6,7 +6,7 @@ import { getAllSubscriptions } from '../../services/subscriptionService.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 
 export default async function AdminReports(container) {
-  updateMeta({ title: 'Reports — Admin — Mango Parking', description: 'Revenue and analytics reports.' });
+  updateMeta({ title: 'Reports — Admin — ManGO Parking', description: 'Revenue and analytics reports.' });
 
   const [bookings, subscriptions] = await Promise.all([
     getAllBookings().catch(() => []),

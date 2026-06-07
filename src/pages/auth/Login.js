@@ -26,11 +26,11 @@ export default function Login(container) {
 
   updateMeta({
     title: locale === 'ro'
-      ? 'Autentificare — Mango Parking'
-      : 'Login — Mango Parking',
+      ? 'Autentificare — ManGO Parking'
+      : 'Login — ManGO Parking',
     description: locale === 'ro'
-      ? 'Autentifică-te în contul tău Mango Parking.'
-      : 'Sign in to your Mango Parking account.',
+      ? 'Autentifică-te în contul tău ManGO Parking.'
+      : 'Sign in to your ManGO Parking account.',
     lang: locale,
   });
 
@@ -42,7 +42,7 @@ export default function Login(container) {
         <div class="glass rounded-3xl p-8 md:p-10 shadow-lg">
           <!-- Header -->
           <div class="text-center mb-8">
-            <img src="/images/logo.png" alt="Mango Parking" class="w-20 h-20 object-contain mx-auto mb-2" />
+            <img src="/images/logo.png" alt="ManGO Parking" class="w-20 h-20 object-contain mx-auto mb-2" />
             <p class="text-dim text-[12px] tracking-wide mb-4">— safe &amp; smart parking —</p>
             <h1 class="font-heading text-2xl font-bold tracking-tight">${t('auth.login')}</h1>
           </div>

@@ -73,7 +73,7 @@ export default {
       'Securitate 24/7 inclusă',
     ],
     subscribeNow: 'Abonează-te Acum',
-    onlyAtMango: 'Doar la Mango',
+    onlyAtMango: 'Doar la ManGO',
     viewAll: 'Vezi toate tarifele →',
     pageTitle: 'Tarife și Prețuri',
     pageSubtitle: 'Alege planul potrivit pentru tine. Prețuri transparente, fără costuri ascunse.',
@@ -198,7 +198,7 @@ export default {
     parking247: 'Parcare: 24/7',
     office: 'Birou: 6:00 – 22:00',
     shuttleEvery15: 'Microbuz: la cerere',
-    copyright: 'Mango Parking © {year}. Toate drepturile rezervate.',
+    copyright: 'ManGO Parking © {year}. Toate drepturile rezervate.',
     legal: 'Legal',
     terms: 'Termeni și condiții',
     privacy: 'Confidențialitate',
@@ -226,22 +226,22 @@ export default {
     acceptTermsRequired: 'Trebuie să accepți termenii pentru a continua.',
     // Terms
     termsTitle: 'Termeni și condiții',
-    termsIntro: 'Acești termeni reglementează utilizarea serviciilor Mango Parking și achiziționarea de credite prin site-ul {site}. Prin plasarea unei comenzi confirmi că ai citit și accepți acești termeni.',
+    termsIntro: 'Acești termeni reglementează utilizarea serviciilor ManGO Parking și achiziționarea de credite prin site-ul {site}. Prin plasarea unei comenzi confirmi că ai citit și accepți acești termeni.',
     termsSectionService: '1. Serviciul',
-    termsServiceBody: 'Mango Parking oferă locuri de parcare zilnică lângă Aeroportul Henri Coandă Otopeni și transport microbuz gratuit între parcare, terminal și gara de tren. Clienții achiziționează credite online (1 credit = 1 zi de parcare, Luni–Vineri, 06:00 – 20:00). Creditele nu expiră și nu sunt legate de date calendaristice fixe.',
+    termsServiceBody: 'ManGO Parking oferă locuri de parcare zilnică lângă Aeroportul Henri Coandă Otopeni și transport microbuz gratuit între parcare, terminal și gara de tren. Clienții achiziționează credite online (1 credit = 1 zi de parcare, Luni–Vineri, 06:00 – 20:00). Creditele nu expiră și nu sunt legate de date calendaristice fixe.',
     termsSectionPrice: '2. Prețuri și plăți',
     termsPriceBody: 'Prețurile sunt afișate în RON (lei) și includ TVA. Plata se efectuează online prin procesatorul Netopia Payments. Emitem factură fiscală pe datele furnizate la checkout.',
     termsSectionAccount: '3. Contul și vehiculul',
-    termsAccountBody: 'Achiziția se poate face ca invitat (doar număr de înmatriculare) sau cu un cont Mango Parking (email + parolă sau autentificare Google). Parola este stocată criptat de Firebase Authentication — noi nu avem acces la versiunea în text clar. Datele de facturare (PF sau PJ) introduse la o rezervare se salvează pe profilul tău pentru a fi precompletate la achiziții viitoare; le poți edita sau șterge oricând din contul tău sau la cerere către {dpo}. Creditele sunt atribuite numărului de înmatriculare furnizat și pot fi folosite la sosirea la parcare.',
+    termsAccountBody: 'Achiziția se poate face ca invitat (doar număr de înmatriculare) sau cu un cont ManGO Parking (email + parolă sau autentificare Google). Parola este stocată criptat de Firebase Authentication — noi nu avem acces la versiunea în text clar. Datele de facturare (PF sau PJ) introduse la o rezervare se salvează pe profilul tău pentru a fi precompletate la achiziții viitoare; le poți edita sau șterge oricând din contul tău sau la cerere către {dpo}. Creditele sunt atribuite numărului de înmatriculare furnizat și pot fi folosite la sosirea la parcare.',
     termsSectionObligations: '4. Obligațiile clientului',
-    termsObligationsBody: 'Clientul se obligă să furnizeze date corecte, să respecte regulamentul parcării, personalul și programul microbuzului. Mango Parking poate refuza accesul dacă vehiculul nu corespunde numărului înregistrat.',
+    termsObligationsBody: 'Clientul se obligă să furnizeze date corecte, să respecte regulamentul parcării, personalul și programul microbuzului. ManGO Parking poate refuza accesul dacă vehiculul nu corespunde numărului înregistrat.',
     termsSectionLiability: '5. Răspundere',
-    termsLiabilityBody: 'Mango Parking răspunde pentru vehiculele parcate pe teren conform regulamentului intern și asigurării proprii. Nu răspundem pentru bunurile lăsate în vehicul. Nu răspundem pentru întârzieri ale zborurilor sau ale trenurilor.',
+    termsLiabilityBody: 'ManGO Parking răspunde pentru vehiculele parcate pe teren conform regulamentului intern și asigurării proprii. Nu răspundem pentru bunurile lăsate în vehicul. Nu răspundem pentru întârzieri ale zborurilor sau ale trenurilor.',
     termsSectionLaw: '6. Legislație aplicabilă',
     termsLawBody: 'Prezentul contract este guvernat de legislația din România. Orice litigiu se soluționează prin negociere sau, dacă nu este posibil, prin proceduri SAL/SOL (vezi link-urile din footer) sau de către instanțele competente din județul Ilfov.',
     // Privacy
     privacyTitle: 'Politică de confidențialitate',
-    privacyIntro: '{company} (denumită în continuare „Mango Parking") prelucrează datele tale cu caracter personal în conformitate cu Regulamentul (UE) 2016/679 (GDPR) și legislația română aplicabilă.',
+    privacyIntro: '{company} (denumită în continuare „ManGO Parking") prelucrează datele tale cu caracter personal în conformitate cu Regulamentul (UE) 2016/679 (GDPR) și legislația română aplicabilă.',
     privacySectionData: '1. Ce date colectăm',
     privacyDataBody: 'În funcție de modul în care folosești serviciul, colectăm: (a) Date cont — email, parolă (stocată criptat de Firebase Authentication), nume afișat, limbă preferată; (b) Date de facturare pentru persoană fizică — tip act de identitate (CNP, serie CI sau pașaport) și numărul aferent, prenume, nume, adresa de domiciliu (necesare pentru emiterea facturilor fiscale conform Codului Fiscal); (c) Date de facturare pentru persoană juridică — denumire companie, CUI, Reg.Com. (opțional), adresa sediului social; (d) Date contact — email, telefon; (e) Date vehicul — număr de înmatriculare, istoric rezervări și utilizare credite; (f) Date plată — gestionate exclusiv de Netopia Payments (noi nu stocăm datele cardului); pentru plata la sosire înregistrăm doar statusul plății (plătit, neplătit, cine a confirmat); (g) Date tehnice — IP, tip browser/dispozitiv, jurnale de acces, cookie-uri esențiale.',
     privacySectionWhy: '2. Scop și temei',
@@ -267,7 +267,7 @@ export default {
     gdprComplaintBody: 'Dacă suspectezi încălcarea drepturilor tale, ne poți contacta la {dpo} sau depune plângere la ANSPDCP (anspdcp.ro).',
     // Delivery
     deliveryTitle: 'Politică de livrare',
-    deliveryIntro: 'Mango Parking vinde produse digitale („credite" pentru parcare). Nu există livrare fizică.',
+    deliveryIntro: 'ManGO Parking vinde produse digitale („credite" pentru parcare). Nu există livrare fizică.',
     deliverySectionInstant: '1. Livrare instantă',
     deliveryInstantBody: 'După confirmarea plății de către Netopia, creditele sunt creditate imediat în contul asociat numărului de înmatriculare furnizat. Primești un email de confirmare cu detaliile achiziției.',
     deliverySectionFailure: '2. În caz de eșec',
@@ -358,11 +358,11 @@ export default {
 
   // About page
   about: {
-    pageTitle: 'Despre Mango Parking',
+    pageTitle: 'Despre ManGO Parking',
     heroTitle: 'Parcare cu atenție la detalii.',
     heroSubtitle: 'Suntem prima parcare de lângă Otopeni care servește atât călătorii cât și navetiștii zilnici.',
     story: 'Povestea Noastră',
-    storyText: 'Mango Parking a fost înființat cu o misiune simplă: să ofere cea mai convenabilă și sigură experiență de parcare lângă Aeroportul Henri Coandă. Am observat o nevoie neadresată — navetiștii zilnici care folosesc gara din apropiere nu aveau nicio opțiune de parcare de calitate. Așa s-a născut Mango Parking, prima facilitate care servește ambele segmente cu un serviciu de microbuz partajat.',
+    storyText: 'ManGO Parking a fost înființat cu o misiune simplă: să ofere cea mai convenabilă și sigură experiență de parcare lângă Aeroportul Henri Coandă. Am observat o nevoie neadresată — navetiștii zilnici care folosesc gara din apropiere nu aveau nicio opțiune de parcare de calitate. Așa s-a născut ManGO Parking, prima facilitate care servește ambele segmente cu un serviciu de microbuz partajat.',
     securityTitle: 'Securitate de nivel superior',
     securityFeatures: [
       'Pază umană 24/7',
@@ -376,7 +376,7 @@ export default {
   // Floating WhatsApp button (site-wide)
   whatsapp: {
     label: 'Contactați-ne pe WhatsApp',
-    message: 'Bună! Aș dori informații despre parcarea Mango.',
+    message: 'Bună! Aș dori informații despre parcarea ManGO.',
   },
 
   // Contact page
@@ -567,7 +567,7 @@ export default {
   // Admin
   admin: {
     // Shared
-    mangoAdmin: 'Mango Admin',
+    mangoAdmin: 'ManGO Admin',
     backToSite: 'Înapoi la site',
     // Sidebar
     dashboard: 'Panou Admin',
@@ -995,7 +995,7 @@ export default {
 
   // Customer-facing voucher page (/account/vouchers)
   accountVouchers: {
-    subtitle: 'Vouchere și reduceri primite de la Mango Parking.',
+    subtitle: 'Vouchere și reduceri primite de la ManGO Parking.',
     copyCode: 'Copiază codul',
     copied: 'Cod {code} copiat.',
     emptyTitle: 'Niciun voucher momentan',
@@ -1021,7 +1021,7 @@ export default {
   promotions: {
     pretitle: 'Promoții & oferte',
     defaultTitle: 'Promoții și oferte',
-    defaultIntro: 'Reduceri active la Mango Parking.',
+    defaultIntro: 'Reduceri active la ManGO Parking.',
     activeTitle: 'Coduri disponibile',
     activeSubtitle: 'Aplică codul la finalizarea rezervării.',
     copyCode: 'Copiază codul',
@@ -1446,7 +1446,7 @@ export default {
     reportEntries: 'Încasări',
     reportTotal: 'Total',
     reportTitle: 'Raport casierie',
-    reportFooter: 'Generat de Mango Parking · păstrează acest raport pentru evidența contabilă.',
+    reportFooter: 'Generat de ManGO Parking · păstrează acest raport pentru evidența contabilă.',
     viewReport: 'Vezi raport',
     printBtn: 'Printează',
   },

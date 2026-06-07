@@ -15,10 +15,10 @@ export default function Contact(container) {
   const locale = getLocale();
 
   updateMeta({
-    title: locale === 'ro' ? 'Contact — Mango Parking' : 'Contact — Mango Parking',
+    title: locale === 'ro' ? 'Contact — ManGO Parking' : 'Contact — ManGO Parking',
     description: locale === 'ro'
-      ? 'Contactează Mango Parking. Telefon, email și indicații către parcarea noastră de lângă Aeroportul Otopeni.'
-      : 'Contact Mango Parking. Phone, email, and directions to our parking near Otopeni Airport.',
+      ? 'Contactează ManGO Parking. Telefon, email și indicații către parcarea noastră de lângă Aeroportul Otopeni.'
+      : 'Contact ManGO Parking. Phone, email, and directions to our parking near Otopeni Airport.',
     lang: locale,
   });
 

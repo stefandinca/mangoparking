@@ -39,7 +39,7 @@ export default async function BookingHistory(container) {
   const uid = getCurrentUser()?.uid;
 
   updateMeta({
-    title: `${t('account.bookings')} — Mango Parking`,
+    title: `${t('account.bookings')} — ManGO Parking`,
     description: t('account.bookingsSubtitle'),
     lang: locale,
   });

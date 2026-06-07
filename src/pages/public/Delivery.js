@@ -5,10 +5,10 @@ import { renderLegalPage } from '../../components/core/LegalPageShell.js';
 export default function Delivery(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('legal.deliveryTitle')} — Mango Parking`,
+    title: `${t('legal.deliveryTitle')} — ManGO Parking`,
     description: locale === 'ro'
-      ? 'Politica de livrare digitală a creditelor Mango Parking.'
-      : 'Mango Parking digital credit delivery policy.',
+      ? 'Politica de livrare digitală a creditelor ManGO Parking.'
+      : 'ManGO Parking digital credit delivery policy.',
     lang: locale,
   });
 

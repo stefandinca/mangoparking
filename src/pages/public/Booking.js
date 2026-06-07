@@ -10,7 +10,7 @@ import { checkIcon } from '../../components/widgets/icons.js';
 export default function Booking(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('funnel.pageTitle')} — Mango Parking`,
+    title: `${t('funnel.pageTitle')} — ManGO Parking`,
     description: t('funnel.pageSubtitle'),
     lang: locale,
   });

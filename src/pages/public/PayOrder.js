@@ -24,7 +24,7 @@ import { submitNetopiaHandoff } from '../../services/netopiaService.js';
 export default function PayOrder(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('pay.title')} — Mango Parking`,
+    title: `${t('pay.title')} — ManGO Parking`,
     description: t('pay.subtitle'),
     lang: locale,
   });

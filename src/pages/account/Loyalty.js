@@ -40,7 +40,7 @@ export default function Loyalty(container) {
   const progressPct = nextTierInfo ? Math.min(100, Math.round((points / progressMax) * 100)) : 100;
 
   updateMeta({
-    title: `${t('account.loyalty')} — Mango Parking`,
+    title: `${t('account.loyalty')} — ManGO Parking`,
     description: t('account.loyaltySubtitle'),
     lang: locale,
   });

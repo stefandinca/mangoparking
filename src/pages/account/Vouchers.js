@@ -108,7 +108,7 @@ export default async function AccountVouchers(container) {
   const locale = getLocale();
   const user = getCurrentUser();
   updateMeta({
-    title: `${t('account.vouchers')} — Mango Parking`,
+    title: `${t('account.vouchers')} — ManGO Parking`,
     description: t('accountVouchers.subtitle'),
     lang: locale,
   });

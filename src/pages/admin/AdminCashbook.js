@@ -245,7 +245,7 @@ function renderReportsTable(reports, locale, { withAgentColumn = false } = {}) {
 export default async function AdminCashbook(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('cashbook.pageTitle')} — Admin — Mango Parking`,
+    title: `${t('cashbook.pageTitle')} — Admin — ManGO Parking`,
     description: t('cashbook.subtitle'),
     lang: locale,
   });

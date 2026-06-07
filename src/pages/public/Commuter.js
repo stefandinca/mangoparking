@@ -11,7 +11,7 @@ export default function Commuter(container) {
   const rate = getCommuterRate();
 
   updateMeta({
-    title: locale === 'ro' ? 'Abonament Navetiști — Mango Parking' : 'Commuter Plan — Mango Parking',
+    title: locale === 'ro' ? 'Abonament Navetiști — ManGO Parking' : 'Commuter Plan — ManGO Parking',
     description: locale === 'ro'
       ? 'Singura parcare cu abonament pentru navetiști la Otopeni. 500 lei/lună, microbuz sincronizat cu trenurile.'
       : 'The only commuter parking subscription at Otopeni. 500 lei/month, shuttle synced with trains.',

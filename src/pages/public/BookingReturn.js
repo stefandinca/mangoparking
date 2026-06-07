@@ -20,7 +20,7 @@ import { SIGNUP_VOUCHER_AMOUNT } from '../../services/voucherService.js';
 export default function BookingReturn(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('return.title')} — Mango Parking`,
+    title: `${t('return.title')} — ManGO Parking`,
     description: t('return.subtitleProcessing'),
     lang: locale,
   });

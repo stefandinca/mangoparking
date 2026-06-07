@@ -20,9 +20,9 @@ export function Footer() {
           <!-- Brand -->
           <div class="col-span-2 md:col-span-1">
             <div class="flex items-center gap-2.5 mb-3">
-              <img src="/images/logo.png" alt="Mango Parking" class="w-10 h-10 object-contain" />
+              <img src="/images/logo.png" alt="ManGO Parking" class="w-10 h-10 object-contain" />
               <div>
-                <div class="font-heading font-bold text-[16px] leading-none">Mango Parking</div>
+                <div class="font-heading font-bold text-[16px] leading-none">ManGO Parking</div>
                 <div class="text-[11px] text-dim mt-1">— safe &amp; smart parking —</div>
               </div>
             </div>

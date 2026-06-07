@@ -9,10 +9,10 @@ export default function About(container) {
   const locale = getLocale();
 
   updateMeta({
-    title: locale === 'ro' ? 'Despre Noi — Mango Parking' : 'About Us — Mango Parking',
+    title: locale === 'ro' ? 'Despre Noi — ManGO Parking' : 'About Us — ManGO Parking',
     description: locale === 'ro'
-      ? 'Despre Mango Parking — parcare securizată lângă Aeroportul Otopeni cu microbuz gratuit și securitate 24/7.'
-      : 'About Mango Parking — secure parking near Otopeni Airport with free shuttle and 24/7 security.',
+      ? 'Despre ManGO Parking — parcare securizată lângă Aeroportul Otopeni cu microbuz gratuit și securitate 24/7.'
+      : 'About ManGO Parking — secure parking near Otopeni Airport with free shuttle and 24/7 security.',
     lang: locale,
   });
 

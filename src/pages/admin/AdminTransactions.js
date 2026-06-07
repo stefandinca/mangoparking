@@ -47,7 +47,7 @@ const STATUS_STYLES = {
 
 export default async function AdminTransactions(container) {
   const locale = getLocale();
-  updateMeta({ title: `${t('transactions.pageTitle')} — Admin — Mango Parking`, description: t('transactions.subtitle'), lang: locale });
+  updateMeta({ title: `${t('transactions.pageTitle')} — Admin — ManGO Parking`, description: t('transactions.subtitle'), lang: locale });
 
   const [txns, bookings, users] = await Promise.all([
     getAllRecentTransactions(500).catch(() => []),

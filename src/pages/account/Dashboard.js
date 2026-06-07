@@ -76,7 +76,7 @@ export default async function Dashboard(container) {
   }
 
   updateMeta({
-    title: `${t('account.dashboard')} — Mango Parking`,
+    title: `${t('account.dashboard')} — ManGO Parking`,
     description: t('account.dashboardSubtitle'),
     lang: locale,
   });

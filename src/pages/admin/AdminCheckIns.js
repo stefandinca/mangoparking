@@ -358,7 +358,7 @@ function overdueRowHtml(b, { locale, canCancel }) {
 
 export default async function AdminCheckIns(container) {
   const locale = getLocale();
-  updateMeta({ title: `${t('checkins.pageTitle')} — Admin — Mango Parking`, description: t('checkins.subtitle'), lang: locale });
+  updateMeta({ title: `${t('checkins.pageTitle')} — Admin — ManGO Parking`, description: t('checkins.subtitle'), lang: locale });
 
   const profile = getUserProfile();
   const role = profile?.role || 'customer';

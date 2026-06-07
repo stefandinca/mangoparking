@@ -34,7 +34,7 @@ const QUILL_TOOLBAR = [
 export default async function AdminPromotions(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('admin.promotions')} — Admin — Mango Parking`,
+    title: `${t('admin.promotions')} — Admin — ManGO Parking`,
     description: t('admin.promotionsSubtitle'),
     lang: locale,
   });

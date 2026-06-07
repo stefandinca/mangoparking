@@ -11,7 +11,7 @@ export default async function Pricing(container) {
   const locale = getLocale();
 
   updateMeta({
-    title: locale === 'ro' ? 'Tarife — Mango Parking' : 'Pricing — Mango Parking',
+    title: locale === 'ro' ? 'Tarife — ManGO Parking' : 'Pricing — ManGO Parking',
     description: locale === 'ro'
       ? 'Tarife parcare aeroport pe tranșe și parcare navetiști la Aeroportul Otopeni.'
       : 'Airport parking tiered rates and commuter credits at Otopeni Airport.',

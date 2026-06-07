@@ -28,7 +28,7 @@ const ROUTE_DISPLAY = {
 };
 
 export default async function AdminShuttle(container) {
-  updateMeta({ title: 'Shuttle — Admin — Mango Parking', description: 'Manage shuttle schedule.' });
+  updateMeta({ title: 'Shuttle — Admin — ManGO Parking', description: 'Manage shuttle schedule.' });
 
   const schedule = await getShuttleSchedule();
 

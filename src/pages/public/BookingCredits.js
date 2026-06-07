@@ -17,7 +17,7 @@ import { showToast } from '../../components/core/Toast.js';
 export default async function Booking(container) {
   const locale = getLocale();
   updateMeta({
-    title: locale === 'ro' ? 'Cumpără Credite — Mango Parking' : 'Buy Credits — Mango Parking',
+    title: locale === 'ro' ? 'Cumpără Credite — ManGO Parking' : 'Buy Credits — ManGO Parking',
     description: locale === 'ro'
       ? 'Cumpără credite de parcare la Aeroportul Otopeni. Plată online, microbuz gratuit.'
       : 'Buy parking credits at Otopeni Airport. Pay online, free shuttle included.',

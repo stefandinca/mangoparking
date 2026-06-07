@@ -51,7 +51,7 @@ function localDatetimeToIso(localValue) {
 export default function BookingLongTerm(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('longTerm.pageTitle')} — Mango Parking`,
+    title: `${t('longTerm.pageTitle')} — ManGO Parking`,
     description: t('longTerm.pageSubtitle'),
     lang: locale,
   });

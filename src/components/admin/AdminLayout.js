@@ -49,7 +49,7 @@ export function AdminLayout(activePath, contentHtml) {
     <aside class="hidden md:flex w-64 bg-blueberry-deep flex-col shrink-0 sticky top-0 h-screen">
       <div class="p-6 border-b border-white/10">
         <a href="${localePath('/')}" data-link class="flex items-center gap-2.5">
-          <img src="/images/logo.png" alt="Mango Parking" class="w-9 h-9 object-contain" />
+          <img src="/images/logo.png" alt="ManGO Parking" class="w-9 h-9 object-contain" />
           <span class="text-white font-heading font-bold text-lg">${t('admin.mangoAdmin')}</span>
         </a>
       </div>
@@ -71,7 +71,7 @@ export function AdminLayout(activePath, contentHtml) {
         <div class="flex items-center justify-between px-4 py-3">
           <div class="flex items-center gap-2">
             <a href="${localePath('/')}" data-link class="shrink-0">
-              <img src="/images/logo.png" alt="Mango Parking" class="w-8 h-8 object-contain" />
+              <img src="/images/logo.png" alt="ManGO Parking" class="w-8 h-8 object-contain" />
             </a>
             <span class="text-white font-heading font-bold text-[15px]">${t('admin.mangoAdmin')}</span>
           </div>

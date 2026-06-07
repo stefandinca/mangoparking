@@ -87,7 +87,7 @@ export default async function Promotions(container) {
   const bodyHtml = renderPromoBody(localized?.body || '');
 
   updateMeta({
-    title: `${title} — Mango Parking`,
+    title: `${title} — ManGO Parking`,
     description: intro,
     lang: locale,
   });

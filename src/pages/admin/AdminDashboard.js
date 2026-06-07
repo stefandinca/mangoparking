@@ -196,7 +196,7 @@ function renderChartSvg(buckets) {
 
 export default async function AdminDashboard(container) {
   const locale = getLocale();
-  updateMeta({ title: 'Admin Dashboard — Mango Parking', description: 'Admin dashboard overview.' });
+  updateMeta({ title: 'Admin Dashboard — ManGO Parking', description: 'Admin dashboard overview.' });
 
   // Fetch real data. Pull 90 days of token transactions + bookings up front
   // so the chart tab switcher is instant (re-buckets in memory).

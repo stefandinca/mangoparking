@@ -5,7 +5,7 @@ import { renderLegalPage } from '../../components/core/LegalPageShell.js';
 export default function Cancellation(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('legal.cancellationTitle')} — Mango Parking`,
+    title: `${t('legal.cancellationTitle')} — ManGO Parking`,
     description: locale === 'ro'
       ? 'Politica de anulare și retur, incluzând dreptul de retragere de 14 zile.'
       : 'Cancellation and refund policy, including the 14-day right of withdrawal.',

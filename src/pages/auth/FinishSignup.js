@@ -35,7 +35,7 @@ const STORAGE_KEY = 'mango.invite.email';
 export default function FinishSignup(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('finishSignup.title')} — Mango Parking`,
+    title: `${t('finishSignup.title')} — ManGO Parking`,
     description: t('finishSignup.hint'),
     lang: locale,
   });
@@ -46,7 +46,7 @@ export default function FinishSignup(container) {
       <div class="w-full max-w-md">
         <div class="bg-white rounded-3xl p-8 md:p-10 shadow-lg border border-frost-deep">
           <div class="text-center mb-6">
-            <img src="/images/logo.png" alt="Mango Parking" class="w-16 h-16 object-contain mx-auto mb-2" />
+            <img src="/images/logo.png" alt="ManGO Parking" class="w-16 h-16 object-contain mx-auto mb-2" />
             <h1 class="font-heading text-2xl font-bold tracking-tight text-blueberry-deep">${t('finishSignup.title')}</h1>
             <p class="text-dim text-[14px] mt-1">${t('finishSignup.hint')}</p>
           </div>

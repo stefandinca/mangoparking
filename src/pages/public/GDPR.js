@@ -5,10 +5,10 @@ import { renderLegalPage } from '../../components/core/LegalPageShell.js';
 export default function GDPR(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('legal.gdprTitle')} — Mango Parking`,
+    title: `${t('legal.gdprTitle')} — ManGO Parking`,
     description: locale === 'ro'
-      ? 'Politica GDPR Mango Parking — temei legal, drepturi, măsuri de securitate.'
-      : 'Mango Parking GDPR policy — legal basis, rights, security measures.',
+      ? 'Politica GDPR ManGO Parking — temei legal, drepturi, măsuri de securitate.'
+      : 'ManGO Parking GDPR policy — legal basis, rights, security measures.',
     lang: locale,
   });
 

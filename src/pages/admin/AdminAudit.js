@@ -27,7 +27,7 @@ const ACTION_STYLES = {
 };
 
 export default async function AdminAudit(container) {
-  updateMeta({ title: 'Audit Log — Admin — Mango Parking', description: 'System audit log and activity trail.' });
+  updateMeta({ title: 'Audit Log — Admin — ManGO Parking', description: 'System audit log and activity trail.' });
 
   const auditLog = await getAuditLog(100).catch(() => []);
   const actionTypes = [...new Set(auditLog.map(l => l.action))];

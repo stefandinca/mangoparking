@@ -22,7 +22,7 @@ const ZONE_META = [
 ];
 
 export default async function AdminCapacity(container) {
-  updateMeta({ title: 'Capacity — Admin — Mango Parking', description: 'Manage parking spot capacity.' });
+  updateMeta({ title: 'Capacity — Admin — ManGO Parking', description: 'Manage parking spot capacity.' });
 
   // Fetch real spots + the data needed to label occupied/reserved tiles
   // with the occupying plate. Three sources: longterm bookings with a

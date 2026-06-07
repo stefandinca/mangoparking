@@ -5,10 +5,10 @@ import { renderLegalPage } from '../../components/core/LegalPageShell.js';
 export default function Terms(container) {
   const locale = getLocale();
   updateMeta({
-    title: `${t('legal.termsTitle')} — Mango Parking`,
+    title: `${t('legal.termsTitle')} — ManGO Parking`,
     description: locale === 'ro'
-      ? 'Termenii și condițiile de utilizare ale serviciilor Mango Parking.'
-      : 'Terms and conditions for Mango Parking services.',
+      ? 'Termenii și condițiile de utilizare ale serviciilor ManGO Parking.'
+      : 'Terms and conditions for ManGO Parking services.',
     lang: locale,
   });
 
