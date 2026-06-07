@@ -7,6 +7,11 @@
 @theme {
   --color-mango: #FDBB30;
   --color-mango-hover: #E8A820;
+  /* Legible amber for mango TEXT on light/cream/amber-tint backgrounds —
+     #FDBB30 on cream (#FFF8E8) is ~1.4:1 (illegible). This deep amber is
+     ~5:1 on white/cream while staying on-brand warm. Use text-mango-deep
+     for mango-colored text on light surfaces; keep text-mango on dark. */
+  --color-mango-deep: #A8620A;
   --color-blueberry: #1E5BD6;
   --color-blueberry-hover: #1947A8;
   --color-blueberry-deep: #0F2D66;

@@ -7,7 +7,6 @@ import { initCarousel } from '../../components/widgets/Carousel.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
 import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL } from '../../utils/constants.js';
 import { subscribeCapacity } from '../../services/capacityService.js';
-import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
 import { getLongTermRates } from '../../services/longTermService.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { getPublishedReviews } from '../../services/reviewService.js';
@@ -82,11 +81,8 @@ export default function Home(container) {
         '"Super professional. Booked at midnight, shuttle was there at 5 AM. Will use again for every trip."',
       ];
 
-  // Initial capacity values (will be updated by real-time subscription)
+  // Initial capacity value (updated by the real-time subscription).
   const MOCK_CAPACITY = 0;
-  const MOCK_NEXT_SHUTTLE = '--:--';
-  const MOCK_SHUTTLE_DEST = '...';
-  const capacityPct = 0;
 
   const page = html`<div>
     ${''/* Navbar is inserted programmatically */}
@@ -104,14 +100,14 @@ export default function Home(container) {
 
             <h1 class="font-heading text-[clamp(3rem,6vw,5.5rem)] font-bold leading-[1.02] tracking-[-0.03em] mb-6 text-blueberry-deep">
               ${t('hero.title1')}<br>
-              <span class="text-mango">${t('hero.title2')}</span>
+              <span class="text-mango-deep">${t('hero.title2')}</span>
             </h1>
 
             <p class="text-[17px] text-dim leading-relaxed max-w-md mb-10">${t('hero.subtitle')}</p>
 
             <div class="flex flex-col sm:flex-row gap-3 mb-14">
-              <a href="${localePath('/booking/long-term')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[17px] px-8 py-4 rounded-2xl transition-all duration-200 text-left sm:text-center shadow-sm hover:shadow-md">${t('funnel.longTerm.cta')}</a>
-              <a href="${localePath('/booking/credits')}" class="bg-white border-2 border-blueberry hover:bg-blueberry/5 text-blueberry font-semibold text-[17px] px-8 py-4 rounded-2xl transition-all duration-200 text-left sm:text-center shadow-sm hover:shadow-md">${t('funnel.commuter.cta')}</a>
+              <a href="${localePath('/booking/long-term')}" class="inline-flex items-center justify-start sm:justify-center gap-2.5 bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[17px] px-8 py-4 rounded-2xl transition-all duration-200 shadow-sm hover:shadow-md">${planeIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 shrink-0"')}${t('funnel.longTerm.cta')}</a>
+              <a href="${localePath('/booking/credits')}" class="inline-flex items-center justify-start sm:justify-center gap-2.5 bg-white border-2 border-blueberry hover:bg-blueberry/5 text-blueberry font-semibold text-[17px] px-8 py-4 rounded-2xl transition-all duration-200 shadow-sm hover:shadow-md">${peopleIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 shrink-0"')}${t('funnel.commuter.cta')}</a>
             </div>
 
             <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -135,9 +131,9 @@ export default function Home(container) {
               <img src="/images/logo.png" alt="" aria-hidden="true" class="absolute -bottom-6 -left-6 w-40 h-40 object-contain drop-shadow-2xl rotate-[-8deg] pointer-events-none select-none" />
 
               <div class="absolute top-4 right-0 glass rounded-2xl p-5 shadow-lg w-48">
-                <p class="text-[11px] font-mono uppercase text-dim tracking-[0.15em] mb-2">${t('hero.nextShuttle')}</p>
-                <p class="font-heading font-bold text-3xl tracking-tight font-mono" data-next-shuttle>${MOCK_NEXT_SHUTTLE}</p>
-                <p class="text-dim text-xs mt-1">→ ${MOCK_SHUTTLE_DEST}</p>
+                <div class="w-9 h-9 rounded-xl bg-mango/15 flex items-center justify-center mb-2.5">${shuttleIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-blueberry-deep"')}</div>
+                <p class="font-heading font-bold text-[17px] text-blueberry-deep leading-tight">${t('shuttle.onDemandTitle')}</p>
+                <p class="text-dim text-[12px] mt-1.5">${t('hero.shuttleFreeValue')} · ${t('hero.shuttleFree')}</p>
               </div>
 
               <div class="absolute bottom-0 right-0 glass rounded-2xl p-5 shadow-lg w-48">
@@ -157,7 +153,7 @@ export default function Home(container) {
     <section class="py-16 md:py-28">
       <div class="max-w-7xl mx-auto px-6">
         <div class="text-center mb-20">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('howItWorks.label')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('howItWorks.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('howItWorks.title')}</h2>
         </div>
         <div class="grid md:grid-cols-3 gap-6">
@@ -187,7 +183,7 @@ export default function Home(container) {
     <section class="py-28 bg-blueberry-deep rounded-[40px] mx-4 relative overflow-hidden">
       <div class="max-w-7xl mx-auto px-6 relative z-10">
         <div class="text-center mb-20">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('pricing.label')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('pricing.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-white">${t('pricing.title')}</h2>
         </div>
         <div data-carousel="parking" class="max-w-4xl mx-auto">
@@ -256,7 +252,7 @@ export default function Home(container) {
     <section class="py-28">
       <div class="max-w-7xl mx-auto px-6">
         <div class="text-center mb-20">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('amenities.label')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('amenities.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('amenities.title')}</h2>
         </div>
         <div data-carousel="amenities" class="max-w-4xl mx-auto">
@@ -282,7 +278,7 @@ export default function Home(container) {
     <section class="py-16 md:py-28">
       <div class="max-w-3xl mx-auto px-6">
         <div class="text-center mb-12">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('shuttle.label')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('shuttle.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('shuttle.homeHeading')}</h2>
         </div>
         <div class="card-solid rounded-3xl p-8 md:p-10 flex flex-col sm:flex-row items-start gap-5">
@@ -300,7 +296,7 @@ export default function Home(container) {
     <section class="py-16 md:py-28">
       <div class="max-w-7xl mx-auto px-6">
         <div class="text-center mb-20">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('reviews.label')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('reviews.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('reviews.title')}</h2>
         </div>
         <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto" data-reviews-grid>
@@ -319,7 +315,7 @@ export default function Home(container) {
     <section class="py-16 md:py-28">
       <div class="max-w-2xl mx-auto px-6">
         <div class="text-center mb-14">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('faq.label')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('faq.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('faq.title')}</h2>
         </div>
         <div class="space-y-3" data-faq-container>
@@ -339,7 +335,7 @@ export default function Home(container) {
     <!-- GALLERY -->
     <section class="py-20 overflow-hidden">
       <div class="max-w-7xl mx-auto px-6 mb-12">
-        <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3 text-center">${t('gallery.label')}</p>
+        <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3 text-center">${t('gallery.label')}</p>
         <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep text-center">${t('gallery.title')}</h2>
       </div>
       <div class="flex gap-4 px-6 max-w-7xl mx-auto">
@@ -455,33 +451,6 @@ export default function Home(container) {
     if (bar) bar.style.width = (cap.total > 0 ? Math.round((cap.occupied / cap.total) * 100) : 0) + '%';
   });
 
-  // Fetch shuttle schedule and populate widgets
-  getShuttleSchedule().then(schedule => {
-    const upcoming = getUpcomingDepartures(schedule, 4);
-
-    // Update next shuttle widget
-    const nextShuttleEl = page.querySelector('[data-next-shuttle]');
-    if (nextShuttleEl && upcoming.length > 0) {
-      nextShuttleEl.textContent = upcoming[0].departureTime;
-      const destEl = nextShuttleEl.nextElementSibling;
-      if (destEl) destEl.textContent = '→ ' + t('shuttle.' + getRouteKey(upcoming[0].route));
-    }
-
-    // Update shuttle table
-    const rowsContainer = page.querySelector('[data-shuttle-rows]');
-    if (rowsContainer) {
-      rowsContainer.innerHTML = upcoming.map((row, i) => {
-        const statusClass = i === 0 ? 'bg-mango/10 text-mango' : 'bg-frost text-dim';
-        const statusText = i === 0 ? t('shuttle.boarding') : t('shuttle.next');
-        return `
-          <div class="shuttle-row grid grid-cols-3 items-center px-4 sm:px-8 py-5">
-            <span class="text-[15px] font-medium">${t('shuttle.' + getRouteKey(row.route))}</span>
-            <span class="text-[15px] text-center font-mono font-medium">${row.departureTime}</span>
-            <span class="text-right"><span class="text-[12px] font-bold ${statusClass} px-3 py-1 rounded-full">${statusText}</span></span>
-          </div>`;
-      }).join('');
-    }
-  }).catch(() => {});
 
   // Return cleanup
   return () => {

@@ -3,30 +3,21 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getShuttleSchedule, getTrainSchedule, getPopularFlights, getRouteKey } from '../../services/shuttleService.js';
+import { getTrainSchedule, getPopularFlights } from '../../services/shuttleService.js';
+import { shuttleIcon } from '../../components/widgets/icons.js';
 
 export default async function Shuttle(container) {
   const locale = getLocale();
   updateMeta({
     title: locale === 'ro' ? 'Program Shuttle — ManGO Parking' : 'Shuttle Schedule — ManGO Parking',
     description: locale === 'ro'
-      ? 'Program naveta gratuită ManGO Parking. Curse la fiecare 15 minute către aeroport și gara de tren.'
-      : 'Free shuttle schedule from ManGO Parking. Runs every 15 minutes to airport and train station.',
+      ? 'Microbuz gratuit ManGO Parking, la cerere — te ducem la aeroport și la gară când sosești.'
+      : 'Free ManGO Parking shuttle, on demand — we take you to the airport and train station when you arrive.',
     lang: locale,
   });
 
-  const schedule = await getShuttleSchedule();
   const trains = await getTrainSchedule();
   const flights = getPopularFlights();
-
-  const statusColors = {
-    boarding: 'bg-mango/10 text-mango',
-    next: 'bg-frost text-dim',
-    scheduled: 'bg-frost text-dim',
-    departed: 'bg-charcoal/10 text-charcoal/40',
-    delayed: 'bg-danger/10 text-danger',
-    cancelled: 'bg-danger/10 text-danger line-through',
-  };
 
   const page = html`<div>
     <div data-navbar></div>
@@ -34,37 +25,21 @@ export default async function Shuttle(container) {
     <section class="pt-32 pb-20">
       <div class="max-w-4xl mx-auto px-6">
         <div class="text-center mb-16">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('shuttle.label')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('shuttle.label')}</p>
           <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-4">${t('shuttle.pageTitle')}</h1>
           <p class="text-dim text-[17px] max-w-lg mx-auto">${t('shuttle.pageSubtitle')}</p>
         </div>
 
-        <!-- Shuttle Schedule -->
+        <!-- Free shuttle (on-demand) -->
         <div class="mb-12">
-          <h2 class="font-heading text-xl font-bold mb-4">${t('shuttle.shuttleSchedule')}</h2>
-          <div class="card-solid rounded-3xl overflow-hidden">
-            <div class="grid grid-cols-3 text-[12px] font-mono uppercase tracking-[0.12em] text-dim px-4 sm:px-8 py-4 border-b border-frost-deep">
-              <span>${t('shuttle.route')}</span>
-              <span class="text-center">${t('shuttle.departs')}</span>
-              <span class="text-right">${t('shuttle.status')}</span>
-            </div>
-            <div class="divide-y divide-frost-deep/60">
-              ${schedule.map((row, i) => {
-                const routeKey = getRouteKey(row.route);
-                const status = i === 0 ? 'boarding' : (i < 4 ? 'next' : 'scheduled');
-                const color = statusColors[status] || statusColors.scheduled;
-                const statusLabel = t('shuttle.' + status);
-                return `
-                  <div class="shuttle-row grid grid-cols-3 items-center px-4 sm:px-8 py-5">
-                    <span class="text-[15px] font-medium min-w-0 truncate">${t('shuttle.' + routeKey)}</span>
-                    <span class="text-[15px] text-center font-mono font-medium">${row.departureTime}</span>
-                    <span class="text-right"><span class="text-[12px] font-bold ${color} px-3 py-1 rounded-full">${statusLabel}</span></span>
-                  </div>
-                `;
-              }).join('')}
+          <h2 class="font-heading text-xl font-bold mb-4">${t('shuttle.homeHeading')}</h2>
+          <div class="card-solid rounded-3xl p-8 md:p-10 flex flex-col sm:flex-row items-start gap-5">
+            <div class="w-12 h-12 rounded-2xl bg-mango/15 flex items-center justify-center shrink-0">${shuttleIcon.replace('class="w-5 h-5"', 'class="w-6 h-6 text-blueberry-deep"')}</div>
+            <div>
+              <p class="font-heading font-bold text-xl text-blueberry-deep mb-2">${t('shuttle.onDemandTitle')}</p>
+              <p class="text-dim text-[16px] leading-relaxed">${t('shuttle.onDemandBody')}</p>
             </div>
           </div>
-          <p class="text-center text-[13px] text-dim/40 mt-4">${t('shuttle.autoRefresh')}</p>
         </div>
 
         <!-- Train Schedule -->

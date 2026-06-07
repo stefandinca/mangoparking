@@ -29,7 +29,7 @@ export default async function Pricing(container) {
   function priceBlock(online, suffix = 'lei') {
     const original = originalFromOnline(online, discount);
     if (original == null || original === online) {
-      return `<p class="font-mono text-2xl font-bold text-mango">${online} ${suffix}</p>`;
+      return `<p class="font-mono text-2xl font-bold text-mango-deep">${online} ${suffix}</p>`;
     }
     return `
       <div>

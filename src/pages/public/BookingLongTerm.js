@@ -82,7 +82,7 @@ export default function BookingLongTerm(container) {
     <section class="pt-28 pb-16 bg-frost min-h-screen">
       <div class="max-w-4xl mx-auto px-6">
         <div class="text-center mb-10">
-          <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('funnel.longTerm.title')}</p>
+          <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('funnel.longTerm.title')}</p>
           <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${t('longTerm.pageTitle')}</h1>
           <p class="text-dim text-[17px]">${t('longTerm.pageSubtitle')}</p>
         </div>
@@ -118,7 +118,7 @@ export default function BookingLongTerm(container) {
           <div class="card-solid rounded-3xl p-6 md:col-span-2">
             <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
               <h3 class="font-heading font-bold text-lg text-blueberry-deep">${t('rates.longTermRates')}</h3>
-              <span class="hidden text-[12px] uppercase tracking-wider font-mono font-semibold text-mango bg-mango/10 px-3 py-1 rounded-full" data-seasonal-badge></span>
+              <span class="hidden text-[12px] uppercase tracking-wider font-mono font-semibold text-mango-deep bg-mango/10 px-3 py-1 rounded-full" data-seasonal-badge></span>
             </div>
             <p class="text-[12px] text-dim mb-4">${t('longTerm.tiersInfoNote')}</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" data-tiers>

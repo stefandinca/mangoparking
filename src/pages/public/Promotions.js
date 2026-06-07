@@ -107,7 +107,7 @@ export default async function Promotions(container) {
          </div>
        </div>`
     : `<div class="mb-8 text-center">
-         <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('promotions.pretitle')}</p>
+         <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('promotions.pretitle')}</p>
          <h1 class="font-heading text-4xl sm:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${escapeHtml(title)}</h1>
          ${intro ? `<p class="text-dim text-[17px] max-w-2xl mx-auto">${escapeHtml(intro)}</p>` : ''}
        </div>`;
