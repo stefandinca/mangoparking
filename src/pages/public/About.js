@@ -11,8 +11,8 @@ export default function About(container) {
   updateMeta({
     title: locale === 'ro' ? 'Despre Noi — ManGO Parking' : 'About Us — ManGO Parking',
     description: locale === 'ro'
-      ? 'Despre ManGO Parking — parcare securizată lângă Aeroportul Otopeni cu microbuz gratuit și securitate 24/7.'
-      : 'About ManGO Parking — secure parking near Otopeni Airport with free shuttle and 24/7 security.',
+      ? 'Despre ManGO Parking — parcare securizată lângă Aeroportul Otopeni cu microbuz gratuit și acces cu barieră.'
+      : 'About ManGO Parking — secure parking near Otopeni Airport with free shuttle and gated access.',
     lang: locale,
   });
 

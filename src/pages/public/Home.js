@@ -40,8 +40,8 @@ export default function Home(container) {
       ? 'ManGO Parking — Parcare Aeroport Otopeni | Credite Parcare Zilnică & Microbuz'
       : 'ManGO Parking — Otopeni Airport Parking | Daily Parking Credits & Shuttle',
     description: locale === 'ro'
-      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără credite, parchează flexibil. Microbuz gratuit, securitate 24/7.'
-      : 'Secure parking near Henri Coandă Otopeni Airport. Buy credits, park flexibly. Free shuttle, 24/7 security.',
+      ? 'Parcare securizată lângă Aeroportul Henri Coandă Otopeni. Cumpără credite, parchează flexibil. Microbuz gratuit, acces cu barieră.'
+      : 'Secure parking near Henri Coandă Otopeni Airport. Buy credits, park flexibly. Free shuttle, gated access.',
     lang: locale,
     hreflang: { ro: SITE_URL + '/', en: SITE_URL + '/en' },
   });
@@ -67,7 +67,6 @@ export default function Home(container) {
     priceRange: '29-49 RON/day',
     amenityFeature: [
       { '@type': 'LocationFeatureSpecification', name: 'Free Shuttle', value: true },
-      { '@type': 'LocationFeatureSpecification', name: '24/7 Security', value: true },
     ],
   });
 
@@ -121,7 +120,7 @@ export default function Home(container) {
               <div class="w-px h-8 bg-frost-deep hidden sm:block"></div>
               <div>
                 <p class="font-heading font-bold text-2xl tracking-tight">24/7</p>
-                <p class="text-[12px] text-dim uppercase tracking-wider mt-0.5">${t('hero.security')}</p>
+                <p class="text-[12px] text-dim uppercase tracking-wider mt-0.5">${t('hero.access')}</p>
               </div>
             </div>
           </div>
