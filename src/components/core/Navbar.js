@@ -24,7 +24,7 @@ export function Navbar() {
             <a href="${localePath('/')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.howItWorks')}</a>
             <a href="${localePath('/pricing')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.pricing')}</a>
             <a href="${localePath('/promotions')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.promotions')}</a>
-            <a href="${localePath('/shuttle')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.shuttle')}</a>
+            <a href="${localePath('/contact')}" class="hover:text-charcoal transition-colors duration-200">${t('footer.contact')}</a>
             <a href="${localePath('/about')}" class="hover:text-charcoal transition-colors duration-200">${t('nav.faq')}</a>
           </div>
           <div class="flex items-center gap-3">
@@ -54,9 +54,8 @@ export function Navbar() {
           <a href="${localePath('/')}" class="block py-3 px-2">${t('nav.howItWorks')}</a>
           <a href="${localePath('/pricing')}" class="block py-3 px-2">${t('nav.pricing')}</a>
           <a href="${localePath('/promotions')}" class="block py-3 px-2">${t('nav.promotions')}</a>
-          <a href="${localePath('/shuttle')}" class="block py-3 px-2">${t('nav.shuttle')}</a>
-          <a href="${localePath('/about')}" class="block py-3 px-2">${t('nav.faq')}</a>
           <a href="${localePath('/contact')}" class="block py-3 px-2">${t('footer.contact')}</a>
+          <a href="${localePath('/about')}" class="block py-3 px-2">${t('nav.faq')}</a>
           <hr class="border-frost-deep">
           ${user
             ? `${isAdminUser ? `<a href="${localePath('/admin')}" class="block py-3 px-2">${t('nav.admin')}</a>` : ''}
