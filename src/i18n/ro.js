@@ -928,6 +928,7 @@ export default {
   // Billing (PF / PJ — invoicing data for SmartBill)
   billing: {
     title: 'Date de facturare',
+    sameAsContact: 'Aceleași date ca la contact (completează automat numele)',
     typePF: 'Persoană fizică',
     typePJ: 'Persoană juridică',
     firstName: 'Prenume',

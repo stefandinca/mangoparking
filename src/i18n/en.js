@@ -927,6 +927,7 @@ export default {
   // Billing (PF / PJ — invoicing data for SmartBill)
   billing: {
     title: 'Billing details',
+    sameAsContact: 'Same as my contact details (auto-fills the name)',
     typePF: 'Individual',
     typePJ: 'Company',
     firstName: 'First name',

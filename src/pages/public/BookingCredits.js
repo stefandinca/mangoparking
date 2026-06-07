@@ -212,6 +212,10 @@ export default async function Booking(container) {
         `}
 
         <!-- Billing (PF/PJ) -->
+        <label class="flex items-center gap-2.5 text-[14px] text-charcoal/80 cursor-pointer px-1 mb-2" data-billing-same-wrap>
+          <input type="checkbox" name="billingSameAsContact" class="accent-blueberry w-4 h-4 shrink-0">
+          <span>${t('billing.sameAsContact')}</span>
+        </label>
         ${billingFieldsHtml(profile?.billing)}
 
         <!-- Payment method -->
@@ -469,6 +473,43 @@ export default async function Booking(container) {
 
     // Wire PF/PJ toggle for the billing block (idempotent — safe across re-renders).
     wireBillingToggle(form);
+
+    // "Billing = same as contact" — copy the contact name into the PF billing
+    // name fields and lock them; PF only (hidden for PJ / company invoicing).
+    (function wireBillingSameAsContact() {
+      const chk = form.querySelector('[name="billingSameAsContact"]');
+      const wrap = form.querySelector('[data-billing-same-wrap]');
+      if (!chk) return;
+      const billingFirst = () => form.querySelector('[name="billingFirstName"]');
+      const billingLast = () => form.querySelector('[name="billingLastName"]');
+      const isPF = () => (form.querySelector('input[name="billingType"]:checked')?.value || 'PF') !== 'PJ';
+      function syncFromContact() {
+        if (!chk.checked) return;
+        const parts = String(form.querySelector('[name="name"]')?.value || '').trim().split(/\s+/).filter(Boolean);
+        const fn = billingFirst();
+        const ln = billingLast();
+        if (fn) fn.value = parts[0] || '';
+        if (ln) ln.value = parts.length > 1 ? parts.slice(1).join(' ') : '';
+      }
+      function applyLock() {
+        const on = chk.checked;
+        [billingFirst(), billingLast()].forEach((el) => {
+          if (!el) return;
+          el.disabled = on;
+          el.classList.toggle('bg-frost', on);
+          el.classList.toggle('text-dim', on);
+        });
+        if (on) syncFromContact();
+      }
+      chk.addEventListener('change', applyLock);
+      form.querySelector('[name="name"]')?.addEventListener('input', syncFromContact);
+      form.querySelector('[data-billing-type-toggle]')?.addEventListener('change', () => {
+        if (wrap) wrap.classList.toggle('hidden', !isPF());
+        if (!isPF()) { chk.checked = false; applyLock(); }
+        else applyLock();
+      });
+      if (wrap) wrap.classList.toggle('hidden', !isPF());
+    })();
 
     // Payment-method toggle — repaints active card, swaps submit copy
     // (no Netopia branding when paying at pickup), and re-renders the summary.

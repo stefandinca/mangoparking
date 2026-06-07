@@ -146,12 +146,38 @@ export default function BookingLongTerm(container) {
             <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
             <input type="text" name="licensePlate" required placeholder="B 123 ABC" value="${profile?.vehicles?.[0]?.plate || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
             <div class="flex justify-end mt-5">
+              <button type="button" data-next-step="contact" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+            </div>
+          </div>
+
+          <!-- Contact (comes before billing so "same as contact" can prefill it) -->
+          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-step="contact">
+            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.contactInfo')}</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.name')} *</label>
+                <input type="text" name="name" required value="${profile?.displayName || user?.displayName || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+              </div>
+              <div>
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.email')} *</label>
+                <input type="email" name="email" required value="${profile?.email || user?.email || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+              </div>
+              <div>
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')}</label>
+                <input type="tel" name="phone" value="${profile?.phone || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+              </div>
+            </div>
+            <div class="flex justify-end mt-5">
               <button type="button" data-next-step="billing" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
             </div>
           </div>
 
           <!-- Billing (PF/PJ) -->
-          <div class="md:col-span-2" data-step="billing">
+          <div class="md:col-span-2 space-y-3" data-step="billing">
+            <label class="flex items-center gap-2.5 text-[14px] text-charcoal/80 cursor-pointer px-1" data-billing-same-wrap>
+              <input type="checkbox" name="billingSameAsContact" class="accent-blueberry w-4 h-4 shrink-0">
+              <span>${t('billing.sameAsContact')}</span>
+            </label>
             ${billingFieldsHtml(profile?.billing)}
             <div class="flex justify-end mt-5">
               <button type="button" data-next-step="paymethod" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
@@ -176,28 +202,6 @@ export default function BookingLongTerm(container) {
                   <p class="text-[13px] text-dim mt-0.5">${t('payment.method.pickupHint')}</p>
                 </div>
               </label>
-            </div>
-            <div class="flex justify-end mt-5">
-              <button type="button" data-next-step="contact" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
-            </div>
-          </div>
-
-          <!-- Contact -->
-          <div class="card-solid rounded-3xl p-6" data-step="contact">
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.contactInfo')}</h3>
-            <div class="space-y-3">
-              <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.name')} *</label>
-                <input type="text" name="name" required value="${profile?.displayName || user?.displayName || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-              </div>
-              <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.email')} *</label>
-                <input type="email" name="email" required value="${profile?.email || user?.email || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-              </div>
-              <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')}</label>
-                <input type="tel" name="phone" value="${profile?.phone || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-              </div>
             </div>
             <div class="flex justify-end mt-5">
               <button type="button" data-next-step="terms" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
@@ -453,6 +457,49 @@ export default function BookingLongTerm(container) {
 
   // Wire the PF/PJ toggle.
   wireBillingToggle(form);
+
+  // "Billing = same as contact" — copies the contact name into the PF
+  // billing name fields (first token → first name, the rest → last name)
+  // and locks them, so the customer doesn't re-type their name. Only
+  // relevant for PF (a company has its own name), so it's hidden for PJ.
+  (function wireBillingSameAsContact() {
+    const chk = form.querySelector('[name="billingSameAsContact"]');
+    const wrap = form.querySelector('[data-billing-same-wrap]');
+    if (!chk) return;
+    const billingFirst = () => form.querySelector('[name="billingFirstName"]');
+    const billingLast = () => form.querySelector('[name="billingLastName"]');
+    const isPF = () => (form.querySelector('input[name="billingType"]:checked')?.value || 'PF') !== 'PJ';
+
+    function syncFromContact() {
+      if (!chk.checked) return;
+      const parts = String(form.name?.value || '').trim().split(/\s+/).filter(Boolean);
+      const fn = billingFirst();
+      const ln = billingLast();
+      if (fn) fn.value = parts[0] || '';
+      if (ln) ln.value = parts.length > 1 ? parts.slice(1).join(' ') : '';
+    }
+    function applyLock() {
+      const on = chk.checked;
+      [billingFirst(), billingLast()].forEach((el) => {
+        if (!el) return;
+        el.disabled = on;
+        el.classList.toggle('bg-frost', on);
+        el.classList.toggle('text-dim', on);
+      });
+      if (on) syncFromContact();
+    }
+    chk.addEventListener('change', applyLock);
+    form.name?.addEventListener('input', syncFromContact);
+    // Re-apply after a PF/PJ switch (the PF fields are re-shown) and hide the
+    // option entirely for PJ.
+    form.querySelector('[data-billing-type-toggle]')?.addEventListener('change', () => {
+      if (wrap) wrap.classList.toggle('hidden', !isPF());
+      if (!isPF()) { chk.checked = false; applyLock(); }
+      else applyLock();
+    });
+    // Initial visibility — hidden when the profile defaults to PJ.
+    if (wrap) wrap.classList.toggle('hidden', !isPF());
+  })();
 
   // Branded date/time pickers (flatpickr, 24h, click-anywhere opens).
   wireDateTime(form);
