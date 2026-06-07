@@ -35,7 +35,7 @@ export default async function Pricing(container) {
       <div>
         <p class="font-mono text-[15px] text-dim line-through">${original} ${suffix}</p>
         <p class="font-mono text-2xl font-bold text-mango">${online} ${suffix}</p>
-        <p class="text-[11px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</p>
+        <p class="text-[12px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</p>
       </div>
     `;
   }
@@ -71,11 +71,10 @@ export default async function Pricing(container) {
             const showAnchor = original != null && original !== tier.perDay;
             return `
             <div class="card-solid rounded-2xl p-6 text-center">
-              <p class="text-[12px] font-mono uppercase text-dim tracking-wider mb-2">${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}</p>
-              ${showAnchor ? `<p class="font-mono text-[14px] text-dim line-through">${original}</p>` : ''}
-              <p class="font-heading font-bold text-4xl text-blueberry-deep">${tier.perDay}</p>
-              <p class="text-dim text-[13px] mt-1">${t('longTerm.perDay')}</p>
-              ${showAnchor ? `<p class="text-[11px] font-bold uppercase tracking-wider text-leaf mt-1">${t('discount.online', { percent: discount })}</p>` : ''}
+              <p class="text-[13px] font-mono uppercase text-dim tracking-wider mb-2">${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}</p>
+              ${showAnchor ? `<p class="font-mono text-[15px] text-dim line-through">${original}</p>` : ''}
+              <p class="font-heading font-bold text-4xl text-blueberry-deep">${tier.perDay} <span class="text-[15px] font-normal text-dim">${t('longTerm.perDay')}</span></p>
+              ${showAnchor ? `<p class="text-[12px] font-bold uppercase tracking-wider text-leaf mt-1.5">${t('discount.online', { percent: discount })}</p>` : ''}
               ${i === 0 ? `<a href="${localePath('/booking/long-term')}" class="inline-block w-full mt-5 bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] py-2.5 rounded-xl transition-colors">${t('funnel.longTerm.cta')} →</a>` : ''}
             </div>
           `;}).join('')}

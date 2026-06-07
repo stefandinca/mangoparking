@@ -1050,7 +1050,7 @@ export default {
 
   // Online payment discount
   discount: {
-    online: '-{percent}% online',
+    online: 'include −{percent}% online',
     settingsTitle: 'Discount plată online',
     settingsHint: 'Procent aplicat tuturor prețurilor (0 = fără discount). Recomandat: 10%.',
     settingsLabel: 'Procent discount (%)',
@@ -1151,6 +1151,8 @@ export default {
     invalidDates: 'Alege o perioadă validă (data plecare după data sosire).',
     minDuration: 'Rezervarea minimă este de 1 oră.',
     tierNote: 'Tarif automat, cu discount pentru șederi mai lungi.',
+    tiersInfoNote: 'Informativ — tariful se aplică automat în funcție de durata aleasă.',
+    yourRate: 'Tariful tău',
     graceNote: 'O zi de parcare = 24 ore de la sosire. Primele 2 ore peste perioada rezervată sunt gratuite — după, se adaugă o zi suplimentară.',
     durationHours: '{hours} ore parcare',
     viewBooking: 'Vezi detalii',
@@ -1185,7 +1187,7 @@ export default {
     method: {
       title: 'Metodă de plată',
       online: 'Plătesc online acum',
-      onlineHint: 'Reducere automată pe loc.',
+      onlineHint: 'Prețul afișat include deja reducerea online.',
       pickup: 'Plătesc la sosire (cash sau card)',
       pickupHint: 'Plata se face direct la parcare. Tarif fără reducere.',
     },

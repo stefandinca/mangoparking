@@ -1049,7 +1049,7 @@ export default {
 
   // Online payment discount
   discount: {
-    online: '-{percent}% online',
+    online: 'includes −{percent}% online',
     settingsTitle: 'Online-payment discount',
     settingsHint: 'Applied to all displayed prices (0 = no discount). Recommended: 10%.',
     settingsLabel: 'Discount percent (%)',
@@ -1150,6 +1150,8 @@ export default {
     invalidDates: 'Pick a valid range (pick-up after drop-off).',
     minDuration: 'Minimum booking is 1 hour.',
     tierNote: 'Auto-tiered pricing — cheaper per day the longer you stay.',
+    tiersInfoNote: 'For reference — the rate applies automatically based on your dates.',
+    yourRate: 'Your rate',
     graceNote: 'One parking day = 24 hours from drop-off. The first 2 hours past your booked end-time are free — after that, an extra day is added.',
     durationHours: '{hours}h parking',
     viewBooking: 'View details',
@@ -1184,7 +1186,7 @@ export default {
     method: {
       title: 'Payment method',
       online: 'Pay online now',
-      onlineHint: 'Discount applied automatically.',
+      onlineHint: 'The price shown already includes the online discount.',
       pickup: 'Pay on arrival (cash or card)',
       pickupHint: 'Paid at the lot. Full price, no discount.',
     },

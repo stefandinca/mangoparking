@@ -116,10 +116,11 @@ export default function BookingLongTerm(container) {
 
           <!-- Price tiers -->
           <div class="card-solid rounded-3xl p-6 md:col-span-2">
-            <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+            <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
               <h3 class="font-heading font-bold text-lg text-blueberry-deep">${t('rates.longTermRates')}</h3>
               <span class="hidden text-[12px] uppercase tracking-wider font-mono font-semibold text-mango bg-mango/10 px-3 py-1 rounded-full" data-seasonal-badge></span>
             </div>
+            <p class="text-[12px] text-dim mb-4">${t('longTerm.tiersInfoNote')}</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" data-tiers>
               <!-- populated after getLongTermRates() resolves -->
             </div>
@@ -281,7 +282,8 @@ export default function BookingLongTerm(container) {
         ? `${tier.minDays}–${tier.maxDays} ${label}`
         : `${tier.minDays}+ ${label}`;
       return `
-        <div data-tier-min="${tier.minDays}" class="rounded-2xl border-2 border-frost-deep bg-white px-4 py-3 transition-colors">
+        <div data-tier-min="${tier.minDays}" class="relative rounded-xl border border-frost-deep bg-frost/40 px-4 py-3 cursor-default">
+          <span data-tier-tag class="hidden absolute -top-2 left-3 text-[9px] font-bold uppercase tracking-wider bg-mango text-charcoal px-2 py-0.5 rounded-full">${t('longTerm.yourRate')}</span>
           <p class="text-[12px] font-mono uppercase text-dim tracking-wider">${rangeLabel}</p>
           <p class="font-heading font-bold text-2xl text-blueberry-deep mt-1">${tier.perDay} <span class="text-[12px] font-normal text-dim">${t('longTerm.perDay')}</span></p>
         </div>`;
@@ -300,12 +302,17 @@ export default function BookingLongTerm(container) {
 
   function highlightActiveTier() {
     if (!quote.tier) return;
+    // Informational only — mark the tier that applies to the chosen dates
+    // with a soft ring + a "your rate" tag, NOT a filled/selected look (a
+    // mango fill read as a clickable selection users couldn't deselect).
     tiersEl.querySelectorAll('[data-tier-min]').forEach(el => {
       const isActive = Number(el.dataset.tierMin) === quote.tier.minDays;
-      el.classList.toggle('border-mango', isActive);
-      el.classList.toggle('bg-mango/10', isActive);
-      el.classList.toggle('border-frost-deep', !isActive);
-      el.classList.toggle('bg-white', !isActive);
+      el.classList.toggle('ring-2', isActive);
+      el.classList.toggle('ring-mango/50', isActive);
+      el.classList.toggle('bg-mango/5', isActive);
+      el.classList.toggle('bg-frost/40', !isActive);
+      const tag = el.querySelector('[data-tier-tag]');
+      if (tag) tag.classList.toggle('hidden', !isActive);
     });
   }
 
