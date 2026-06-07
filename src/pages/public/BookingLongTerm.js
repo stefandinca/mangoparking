@@ -114,14 +114,15 @@ export default function BookingLongTerm(container) {
             </div>
           </div>
 
-          <!-- Price tiers -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2">
-            <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
-              <h3 class="font-heading font-bold text-lg text-blueberry-deep">${t('rates.longTermRates')}</h3>
-              <span class="hidden text-[12px] uppercase tracking-wider font-mono font-semibold text-mango-deep bg-mango/10 px-3 py-1 rounded-full" data-seasonal-badge></span>
+          <!-- Price tiers — informational only (intentionally flat, not a
+               card, so nobody mistakes it for a selectable option). -->
+          <div class="md:col-span-2 px-1 -mt-2">
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-1.5">
+              <span class="text-[12px] font-mono uppercase tracking-wider text-dim">${t('rates.longTermRates')}</span>
+              <span class="text-[11px] text-dim/70">· ${t('longTerm.tiersInfoNote')}</span>
+              <span class="hidden text-[11px] uppercase tracking-wider font-mono font-semibold text-mango-deep" data-seasonal-badge></span>
             </div>
-            <p class="text-[12px] text-dim mb-4">${t('longTerm.tiersInfoNote')}</p>
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" data-tiers>
+            <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]" data-tiers>
               <!-- populated after getLongTermRates() resolves -->
             </div>
           </div>
@@ -289,12 +290,13 @@ export default function BookingLongTerm(container) {
       const rangeLabel = tier.maxDays
         ? `${tier.minDays}–${tier.maxDays} ${label}`
         : `${tier.minDays}+ ${label}`;
+      // Plain inline text — no box, no border, no fill, no cursor change, so
+      // it reads as a reference list rather than a set of selectable cards.
       return `
-        <div data-tier-min="${tier.minDays}" class="relative rounded-xl border border-frost-deep bg-frost/40 px-4 py-3 cursor-default">
-          <span data-tier-tag class="hidden absolute -top-2 left-3 text-[9px] font-bold uppercase tracking-wider bg-mango text-charcoal px-2 py-0.5 rounded-full">${t('longTerm.yourRate')}</span>
-          <p class="text-[12px] font-mono uppercase text-dim tracking-wider">${rangeLabel}</p>
-          <p class="font-heading font-bold text-2xl text-blueberry-deep mt-1">${tier.perDay} <span class="text-[12px] font-normal text-dim">${t('longTerm.perDay')}</span></p>
-        </div>`;
+        <span data-tier-min="${tier.minDays}" class="whitespace-nowrap text-dim">
+          <span class="text-charcoal/50">${rangeLabel}:</span>
+          <span class="font-mono font-semibold" data-tier-rate>${tier.perDay} ${t('longTerm.perDay')}</span><span data-tier-tag class="hidden text-blueberry font-medium"> · ${t('longTerm.yourRate')}</span>
+        </span>`;
     }).join('');
 
     // Seasonal banner — only when a period is in effect for the drop-off.
@@ -310,15 +312,16 @@ export default function BookingLongTerm(container) {
 
   function highlightActiveTier() {
     if (!quote.tier) return;
-    // Informational only — mark the tier that applies to the chosen dates
-    // with a soft ring + a "your rate" tag, NOT a filled/selected look (a
-    // mango fill read as a clickable selection users couldn't deselect).
+    // Informational only — the applicable tier is just bolded blue with a
+    // quiet "your rate" note. No box/ring/fill that could read as a
+    // selected, clickable option.
     tiersEl.querySelectorAll('[data-tier-min]').forEach(el => {
       const isActive = Number(el.dataset.tierMin) === quote.tier.minDays;
-      el.classList.toggle('ring-2', isActive);
-      el.classList.toggle('ring-mango/50', isActive);
-      el.classList.toggle('bg-mango/5', isActive);
-      el.classList.toggle('bg-frost/40', !isActive);
+      const rate = el.querySelector('[data-tier-rate]');
+      if (rate) {
+        rate.classList.toggle('text-blueberry-deep', isActive);
+        rate.classList.toggle('text-charcoal/70', !isActive);
+      }
       const tag = el.querySelector('[data-tier-tag]');
       if (tag) tag.classList.toggle('hidden', !isActive);
     });
