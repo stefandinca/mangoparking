@@ -11,17 +11,19 @@
 //   type:       'traveler' | 'commuter'   (used for the small label under the name)
 
 import {
-  getCollection, addDocument, updateDocument, removeDocument,
-  where, orderBy, limit,
+  getCollection, addDocument, updateDocument, removeDocument, orderBy,
 } from '../firebase/db.js';
 import { auditLog } from './auditService.js';
 
 export async function getPublishedReviews(max = 6) {
-  return getCollection('reviews',
-    where('published', '==', true),
-    orderBy('sortOrder', 'asc'),
-    limit(max),
-  );
+  // Order by sortOrder only (single-field, auto-indexed) and filter
+  // `published` client-side. Combining where('published') + orderBy
+  // ('sortOrder') would need a composite index that wasn't deployed —
+  // without it the query throws and the homepage silently shows fallback
+  // reviews. The reviews collection is admin-curated and tiny, so fetching
+  // all + filtering is cheap and avoids the index dependency entirely.
+  const all = await getCollection('reviews', orderBy('sortOrder', 'asc')).catch(() => []);
+  return all.filter((r) => r.published !== false).slice(0, max);
 }
 
 export async function getAllReviews() {
