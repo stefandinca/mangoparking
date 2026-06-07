@@ -141,8 +141,8 @@ function renderSuccess(order) {
     <div class="flex flex-col sm:flex-row gap-3 justify-center">
       <a href="${localePath('/')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
       ${isLongTerm
-        ? `<a href="${localePath('/account/bookings')}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.viewBookings')}</a>`
-        : `<a href="${localePath('/account')}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.viewBalance')}</a>`}
+        ? `<a href="${localePath('/account/bookings')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.viewBookings')}</a>`
+        : `<a href="${localePath('/account')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.viewBalance')}</a>`}
     </div>
     ${isGuest ? renderSignupCTA(order) : ''}
   `;
@@ -222,7 +222,7 @@ function renderFailure(order) {
     <h1 class="font-heading text-2xl md:text-3xl font-bold text-blueberry-deep mb-2">${t('return.titleFailure')}</h1>
     <p class="text-dim text-[15px] mb-6">${t('return.subtitleFailure')}</p>
     <div class="flex flex-col sm:flex-row gap-3 justify-center">
-      <a href="${retryHref}" class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.tryAgain')}</a>
+      <a href="${retryHref}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.tryAgain')}</a>
       <a href="${localePath('/contact')}" class="font-semibold text-[15px] px-6 py-3 rounded-xl border-2 border-frost-deep hover:bg-white transition-colors">${t('return.contactUs')}</a>
     </div>
   `;
@@ -238,7 +238,7 @@ function renderSlow(orderId) {
     <h1 class="font-heading text-2xl md:text-3xl font-bold text-blueberry-deep mb-2">${t('return.titleSlow')}</h1>
     <p class="text-dim text-[15px] mb-2">${t('return.subtitleSlow')}</p>
     <p class="text-dim text-[12px] font-mono mb-6">${orderId}</p>
-    <a href="${localePath('/contact')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.contactUs')}</a>
+    <a href="${localePath('/contact')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.contactUs')}</a>
   `;
 }
 

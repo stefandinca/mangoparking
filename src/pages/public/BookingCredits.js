@@ -248,7 +248,7 @@ export default async function Booking(container) {
           <span>${t('legal.acceptTerms')}</span>
         </label>
 
-        <button type="submit" data-pay-btn class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
+        <button type="submit" data-pay-btn class="w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
           ${processing
             ? t('credit.processing')
             : (paymentMethod === 'pay-at-pickup' ? t('credit.payNowPickup') : t('credit.payNow'))}

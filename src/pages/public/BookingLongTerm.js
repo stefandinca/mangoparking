@@ -227,7 +227,7 @@ export default function BookingLongTerm(container) {
               <input type="checkbox" name="acceptTerms" required class="accent-mango w-4 h-4 mt-1 shrink-0">
               <span>${t('legal.acceptTerms')}</span>
             </label>
-            <button type="submit" data-pay-btn class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
+            <button type="submit" data-pay-btn class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
           </div>
         </form>
 

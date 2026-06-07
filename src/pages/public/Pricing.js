@@ -120,7 +120,7 @@ export default async function Pricing(container) {
 
         <!-- CTA -->
         <div class="text-center">
-          <a href="${localePath('/booking/credits')}" class="inline-block bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[16px] px-8 py-4 rounded-2xl transition-colors shadow-md">${t('credit.buyTokens')}</a>
+          <a href="${localePath('/booking/credits')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-8 py-4 rounded-2xl transition-colors shadow-md">${t('credit.buyTokens')}</a>
         </div>
       </div>
     </section>
