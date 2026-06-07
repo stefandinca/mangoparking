@@ -36,6 +36,15 @@ body {
   overflow-x: hidden;
 }
 
+/* Hide the scrollbar on scroll-snap carousels (track stays swipeable). */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ===== Solid containers (glassmorphism removed per brand update) ===== */
 .glass {
   background: #FFFFFF;

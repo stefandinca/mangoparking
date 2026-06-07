@@ -3,6 +3,7 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { checkIcon, starIcon, planeIcon, peopleIcon, shuttleIcon } from '../../components/widgets/icons.js';
+import { initCarousel } from '../../components/widgets/Carousel.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
 import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL } from '../../utils/constants.js';
 import { subscribeCapacity } from '../../services/capacityService.js';
@@ -189,9 +190,10 @@ export default function Home(container) {
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('pricing.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-white">${t('pricing.title')}</h2>
         </div>
-        <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        <div data-carousel="parking" class="max-w-4xl mx-auto">
+          <div data-carousel-track class="flex md:grid md:grid-cols-2 gap-6 overflow-x-auto md:overflow-visible snap-x snap-mandatory no-scrollbar pb-2 md:pb-0">
           <!-- Long-term (left) -->
-          <div class="bg-blueberry rounded-3xl p-8 flex flex-col">
+          <div class="snap-center shrink-0 w-[88%] md:w-auto bg-blueberry rounded-3xl p-8 flex flex-col">
             <div class="flex items-center gap-3 mb-6">
               <div class="w-10 h-10 rounded-xl bg-blueberry-deep flex items-center justify-center">
                 ${planeIcon.replace('class="w-5 h-5"', 'class="w-5 h-5 text-white"')}
@@ -217,7 +219,7 @@ export default function Home(container) {
           </div>
 
           <!-- Commuter / Credits (right) -->
-          <div class="bg-blueberry border-2 border-mango rounded-3xl p-8 flex flex-col relative">
+          <div class="snap-center shrink-0 w-[88%] md:w-auto bg-blueberry border-2 border-mango rounded-3xl p-8 flex flex-col relative">
             <div class="absolute -top-3 right-8 bg-mango text-charcoal text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-md">${t('pricing.onlyAtMango')}</div>
             <div class="flex items-center gap-3 mb-3">
               <div class="w-10 h-10 rounded-xl bg-mango flex items-center justify-center">
@@ -243,6 +245,8 @@ export default function Home(container) {
             </ul>
             <a href="${localePath('/booking/credits')}" class="block text-center bg-white hover:bg-frost text-blueberry-deep font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md">${t('funnel.commuter.cta')}</a>
           </div>
+          </div>
+          <div data-carousel-dots class="flex justify-center gap-2 mt-6 md:hidden"></div>
         </div>
         <p class="text-center mt-8"><a href="${localePath('/pricing')}" class="text-white/25 hover:text-white/50 text-[14px] transition-colors">${t('pricing.viewAll')}</a></p>
       </div>
@@ -255,18 +259,21 @@ export default function Home(container) {
           <p class="text-[12px] font-mono uppercase text-mango tracking-[0.2em] mb-3">${t('amenities.label')}</p>
           <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep">${t('amenities.title')}</h2>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-5 max-w-4xl mx-auto">
+        <div data-carousel="amenities" class="max-w-4xl mx-auto">
+          <div data-carousel-track class="flex gap-5 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-2">
           ${[
             { icon: 'shuttle', label: t('amenities.shuttle'), sub: t('amenities.shuttleSub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0H21M3.375 14.25h.008M3.375 14.25c-.621 0-1.125.504-1.125 1.125v2.25c0 .621.504 1.125 1.125 1.125m0-4.5V6.375c0-.621.504-1.125 1.125-1.125h8.25c.621 0 1.125.504 1.125 1.125v8.25"/></svg>` },
             { icon: 'shield', label: t('amenities.security'), sub: t('amenities.securitySub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>` },
             { icon: 'luggage', label: t('amenities.luggage'), sub: t('amenities.luggageSub'), svg: `<svg class="w-5 h-5 text-charcoal" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38"/></svg>` },
           ].map(a => `
-            <div class="card-solid rounded-2xl p-6 text-center">
+            <div class="snap-center shrink-0 w-[70%] sm:w-[45%] lg:w-[31%] card-solid rounded-2xl p-6 text-center">
               <div class="w-12 h-12 rounded-2xl bg-frost flex items-center justify-center mx-auto mb-4">${a.svg}</div>
               <p class="font-heading font-semibold text-[16px]">${a.label}</p>
               <p class="text-dim text-[14px] mt-1">${a.sub}</p>
             </div>
           `).join('')}
+          </div>
+          <div data-carousel-dots class="flex justify-center gap-2 mt-6"></div>
         </div>
       </div>
     </section>
@@ -393,6 +400,10 @@ export default function Home(container) {
 
   container.appendChild(page);
 
+  // Carousels (amenities + parking cards) — swipeable on small screens, a
+  // plain row on desktop (dots auto-hide when the track doesn't overflow).
+  const carouselCleanups = Array.from(page.querySelectorAll('[data-carousel]')).map(initCarousel);
+
   // "Starting from" price badges in the pricing preview section
   Promise.all([getLongTermRates(), getTokenPacks()]).then(([rates, packs]) => {
     const longFrom = rates?.tiers?.length ? Math.min(...rates.tiers.map(t => t.perDay)) : null;
@@ -473,5 +484,8 @@ export default function Home(container) {
   }).catch(() => {});
 
   // Return cleanup
-  return () => { unsubCapacity(); };
+  return () => {
+    unsubCapacity();
+    carouselCleanups.forEach((fn) => fn && fn());
+  };
 }
