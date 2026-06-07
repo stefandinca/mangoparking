@@ -1065,7 +1065,7 @@ export default {
 
   // Online payment discount
   discount: {
-    online: 'include −{percent}% online',
+    online: 'include {percent}% reducere pentru plata online',
     settingsTitle: 'Discount plată online',
     settingsHint: 'Procent aplicat tuturor prețurilor (0 = fără discount). Recomandat: 10%.',
     settingsLabel: 'Procent discount (%)',
