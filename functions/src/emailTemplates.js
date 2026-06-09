@@ -37,6 +37,11 @@ const TEMPLATES = {
   'low-credit-warning-ro':          13,
   'low-credit-warning-en':          14,
 
+  // Vouchers — paste email-templates/voucher-assigned-*.html into Brevo, then
+  // drop the numeric IDs here. Until set, the send skips gracefully.
+  'voucher-assigned-ro':            null,
+  'voucher-assigned-en':            null,
+
   // Reminders (scheduled)
   'reminder-checkin-24h-ro':        15,
   'reminder-checkin-24h-en':        16,

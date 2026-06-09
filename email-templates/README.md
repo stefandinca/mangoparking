@@ -1,7 +1,7 @@
 # Email templates — Mango Parking
 
-Source-of-truth HTML for the 10 transactional emails the app sends. Each
-template has a Romanian and an English variant (20 files total). The
+Source-of-truth HTML for the 11 transactional emails the app sends. Each
+template has a Romanian and an English variant (22 files total). The
 recipient's locale is read from `users/{uid}.locale` server-side; the
 Cloud Function picks the right template ID.
 
@@ -20,7 +20,7 @@ live versions live in your Brevo dashboard. To set them up:
    `params` JSON, e.g. `{ "firstName": "Ana", "code": "LT-ABC23" }`.
 6. Record the numeric ID in `functions/src/emailTemplates.js` against
    the template name.
-7. Repeat for all 20 files.
+7. Repeat for all 22 files.
 
 Total time once you're logged into Brevo: ~30 minutes.
 
@@ -43,7 +43,7 @@ changes or rebuilding from scratch.
 - `{% if params.discountPct > 0 %}...{% else %}...{% endif %}`
 - `{% for v in params.items %}...{% endfor %}` — loops
 
-## The 10 emails
+## The 11 emails
 
 | ID | Trigger | Recipient | Params |
 |---|---|---|---|
@@ -57,6 +57,7 @@ changes or rebuilding from scratch.
 | `reminder-checkin-24h` | scheduled, daily 10:00 | upcoming booking contact | firstName, code, plate, dropoffAt |
 | `reminder-checkout-24h` | scheduled, daily 10:00 | active booking contact | firstName, code, plate, pickupAt |
 | `reminder-commuter-7pm` | scheduled, daily 19:00 | active commuter | firstName, plate, cutoffTime |
+| `voucher-assigned` | `promoVouchers/{code}` onWrite, visibility=private | each newly-assigned user | firstName, voucherName, code, valueText, validFrom, validTo, description, vouchersLink |
 
 ## Design system
 

@@ -13,7 +13,7 @@
 //                                  E4: credit used (type=use)
 //                                  E5: low-credit warning (when applicable)
 
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
 
@@ -544,5 +544,98 @@ export const onContactMessageCreated = onDocumentCreated(
       replyTo,
       tags: ['contact-form'],
     });
+  }
+);
+
+// ── Private voucher assigned → notify the recipient ──────────────────────
+// A "private" promoVoucher carries an `assignedUserIds[]` of the users it was
+// handed to. When an admin creates/edits one (or flips a public voucher to
+// private), each newly-assigned user gets a branded email with the code.
+// Public vouchers don't email (nobody is individually assigned).
+
+function fmtDateOnly(iso, locale) {
+  if (!iso) return '';
+  const d = new Date(String(iso).length <= 10 ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  try {
+    return d.toLocaleDateString(locale === 'en' ? 'en-GB' : 'ro-RO', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+  } catch { return String(iso); }
+}
+
+function voucherValueText(type, value, locale) {
+  const v = Number(value) || 0;
+  if (type === 'percent') return `${v}%`;
+  if (type === 'days') {
+    return locale === 'en'
+      ? `${v} ${v === 1 ? 'day' : 'days'}`
+      : `${v} ${v === 1 ? 'zi' : 'zile'}`;
+  }
+  return `${v} lei`; // fixed
+}
+
+export const onPromoVoucherAssigned = onDocumentWritten(
+  { document: 'promoVouchers/{code}', region: 'europe-west1', secrets: [BREVO_API_KEY] },
+  async (event) => {
+    const after = event.data?.after?.data();
+    if (!after) return;                          // deleted
+    if (after.visibility !== 'private') return;  // only private vouchers email
+    const assigned = Array.isArray(after.assignedUserIds) ? after.assignedUserIds.filter(Boolean) : [];
+    if (!assigned.length) return;
+
+    const db = getFirestore();
+    const ref = db.collection('promoVouchers').doc(event.params.code);
+
+    // Claim the not-yet-notified assignees atomically (tracked in
+    // voucherEmailSentTo) so a double-firing trigger or a later edit emails
+    // each recipient exactly once.
+    const fresh = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return [];
+      const d = snap.data();
+      if (d.visibility !== 'private') return [];
+      const ids = Array.isArray(d.assignedUserIds) ? d.assignedUserIds.filter(Boolean) : [];
+      const notified = Array.isArray(d.voucherEmailSentTo) ? d.voucherEmailSentTo : [];
+      const toNotify = ids.filter((uid) => !notified.includes(uid));
+      if (!toNotify.length) return [];
+      tx.update(ref, { voucherEmailSentTo: FieldValue.arrayUnion(...toNotify) });
+      return toNotify;
+    }).catch((err) => {
+      console.warn('onPromoVoucherAssigned: claim failed', err?.message);
+      return [];
+    });
+    if (!fresh.length) return;
+
+    for (const uid of fresh) {
+      let userSnap;
+      try {
+        userSnap = await db.collection('users').doc(uid).get();
+      } catch (err) {
+        console.warn('onPromoVoucherAssigned: user lookup failed', uid, err?.message);
+        continue;
+      }
+      if (!userSnap.exists) continue;
+      const u = userSnap.data();
+      if (!u.email) continue;
+      const locale = u.locale === 'en' ? 'en' : 'ro';
+      console.log(`onPromoVoucherAssigned: emailing ${u.email} voucher=${event.params.code}`);
+      await sendBrevoEmail({
+        to: u.email,
+        name: u.displayName || '',
+        templateName: 'voucher-assigned',
+        locale,
+        params: {
+          firstName: firstNameFrom(u.displayName, u.email),
+          voucherName: after.name || event.params.code,
+          code: event.params.code,
+          valueText: voucherValueText(after.type, after.value, locale),
+          validFrom: fmtDateOnly(after.startDate, locale),
+          validTo: fmtDateOnly(after.endDate, locale),
+          description: after.description || '',
+          vouchersLink: localePathOf('/account/vouchers', locale),
+        },
+      });
+    }
   }
 );

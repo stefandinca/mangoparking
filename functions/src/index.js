@@ -42,7 +42,7 @@ import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
-export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated } from './emails.js';
+export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated, onPromoVoucherAssigned } from './emails.js';
 
 // Internal ops alerts to rezervari@ — customer activity (signup, reservation,
 // cancellation, credit purchase). Inline-HTML sends, no Brevo template.

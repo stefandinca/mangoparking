@@ -207,7 +207,8 @@ no-shows are explicit flows.
   `NETOPIA_ENV`. Secrets: `NETOPIA_SIGNATURE`, `NETOPIA_PUBLIC_KEY`, `NETOPIA_PRIVATE_KEY`.
 - **Brevo email:** Firestore triggers + scheduled jobs send welcome, booking/credit
   confirmation, credit-used, low-credit, reminders (24h, commuter 7PM), refund, invite,
-  and password-reset mails (customer-facing, Brevo templates). `adminNotifications.js`
+  password-reset, and private-voucher-assigned mails (customer-facing, Brevo templates).
+  `adminNotifications.js`
   also sends inline-HTML ops alerts to rezervari@ on signup / reservation /
   cancellation / no-show / refund / credit purchase / password-reset — customer and
   staff-initiated, no Brevo template. Secret: `BREVO_API_KEY`.
