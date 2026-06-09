@@ -210,7 +210,13 @@ export default async function AdminDashboard(container) {
   // Refund queue — bookings cancelled but money not yet returned.
   // Surfaces here so the count stays in admins' face every time they
   // open the dashboard. Click-through goes to /admin/refunds.
-  const refundPending = allBookings.filter((b) => b.paymentStatus === 'refund-pending');
+  // Only count genuinely-paid bookings (paidBy = real captured payment);
+  // unpaid "cash on arrival" rows have nothing to refund. Must match the
+  // filter in AdminRefunds.js so the dashboard tally and the queue agree.
+  const PAID_CHANNELS = new Set(['netopia', 'admin-cash', 'admin-card']);
+  const refundPending = allBookings.filter(
+    (b) => b.paymentStatus === 'refund-pending' && PAID_CHANNELS.has(b.paidBy),
+  );
   const refundPendingTotal = refundPending.reduce((acc, b) => acc + (Number(b.totalPrice) || 0), 0);
 
   const today = new Date().toISOString().slice(0, 10);
