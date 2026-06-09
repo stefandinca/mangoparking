@@ -13,6 +13,12 @@ const adminResendRefundEmailFn = httpsCallable(functions, 'adminResendRefundEmai
 
 const HISTORY_DAYS = 90;
 
+// Only a booking with a captured payment can be refunded. These are the
+// `paidBy` channels where money actually changed hands (online, or cash/card
+// collected at the desk). Unpaid "cash on arrival" (pay-at-pickup) bookings
+// have `paidBy: null` — nothing to refund — and must not appear in the queue.
+const PAID_CHANNELS = new Set(['netopia', 'admin-cash', 'admin-card']);
+
 const NETOPIA_ADMIN_URL = 'https://admin.netopia-payments.com/';
 
 // /admin/refunds — manual refund queue.
@@ -119,10 +125,14 @@ export default async function AdminRefunds(container) {
   });
 
   const sinceIso = new Date(Date.now() - HISTORY_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const [pending, refundedAll] = await Promise.all([
+  const [pendingRaw, refundedAll] = await Promise.all([
     getCollection('bookings', where('paymentStatus', '==', 'refund-pending')).catch(() => []),
     getCollection('bookings', where('paymentStatus', '==', 'refunded')).catch(() => []),
   ]);
+  // Drop anything that was never actually paid — there's nothing to refund.
+  // (The cancel path already routes unpaid cancels to 'cancelled'; this also
+  // hides any legacy refund-pending rows left without a captured payment.)
+  const pending = pendingRaw.filter((b) => PAID_CHANNELS.has(b.paidBy));
   pending.sort((a, b) => String(b.cancelledAt || '').localeCompare(String(a.cancelledAt || '')));
 
   // History: refunds in the last HISTORY_DAYS, newest first.

@@ -34,8 +34,11 @@ booking becomes `refund-pending` and enters the Refunds queue.
 ### Flow 2 — Process a refund end-to-end
 **Entry:** booking `paymentStatus:'refund-pending'`.
 1. Admin opens `/admin/refunds`. Two server queries: `paymentStatus=='refund-pending'`
-   (queue) and `=='refunded'` (history, then client-filtered to 90 days). Header
-   shows "Total de rambursat" summed from `totalPrice`.
+   (queue) and `=='refunded'` (history, then client-filtered to 90 days). The queue
+   is further filtered to `paidBy` ∈ {netopia, admin-cash, admin-card} — only
+   captured payments can be refunded, so unpaid "cash on arrival" (pay-at-pickup)
+   rows never appear (and any legacy refund-pending row without a real payment is
+   hidden). Header shows "Total de rambursat" summed from `totalPrice`.
 2. Each pending row: Code · Plate · Customer · Cancelled-at · Paid-via · Amount
    (`totalPrice`) · actions. Netopia rows get an "Open in Netopia" link; all rows
    get a green "Marchează rambursat".
