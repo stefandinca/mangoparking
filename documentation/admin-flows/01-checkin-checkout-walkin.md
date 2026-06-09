@@ -17,9 +17,12 @@
 - If a customer chose **"pay when you arrive"**, staff can collect the cash/card
   payment here too.
 - A separate **"Overdue"** list shows cars that stayed past their pick-up time.
-- **The big catch (see bugs):** commuters checked in with credits don't show up
-  on the check-out list at all, so their spot can get stuck as "occupied". And a
-  couple of buttons (charge-for-overstay) don't actually do anything yet.
+- **Mostly resolved now:** credit/commuter check-ins create a real `active`
+  booking, so they appear on the Check-out tab and can be checked out (which
+  frees the spot and clears `activeCheckIns`); charge-for-overstay works. The
+  last gap — a commuter checked in on an earlier day being hidden by the
+  Check-out tab's date window — was fixed by always showing active credit
+  bookings regardless of window (see Bugs 1 & 4).
 
 ---
 
@@ -141,31 +144,32 @@ standalone action and not a balance lookup.
 
 ## Bugs & inconsistencies
 
-1. **[HIGH] Credit/commuter check-ins are invisible on every tab and have no
-   check-out path.** `AdminCheckIns.js:507` subscribes only to `bookings`. Credit
-   funnels write `activeCheckIns/{plate}` + `tokenTransactions`, never a booking.
-   `tokenService.checkOut(plate)` exists but is imported by **no page**. Symptom:
-   agent checks a commuter in, the page jumps to Check-out, the car isn't there;
-   its spot stays `occupied` forever with no UI to release it but manually
-   toggling the tile on `/admin/capacity`. Directly contradicts the v1.8 doc.
-2. **[HIGH] Plate normalization mismatch on no-show / cancel cleanup.**
-   `index.js:69` `normalizePlate` strips spaces **and** hyphens; the defensive
-   `activeCheckIns` lookups in `cancelBookingWithRefund` (`index.js:1699`) and
-   `markNoShows` (`scheduled.js:286`) strip spaces only (`/\s+/g`). A hyphenated
-   plate misses the guard: `markNoShows` can flag an arrived customer as no-show,
-   and cancel fails to clean up the `activeCheckIns` row. Make the two normalizers
-   identical.
-3. **[MED] "Taxează depășire" (charge overstay) is a dead placeholder.**
-   `AdminCheckIns.js:589` only fires an info toast ("coming soon"). v1.7 §C4
-   specified a charge dialog recording cash + an overstay `tokenTransactions` row.
-   Overstays can never be charged.
-4. **[MED] `activeCheckIns` lifecycle is inconsistent → dangling rows / false
-   "already checked in".** Check-in tab (`checkInBooking`) does **not** write
-   `activeCheckIns`; walk-in auto-check-in **does**. `checkOutBooking` frees the
-   spot but **never deletes** `activeCheckIns/{plate}`. A walk-in later checked
-   out keeps a stale row; if the plate returns, a credit check-in throws
-   `ALREADY_CHECKED_IN`. `AdminCapacity` can paint a freed spot with the stale
-   plate label.
+1. **[FIXED] Credit/commuter check-ins now create a booking and are checkable
+   out.** Credit funnels (`grantCreditsForCash` walk-in, `checkInWithCredits`)
+   now call `createCreditCheckInBooking`, writing an `active` booking **and** the
+   `activeCheckIns/{plate}` row, so commuters appear on the Check-out tab.
+   Follow-up fixed today: the Check-out tab filtered credit bookings by their
+   check-in day's date window, and Overdue excludes credit — so a commuter
+   checked in on a *previous* day was hidden on every tab and stranded `active`
+   forever (plate stuck "checked in" on `/admin/capacity`, blocking re-check-in
+   with `ALREADY_CHECKED_IN`). Now active credit bookings always show on
+   Check-out regardless of window (`AdminCheckIns.js` `renderBody`/`counts`).
+2. **[PARTLY FIXED] Plate normalization mismatch on cancel cleanup.**
+   `index.js:69` `normalizePlate` strips spaces **and** hyphens. `markNoShows`
+   (`scheduled.js:303`) already strips both. `cancelBookingWithRefund`
+   (`index.js:1699`) stripped spaces only — fixed today to call `normalizePlate`,
+   so cancelling an active hyphenated-plate booking now deletes its
+   `activeCheckIns` row.
+3. **[FIXED] "Taxează depășire" (charge overstay) works.** `openOverstayDialog`
+   (suggests extra-days × daily rate, editable) → `adminChargeOverstay` records
+   the cash/cashbook entry + a `lateFee` transaction. Also fixed today: it no
+   longer fires for **commuter** check-outs (their `pickupAt` == check-in time
+   would otherwise raise a bogus "late by N days" charge).
+4. **[FIXED] `activeCheckIns` lifecycle.** `checkOutBooking` now frees the spot
+   **and** deletes `activeCheckIns/{normalizedPlate}`; cancel does the same (Bug 2).
+   Remaining by design: the Check-in tab (`checkInBooking`, long-term) does not
+   write `activeCheckIns` — long-term presence is tracked via booking `status`,
+   which `AdminCapacity` reads alongside `activeCheckIns`.
 5. **[MED] Listener + popstate leak; page returns no cleanup.** The default export
    returns nothing, so the router's cleanup is null. Teardown relies solely on a
    `popstate` listener (`:513`), but in-app sidebar navigation uses `pushState`

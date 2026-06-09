@@ -436,7 +436,7 @@ export default async function AdminCheckIns(container) {
     const range = windowRange(activeWindow);
     const q = searchQuery;
     const checkin = bookings.filter((b) => b.status === 'upcoming' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
-    const checkout = bookings.filter((b) => b.status === 'active' && isInWindow(checkoutDate(b), range) && matchesSearch(b, q)).length;
+    const checkout = bookings.filter((b) => b.status === 'active' && (b.type === 'credit' || isInWindow(checkoutDate(b), range)) && matchesSearch(b, q)).length;
     const overdue = bookings.filter((b) => isOverdue(b) && matchesSearch(b, q)).length;
     const noshow = bookings.filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
     return { checkin, checkout, overdue, noshow };
@@ -540,8 +540,14 @@ export default async function AdminCheckIns(container) {
     }
     if (activeTab === 'checkout') {
       const range = windowRange(activeWindow);
+      // An active booking is physically on the lot and must always be
+      // checkable-out. Commuters (credit) have no real pick-up deadline and
+      // are bucketed by check-in day, so a date window would hide one
+      // checked in on an earlier day (and Overdue excludes credit) —
+      // stranding it "checked in" forever. Always include active credit
+      // bookings; keep the window for long-term.
       const rows = bookings
-        .filter((b) => b.status === 'active' && isInWindow(checkoutDate(b), range) && matchesSearch(b, q))
+        .filter((b) => b.status === 'active' && (b.type === 'credit' || isInWindow(checkoutDate(b), range)) && matchesSearch(b, q))
         .sort((a, b) => String(checkoutDate(a) || '').localeCompare(String(checkoutDate(b) || '')))
         .map((b) => rowHtml(b, { tab: 'checkout', locale, canCancel }));
       bodyEl.innerHTML = renderTable(rows);
@@ -650,7 +656,10 @@ export default async function AdminCheckIns(container) {
         await checkInBooking(bookingId);
         showToast(t('checkins.toastCheckedIn'), 'success');
       } else if (action === 'checkout') {
-        const over = overstayInfo(booking);
+        // Commuters (credit) have no scheduled pick-up — their pickupAt is
+        // just their check-in time, so overstayInfo would raise a bogus
+        // "late by N days" charge. Only long-term bookings can overstay.
+        const over = booking.type === 'credit' ? null : overstayInfo(booking);
         if (over) {
           const ok = await confirmModal(
             t('checkins.lateCheckoutWarn', { days: over.daysLate, amount: over.amount }),

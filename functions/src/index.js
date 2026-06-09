@@ -1696,7 +1696,9 @@ export const cancelBookingWithRefund = onCall(
     // car can use the same plate later if needed.
     if (booking.status === 'active' && booking.licensePlate) {
       try {
-        const plate = String(booking.licensePlate).toUpperCase().replace(/\s+/g, '');
+        // Must match normalizePlate exactly (strips spaces AND hyphens) or a
+        // hyphenated plate's activeCheckIns row is never deleted → stale "checked in".
+        const plate = normalizePlate(booking.licensePlate);
         await db.collection('activeCheckIns').doc(plate).delete().catch(() => {});
       } catch (err) {
         console.warn('cancelBookingWithRefund: activeCheckIns cleanup failed', err?.message);
