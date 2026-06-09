@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "statusMessage": "After-code rule: building & checking commit state…",
+            "command": "input=$(cat); dirty=$(git status --porcelain -- src functions 2>/dev/null); if [ -z \"$dirty\" ]; then exit 0; fi; if npm run build:vite >/tmp/mango-stop-build.log 2>&1; then printf '%s' '{\"systemMessage\":\"✅ build passes — remember to commit the change and update docs if necessary (project rule).\",\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"Uncommitted changes exist under src/ or functions/ and npm run build:vite passes. Per the project after-code rule: make a clean, scoped commit and update docs if necessary before finishing, unless the user asked you to hold.\"}}'; else printf '%s' '{\"decision\":\"block\",\"reason\":\"Project after-code rule: files under src/ or functions/ changed but `npm run build:vite` failed. Run it, fix the errors, then finish — and commit + update docs once it is green.\"}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
