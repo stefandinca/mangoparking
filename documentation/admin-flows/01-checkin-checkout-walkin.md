@@ -46,10 +46,13 @@ drop-off falls in the selected window (today / week / month / custom).
 3. Row shows times, name/email, plate (mono), payment badge, "Așteaptă" status,
    a green **Check-in** button (+ **Încasează/Collect** if unpaid, + **Anulează
    rezervarea** if the admin has `PERM.REFUNDS`).
-4. Click **Check-in** → button disabled → `checkInBooking(bookingId)` flips
-   booking to `status:'active'`, stamps `checkinTimestamp`, occupies the reserved
-   (or first available) spot, bumps `settings/global.occupiedSpots`, audit
-   `booking_checkin`.
+4. Click **Check-in** → a confirmation modal (`openCheckActionConfirm`) shows the
+   reservation (code, type, customer, plate, drop-off/pick-up, payment, spot) and
+   asks "Ești sigur că vrei să efectuezi check-in-ul…?". On confirm →
+   `checkInBooking(bookingId)` flips booking to `status:'active'`, stamps
+   `checkinTimestamp`, occupies the reserved (or first available) spot, bumps
+   `settings/global.occupiedSpots`, audit `booking_checkin`. (Check-out shows the
+   same modal, folding in the overstay warning when one applies.)
 5. Toast "Check-in efectuat". Subscription re-renders; row leaves Check-in tab,
    appears on Check-out.
 **End state:** booking `active`, spot `occupied`. ⚠ No `activeCheckIns/{plate}`
@@ -78,10 +81,12 @@ row written on this path (Bug 4).
    manually the auto-fill stops clobbering. A hint shows the computed value.
    (Long-term Flow 2 pre-fills its total the same way, from the date range.)
 3. Submit → `grantCreditsForCashFn`: credits tokens, cashbook entry if cash. If
-   auto-check-in: decrements one token, assigns a spot, writes
-   `activeCheckIns/{plate}` + a `use` `tokenTransactions` row. **No booking doc.**
-**End state:** balance topped up, optionally one token spent and car on lot —
-**invisible to all three tabs** (Bug 1).
+   auto-check-in: decrements one token, assigns a spot, creates an `active`
+   **credit booking** (`createCreditCheckInBooking`: drop-off = now, **pick-up =
+   that day's 20:00 Bucharest cutoff**, not the drop-off time), writes
+   `activeCheckIns/{plate}` + a `use` `tokenTransactions` row.
+**End state:** balance topped up, optionally one credit spent and car on lot,
+showing on the Check-out tab as a commuter booking.
 
 ### Flow 4 — Commuter check-in against EXISTING credits (v1.8)
 **Entry:** plate/customer holds a `tokenBalances` balance ≥ credits-to-use; plate
@@ -92,11 +97,12 @@ not already in `activeCheckIns`.
    guards out-of-order results). Shows "N credits available".
 3. Set credits-to-use (default 1) → submit → `checkInWithCreditsFn`: resolves
    balance, refuses `ALREADY_CHECKED_IN`, deducts in a transaction
-   (`INSUFFICIENT_CREDITS` guard), assigns a spot, writes `activeCheckIns/{plate}`
-   (`source:'manual'`) + `use` tx + audit.
+   (`INSUFFICIENT_CREDITS` guard), assigns a spot, creates an `active` **credit
+   booking** (drop-off = now, **pick-up = that day's 20:00 cutoff**), writes
+   `activeCheckIns/{plate}` (`source:'manual'`) + `use` tx + audit.
 4. Toast; modal closes; page jumps to Check-out tab.
-**End state:** balance decremented, car on lot via `activeCheckIns`. ⚠ No booking
-doc → **never appears on Check-out tab** (Bug 1).
+**End state:** balance decremented, car on lot, showing on the Check-out tab as a
+commuter booking.
 
 ### Flow 5 — Check-out (Check-out tab)
 **Entry:** `bookings` doc `status:'active'`, pick-up in window.

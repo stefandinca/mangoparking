@@ -1432,6 +1432,11 @@ export default {
     // Late check-out warning
     lateCheckoutWarn: 'Clientul a depășit cu {days} zile. Mai sunt de încasat ~{amount} lei. Încasează suplimentul, apoi confirmă check-out-ul.',
     lateCheckoutConfirm: 'Confirmă check-out',
+    // Check-in / check-out confirmation modal
+    confirmCheckInTitle: 'Ești sigur că vrei să efectuezi check-in-ul pentru această rezervare?',
+    confirmCheckOutTitle: 'Ești sigur că vrei să efectuezi check-out-ul pentru această rezervare?',
+    confirmCheckInBtn: 'Da, fă check-in',
+    confirmCheckOutBtn: 'Da, fă check-out',
     // Toasts
     toastCheckedIn: 'Check-in efectuat.',
     toastCheckedOut: 'Check-out efectuat.',

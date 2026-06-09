@@ -80,6 +80,28 @@ function normalizePlate(plate) {
   return String(plate || '').toUpperCase().replace(/[\s-]/g, '');
 }
 
+// `hour`:00 Europe/Bucharest on the local calendar day of `iso`, as an ISO
+// string. Commuter (credit) check-ins use this as their pick-up deadline —
+// "leave by 8 PM the same day" — instead of mirroring the drop-off time.
+// DST-correct: anchors the wall-clock hour via the zone's offset at that day.
+function bucharestCutoffIso(iso, hour = 20) {
+  const base = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(base.getTime())) return null;
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(base); // YYYY-MM-DD
+  const guessUtc = Date.parse(`${day}T${String(hour).padStart(2, '0')}:00:00Z`);
+  if (!Number.isFinite(guessUtc)) return null;
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Bucharest', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const p = dtf.formatToParts(new Date(guessUtc)).reduce((a, x) => { a[x.type] = x.value; return a; }, {});
+  const h = +p.hour === 24 ? 0 : +p.hour;
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, h, +p.minute, +p.second);
+  const offMin = Math.round((asUtc - guessUtc) / 60000);
+  return new Date(guessUtc - offMin * 60000).toISOString();
+}
+
 function balanceDocId({ customerId, licensePlate }) {
   return customerId || `plate_${normalizePlate(licensePlate)}`;
 }
@@ -2203,15 +2225,19 @@ export const grantCreditsForCash = onCall(
 // "now" — no scheduled pick-up. Returns the new booking id.
 async function createCreditCheckInBooking(db, { plate, customerId, contact, spotId, source }) {
   const nowIso = new Date().toISOString();
+  // Commuters park for the day and must leave by 8 PM — pick-up is that day's
+  // 20:00 cutoff, not the drop-off time. Falls back to now if the cutoff can't
+  // be computed (never expected).
+  const pickupIso = bucharestCutoffIso(nowIso, 20) || nowIso;
   const ref = await db.collection('bookings').add({
     code: generateBookingCode('credit'),
     type: 'credit',
     customerId: customerId || null,
     licensePlate: plate,
     startDate: nowIso,
-    endDate: nowIso,
+    endDate: pickupIso,
     dropoffAt: nowIso,
-    pickupAt: nowIso,
+    pickupAt: pickupIso,
     days: 1,
     basePrice: 0,
     latePrice: 0,

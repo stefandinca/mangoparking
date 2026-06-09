@@ -1419,6 +1419,11 @@ export default {
     walkInDoneCheckedIn: 'Walk-in recorded and checked in.',
     lateCheckoutWarn: 'This customer is {days} day(s) over. About {amount} lei still to collect. Take the extra payment, then confirm check-out.',
     lateCheckoutConfirm: 'Confirm check-out',
+    // Check-in / check-out confirmation modal
+    confirmCheckInTitle: 'Are you sure you want to check in this reservation?',
+    confirmCheckOutTitle: 'Are you sure you want to check out this reservation?',
+    confirmCheckInBtn: 'Yes, check in',
+    confirmCheckOutBtn: 'Yes, check out',
     toastCheckedIn: 'Checked in.',
     toastCheckedOut: 'Checked out.',
     toastMarkedPaid: 'Payment recorded.',

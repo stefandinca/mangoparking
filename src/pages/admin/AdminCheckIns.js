@@ -705,19 +705,17 @@ export default async function AdminCheckIns(container) {
           showToast(t('checkins.errorUnpaidCheckin'), 'error');
           return;
         }
+        const ok = await openCheckActionConfirm({ booking, action: 'checkin', locale });
+        if (!ok) return;
         await checkInBooking(bookingId);
         showToast(t('checkins.toastCheckedIn'), 'success');
       } else if (action === 'checkout') {
         // Overstay applies to both: long-term past their pick-up, commuters
-        // past the 20:00 cutoff on their check-in day (valued per-credit).
+        // past the 20:00 cutoff on their check-in day (valued per-credit). The
+        // warning is folded into the confirmation modal when one applies.
         const over = overstayInfo(booking, creditPerDay);
-        if (over) {
-          const ok = await confirmModal(
-            t('checkins.lateCheckoutWarn', { days: over.daysLate, amount: over.amount }),
-            { danger: true, confirmText: t('checkins.lateCheckoutConfirm') },
-          );
-          if (!ok) return;
-        }
+        const ok = await openCheckActionConfirm({ booking, action: 'checkout', locale, over });
+        if (!ok) return;
         await checkOutBooking(bookingId);
         showToast(t('checkins.toastCheckedOut'), 'success');
       } else if (action === 'collect') {
@@ -766,6 +764,62 @@ export default async function AdminCheckIns(container) {
     searchClearBtn.classList.add('hidden');
     setUrl();
     rerender();
+  });
+}
+
+// ── Check-in / check-out confirmation ────────────────────────────────────
+// A detailed "are you sure?" before either action, showing the reservation so
+// staff can sanity-check plate / dates / payment. For check-out it folds in
+// the late-checkout (overstay) warning when one applies. Resolves true on
+// confirm, false on cancel / dismiss.
+function openCheckActionConfirm({ booking, action, locale, over = null }) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+
+    const isCheckin = action === 'checkin';
+    const title = isCheckin ? t('checkins.confirmCheckInTitle') : t('checkins.confirmCheckOutTitle');
+    const confirmLabel = isCheckin ? t('checkins.confirmCheckInBtn') : t('checkins.confirmCheckOutBtn');
+    const dropoff = booking.dropoffAt || booking.startDate;
+    const pickup = booking.pickupAt || booking.endDate;
+    const code = booking.code || `LT-${String(booking.id).slice(0, 5).toUpperCase()}`;
+    const name = booking.contact?.name || booking.contact?.email || '—';
+
+    const row = (label, value) => `
+      <div class="flex justify-between gap-3 py-1 border-b border-frost-deep/60 last:border-0">
+        <span class="text-[12px] uppercase tracking-wider text-dim font-mono">${label}</span>
+        <span class="text-[13px] text-charcoal text-right">${value}</span>
+      </div>`;
+
+    const warn = over ? `
+      <div class="rounded-xl bg-mango/10 border border-mango/30 px-4 py-3 text-[13px] text-charcoal">
+        ${t('checkins.lateCheckoutWarn', { days: over.daysLate, amount: over.amount })}
+      </div>` : '';
+
+    const form = html`<div class="space-y-4">
+      <h3 class="font-heading font-bold text-xl text-blueberry-deep">${title}</h3>
+      <div class="rounded-2xl bg-frost border border-frost-deep p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="font-mono text-[14px] font-bold text-blueberry-deep">${escapeHtml(code)}</span>
+          ${typeBadge(booking)}
+        </div>
+        ${row(t('checkins.colCustomer'), escapeHtml(name))}
+        ${row(t('checkins.colPlate'), `<span class="font-mono">${escapeHtml(booking.licensePlate || '—')}</span>`)}
+        ${row(t('checkins.detailDropoff'), escapeHtml(fmtDateTime(dropoff, locale)))}
+        ${row(t('checkins.detailPickup'), escapeHtml(fmtDateTime(pickup, locale)))}
+        ${row(t('checkins.colPayment'), paymentStatusBadge(booking))}
+        ${booking.spotId ? row(t('checkins.detailSpot'), escapeHtml(booking.spotId)) : ''}
+      </div>
+      ${warn}
+      <div class="flex gap-3 justify-end pt-1">
+        <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors">${t('common.cancel')}</button>
+        <button type="button" data-confirm class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${confirmLabel}</button>
+      </div>
+    </div>`;
+
+    const modal = openModal(form, { onClose: () => finish(false) });
+    qs('[data-cancel]', form).addEventListener('click', () => { finish(false); modal.close(); });
+    qs('[data-confirm]', form).addEventListener('click', () => { finish(true); modal.close(); });
   });
 }
 
