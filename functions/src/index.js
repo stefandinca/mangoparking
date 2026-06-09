@@ -43,6 +43,15 @@ import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resol
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
 export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated } from './emails.js';
 
+// Internal ops alerts to rezervari@ — customer activity (signup, reservation,
+// cancellation, credit purchase). Inline-HTML sends, no Brevo template.
+export {
+  adminNotifyUserCreated,
+  adminNotifyBookingCreated,
+  adminNotifyBookingCancelled,
+  adminNotifyCreditPurchase,
+} from './adminNotifications.js';
+
 // ANAF CUI lookup callable (Phase B4).
 export { lookupCui } from './cui.js';
 

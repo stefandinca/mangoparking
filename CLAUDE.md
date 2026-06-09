@@ -49,7 +49,8 @@ src/services/                         — booking, token, capacity, longTerm, pr
                                         userMerge (+ hidden: subscription, loyalty)
 scripts/{prerender.mjs,seo-routes.mjs}    — build-time SEO prerender for public routes
 functions/src/                        — index.js (Netopia + admin/cash/booking callables),
-                                        emails.js, brevo.js, scheduled.js, cui.js, netopia helpers
+                                        emails.js (customer Brevo emails), adminNotifications.js
+                                        (ops alerts to rezervari@), brevo.js, scheduled.js, cui.js
 firestore.rules / firestore.indexes.json / storage.rules
 firebase.json / vercel.json / vite.config.js / .firebaserc (project: mango-parking)
 ```
@@ -77,7 +78,7 @@ Single `PERM` map drives route guards, the admin sidebar, and Firestore-rule log
 - Never commit secrets; `.env.local` holds Firebase web config; Function secrets via `firebase functions:secrets:set` (NETOPIA_*, BREVO_API_KEY)
 
 ## Cloud Functions (functions/src/)
-HTTP: `createPayment`, `netopiaCallback` (IPN), `repayOrder`. Callables cover admin order/cash/booking ops (mark paid/unpaid, cancel + refund, close cashbook, handovers, grant credits for cash, check-in with credits, charge overstay, create/long-term booking, user create/delete/role, invites, password reset, voucher validation, guest→user merge) and `lookupCui` (ANAF). Firestore triggers + scheduled jobs (`emails.js`, `scheduled.js`) send Brevo email and run housekeeping (no-shows, stale holds, reminders). All in `europe-west1`.
+HTTP: `createPayment`, `netopiaCallback` (IPN), `repayOrder`. Callables cover admin order/cash/booking ops (mark paid/unpaid, cancel + refund, close cashbook, handovers, grant credits for cash, check-in with credits, charge overstay, create/long-term booking, user create/delete/role, invites, password reset, voucher validation, guest→user merge) and `lookupCui` (ANAF). Firestore triggers + scheduled jobs (`emails.js`, `scheduled.js`) send customer Brevo email and run housekeeping (no-shows, stale holds, reminders). `adminNotifications.js` sends inline-HTML ops alerts to rezervari@ on customer signup / reservation / cancellation / credit purchase (via `sendBrevoRaw`, no Brevo template). All in `europe-west1`.
 
 ## Agent Orchestration
 For non-trivial tasks, read [.claude/orchestrator.md](.claude/orchestrator.md) first — it routes work to the specialist agents in [.claude/agents/](.claude/agents/) (`business-strategist`, `ui-ux-designer`, `firebase-developer`) without the user naming anyone. After each change: build, fix regressions, verify, then create one clean commit.

@@ -232,7 +232,8 @@ export const onBookingCreated = onDocumentCreated(
       name: recipient.name,
       templateName: 'booking-longterm-confirm',
       locale: recipient.locale,
-      bcc: [{ email: 'rezervari@mangoparking.ro', name: 'Mango Parking Rezervări' }],
+      // Admin copy is handled by adminNotifyBookingCreated (a dedicated ops
+      // alert), so no BCC here — avoids double-emailing rezervari@.
       params: {
         firstName: recipient.firstName,
         code: booking.code || `LT-${event.params.id.slice(0, 5).toUpperCase()}`,
