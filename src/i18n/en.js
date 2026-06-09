@@ -1309,6 +1309,7 @@ export default {
     createDays: 'Days',
     createTotal: 'Total (RON)',
     priceComputed: 'Computed price: {total} lei ({days} days × {perDay} lei/day) — you can adjust it',
+    creditAmountComputed: 'Computed price: {amount} lei for {qty} credits — you can adjust it',
     createQuantity: 'Credit quantity',
     createAmount: 'Amount paid (RON)',
     createPaidBy: 'Paid by',

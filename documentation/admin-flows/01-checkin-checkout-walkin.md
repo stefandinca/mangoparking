@@ -68,7 +68,12 @@ row written on this path (Bug 4).
 
 ### Flow 3 — Walk-in commuter, SELL new credits
 1. Walk-in modal → "Credit pack" → **Sell new credits** (default).
-2. Enter plate, quantity, amount, paid-by, optional auto-check-in.
+2. Enter plate, quantity, amount, paid-by, optional auto-check-in. The **amount
+   auto-fills from the quantity** using the `tokenPacks` tiers from the Pricing
+   page (exact pack-quantity match → that pack's price; otherwise the cheapest
+   per-credit rate × quantity), and stays editable — once the agent edits it
+   manually the auto-fill stops clobbering. A hint shows the computed value.
+   (Long-term Flow 2 pre-fills its total the same way, from the date range.)
 3. Submit → `grantCreditsForCashFn`: credits tokens, cashbook entry if cash. If
    auto-check-in: decrements one token, assigns a spot, writes
    `activeCheckIns/{plate}` + a `use` `tokenTransactions` row. **No booking doc.**

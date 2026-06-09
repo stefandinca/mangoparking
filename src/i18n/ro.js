@@ -1310,6 +1310,7 @@ export default {
     createDays: 'Zile',
     createTotal: 'Total (lei)',
     priceComputed: 'Preț calculat: {total} lei ({days} zile × {perDay} lei/zi) — îl poți modifica',
+    creditAmountComputed: 'Preț calculat: {amount} lei pentru {qty} credite — îl poți modifica',
     createQuantity: 'Cantitate credite',
     createAmount: 'Sumă încasată (lei)',
     createPaidBy: 'Plătit prin',

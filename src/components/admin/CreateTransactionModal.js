@@ -6,7 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { isValidEmail, isValidLicensePlate } from '../../utils/validators.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
-import { getBalance, lookupByPlate } from '../../services/tokenService.js';
+import { getBalance, lookupByPlate, getTokenPacks } from '../../services/tokenService.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
 import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
 
@@ -18,6 +18,24 @@ function walkInBillingDays(dropoffMs, pickupMs) {
   const duration = pickupMs - dropoffMs;
   if (!Number.isFinite(duration) || duration <= 0) return 0;
   return Math.max(1, Math.ceil((duration - WALKIN_GRACE_MS) / 86_400_000));
+}
+
+// Walk-in credit pricing mirrors the public BookingCredits page: an exact
+// pack-quantity match uses that pack's listed price; any other quantity is
+// priced at the cheapest per-credit rate across packs. tokenPacks prices are
+// the final (online) prices — the same basis the long-term walk-in auto-fill
+// uses — so cash-counter sales and online purchases stay consistent.
+function computeCreditAmount(quantity, packs) {
+  if (!Array.isArray(packs) || !packs.length) return null;
+  const qty = Number(quantity);
+  if (!Number.isInteger(qty) || qty <= 0) return null;
+  const exact = packs.find((p) => Number(p.quantity) === qty);
+  if (exact && Number.isFinite(Number(exact.price))) return Math.round(Number(exact.price));
+  const rates = packs
+    .map((p) => Number(p.price) / Number(p.quantity))
+    .filter((r) => Number.isFinite(r) && r > 0);
+  if (!rates.length) return null;
+  return Math.round(qty * Math.min(...rates));
 }
 
 // Reusable "Create transaction" modal.
@@ -176,6 +194,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
             <input type="number" name="amount" min="1" step="1" placeholder="100"
               class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
           </div>
+          <p data-credit-price-hint class="col-span-2 text-[12px] text-dim mt-0.5 hidden"></p>
         </div>
 
         <!-- Use existing credits (check-in) -->
@@ -247,6 +266,19 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
 
   totalInput?.addEventListener('input', () => { priceTouched = true; });
 
+  // ── Walk-in price auto-compute (credits) ──
+  // Selling new credits pre-fills the amount from the entered quantity using
+  // the same pack tiers shown on the public Pricing page, so the agent gets
+  // the right cash amount by default but can still override it. Like the
+  // long-term field, once the agent edits the amount we stop clobbering it.
+  const quantityInput = qs('[name="quantity"]', contentEl);
+  const amountInput = qs('[name="amount"]', contentEl);
+  const creditPriceHintEl = qs('[data-credit-price-hint]', contentEl);
+  let creditPacks = [];
+  let amountTouched = false;
+
+  amountInput?.addEventListener('input', () => { amountTouched = true; });
+
   function computeWalkInPrice() {
     if (!ltRates) return null;
     const dropoffRaw = qs('[name="dropoffAt"]', contentEl)?.value;
@@ -277,18 +309,37 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     if (!priceTouched) totalInput.value = String(q.total);
   }
 
+  function refreshCreditPrice() {
+    if (!amountInput || !creditPriceHintEl) return;
+    // Only when selling NEW credits — not long-term, not use-existing.
+    if (getType() !== 'credit' || isCreditUse()) {
+      creditPriceHintEl.classList.add('hidden');
+      return;
+    }
+    const qty = Number(quantityInput?.value);
+    const amount = computeCreditAmount(qty, creditPacks);
+    if (amount == null) { creditPriceHintEl.classList.add('hidden'); return; }
+    creditPriceHintEl.textContent = t('transactions.creditAmountComputed', { amount, qty });
+    creditPriceHintEl.classList.remove('hidden');
+    if (!amountTouched) amountInput.value = String(amount);
+  }
+
   // flatpickr dispatches a native 'change' on the underlying input when a
   // date is chosen; recompute on either field changing.
   qs('[name="dropoffAt"]', contentEl)?.addEventListener('change', refreshWalkInPrice);
   qs('[name="pickupAt"]', contentEl)?.addEventListener('change', refreshWalkInPrice);
+  quantityInput?.addEventListener('input', refreshCreditPrice);
 
   Promise.all([
     getLongTermRates().catch(() => null),
     listSeasonalPeriods().catch(() => []),
-  ]).then(([rates, seasonal]) => {
+    getTokenPacks().catch(() => []),
+  ]).then(([rates, seasonal, packs]) => {
     ltRates = rates;
     ltSeasonal = Array.isArray(seasonal) ? seasonal : [];
+    creditPacks = Array.isArray(packs) ? packs : [];
     refreshWalkInPrice();
+    refreshCreditPrice();
   });
 
   const typeToggle = qs('[data-type-toggle]', contentEl);
@@ -355,6 +406,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     applyVisibility();
     if (isCreditUse()) refreshBalance();
     refreshWalkInPrice();
+    refreshCreditPrice();
   });
 
   creditModeToggle?.addEventListener('change', (e) => {
@@ -367,6 +419,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     });
     applyVisibility();
     if (isCreditUse()) refreshBalance();
+    refreshCreditPrice();
   });
 
   // ── Live balance lookup (use-existing mode) ──
