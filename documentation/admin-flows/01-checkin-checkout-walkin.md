@@ -1,0 +1,204 @@
+# 01 — Check-in / Check-out / Walk-in
+
+**Page:** `/admin/checkins` (`src/pages/admin/AdminCheckIns.js`) + the shared
+`CreateTransactionModal` (`src/components/admin/CreateTransactionModal.js`).
+**Permission:** `perm:checkins` (admin, agent, driver).
+
+## In plain words
+
+- This is the screen staff use at the gate to **let cars in and out** of the lot.
+- **Someone with a reservation arrives** → staff find them and press "Check-in";
+  the car gets a parking spot.
+- **A car shows up with no reservation** ("walk-in") → staff create the booking
+  on the spot, or sell/use parking credits, and can check them in immediately.
+- **Regular commuters who pre-bought credits** can be checked in by typing their
+  plate — one credit is spent per visit.
+- **When they leave**, staff press "Check-out" and the spot is freed.
+- If a customer chose **"pay when you arrive"**, staff can collect the cash/card
+  payment here too.
+- A separate **"Overdue"** list shows cars that stayed past their pick-up time.
+- **The big catch (see bugs):** commuters checked in with credits don't show up
+  on the check-out list at all, so their spot can get stuck as "occupied". And a
+  couple of buttons (charge-for-overstay) don't actually do anything yet.
+
+---
+
+> **Structural note that drives the headline bugs:** the page subscribes to a
+> **single** collection — `bookings` (`AdminCheckIns.js:507`). Long-term
+> reservations live in `bookings`. **Credit/commuter check-ins do not** — they
+> write `activeCheckIns/{plate}` + a `tokenTransactions` row and **no** booking
+> doc. So the credit funnel and this page's data source never meet. See Bugs 1 & 4.
+
+---
+
+## Flows
+
+### Flow 1 — Long-term reservation check-in (Check-in tab)
+**Entry:** a `bookings` doc, `type:'longTerm'`, `status:'upcoming'`, whose
+drop-off falls in the selected window (today / week / month / custom).
+1. Admin opens `/admin/checkins`; default tab `checkin`, window `today` (state
+   in URL params).
+2. Live `subscribeCollection('bookings')` populates the list; rows filtered to
+   `status==='upcoming' && inWindow(dropoffAt)` sorted by drop-off ascending.
+3. Row shows times, name/email, plate (mono), payment badge, "Așteaptă" status,
+   a green **Check-in** button (+ **Încasează/Collect** if unpaid, + **Anulează
+   rezervarea** if the admin has `PERM.REFUNDS`).
+4. Click **Check-in** → button disabled → `checkInBooking(bookingId)` flips
+   booking to `status:'active'`, stamps `checkinTimestamp`, occupies the reserved
+   (or first available) spot, bumps `settings/global.occupiedSpots`, audit
+   `booking_checkin`.
+5. Toast "Check-in efectuat". Subscription re-renders; row leaves Check-in tab,
+   appears on Check-out.
+**End state:** booking `active`, spot `occupied`. ⚠ No `activeCheckIns/{plate}`
+row written on this path (Bug 4).
+
+### Flow 2 — Walk-in, long-term, no reservation (+ Walk-in nou)
+**Entry:** car at the gate, no booking.
+1. Click **+ Walk-in nou** → `CreateTransactionModal`, type "Long-term booking".
+2. Pick existing user (email datalist) or "New customer"; enter plate, drop-off
+   (defaults now), pick-up (now+1d), total price.
+3. Optional **"Walk-in — fă check-in imediat"** checkbox.
+4. Submit → `adminCreateLongtermBookingFn`. Server creates a **paid** booking
+   (`paymentStatus:'paid'`, `paidBy:'admin-cash'|'admin-card'`), reserves a spot,
+   records a cashbook entry if cash. If auto-check-in: flips `active`, occupies
+   spot, **writes `activeCheckIns/{plate}`**.
+5. New user → best-effort `adminSendInviteFn`. Toast; on check-in the page jumps
+   to the Check-out tab.
+**End state:** active paid booking + spot occupied + `activeCheckIns` row.
+
+### Flow 3 — Walk-in commuter, SELL new credits
+1. Walk-in modal → "Credit pack" → **Sell new credits** (default).
+2. Enter plate, quantity, amount, paid-by, optional auto-check-in.
+3. Submit → `grantCreditsForCashFn`: credits tokens, cashbook entry if cash. If
+   auto-check-in: decrements one token, assigns a spot, writes
+   `activeCheckIns/{plate}` + a `use` `tokenTransactions` row. **No booking doc.**
+**End state:** balance topped up, optionally one token spent and car on lot —
+**invisible to all three tabs** (Bug 1).
+
+### Flow 4 — Commuter check-in against EXISTING credits (v1.8)
+**Entry:** plate/customer holds a `tokenBalances` balance ≥ credits-to-use; plate
+not already in `activeCheckIns`.
+1. Walk-in modal → "Credit pack" → **Use existing credits**. Sell/paid-by/
+   auto-check-in fields hide; submit relabels to "Check-in".
+2. Debounced balance readout (customer match → `lookupByPlate`, monotonic token
+   guards out-of-order results). Shows "N credits available".
+3. Set credits-to-use (default 1) → submit → `checkInWithCreditsFn`: resolves
+   balance, refuses `ALREADY_CHECKED_IN`, deducts in a transaction
+   (`INSUFFICIENT_CREDITS` guard), assigns a spot, writes `activeCheckIns/{plate}`
+   (`source:'manual'`) + `use` tx + audit.
+4. Toast; modal closes; page jumps to Check-out tab.
+**End state:** balance decremented, car on lot via `activeCheckIns`. ⚠ No booking
+doc → **never appears on Check-out tab** (Bug 1).
+
+### Flow 5 — Check-out (Check-out tab)
+**Entry:** `bookings` doc `status:'active'`, pick-up in window.
+1. Tab filters `status==='active' && inWindow(pickupAt)`, sorted by pick-up asc.
+2. Click **Check-out** → `checkOutBooking(bookingId)` → `status:'completed'`,
+   stamps `completedAt`, frees the spot. Toast. **No confirmation dialog.**
+**End state:** booking `completed`, spot `available`. ⚠ Does **not** delete any
+`activeCheckIns/{plate}` row (Bug 4).
+
+### Flow 6 — Pay-at-pickup collection
+**Entry:** booking `paymentStatus:'unpaid'` (web long-term pay-at-pickup).
+1. Row shows red "Neplătit" badge + amber **Încasează/Collect** button
+   (independent of the check-in button).
+2. Click → collect dialog: hint "Pentru placa {plate}, suma {amount} lei",
+   requires first/last name + locality + address, radio cash/card.
+3. Submit → `adminMarkOrderPaidFn`: flips order + booking to paid, patches
+   billing, reserves a spot if none, cashbook entry if cash. Toast.
+**End state:** `paymentStatus:'paid'`. Collection and check-in are fully
+decoupled — either can happen first, or collection can be skipped entirely (Bug 7).
+
+### Flow 7 — Overdue tab
+**Entry:** `status:'active'` AND `now > pickup + 2h`. No window filter; sorted
+hours-over descending.
+1. Accordion rows; expand for full detail grid.
+2. Actions: **Check-out acum**, **Taxează depășire** (overstay), **Anulează
+   rezervarea** (if `PERM.REFUNDS`). Overstay is a **no-op placeholder** (Bug 3).
+
+### Flow 8 — Cancel reservation
+**Entry:** `PERM.REFUNDS`; booking `upcoming`/`active`, not already refund-pending/
+refunded.
+1. Click **Anulează rezervarea** → danger `confirmModal`. Confirm →
+   `cancelBookingFn`.
+2. Server: `upcoming` + drop-off >12h ago → `no-show` (forfeit, no refund). Else
+   `cancelled`; if paid via Netopia/admin → `refund-pending` (enters Refunds
+   queue); frees spot; for `active` deletes `activeCheckIns/{plate}`; mirrors to
+   `pendingOrders`. Toast.
+**End state:** `cancelled` / `no-show`, spot freed.
+
+### Flow 9 — Plate / search lookup
+Top search bar filters live (120 ms debounce) across plate, code, name/email, id.
+Persisted to `?q=`. **Filter over the loaded `bookings` tabs only** — not a
+standalone action and not a balance lookup.
+
+---
+
+## Bugs & inconsistencies
+
+1. **[HIGH] Credit/commuter check-ins are invisible on every tab and have no
+   check-out path.** `AdminCheckIns.js:507` subscribes only to `bookings`. Credit
+   funnels write `activeCheckIns/{plate}` + `tokenTransactions`, never a booking.
+   `tokenService.checkOut(plate)` exists but is imported by **no page**. Symptom:
+   agent checks a commuter in, the page jumps to Check-out, the car isn't there;
+   its spot stays `occupied` forever with no UI to release it but manually
+   toggling the tile on `/admin/capacity`. Directly contradicts the v1.8 doc.
+2. **[HIGH] Plate normalization mismatch on no-show / cancel cleanup.**
+   `index.js:69` `normalizePlate` strips spaces **and** hyphens; the defensive
+   `activeCheckIns` lookups in `cancelBookingWithRefund` (`index.js:1699`) and
+   `markNoShows` (`scheduled.js:286`) strip spaces only (`/\s+/g`). A hyphenated
+   plate misses the guard: `markNoShows` can flag an arrived customer as no-show,
+   and cancel fails to clean up the `activeCheckIns` row. Make the two normalizers
+   identical.
+3. **[MED] "Taxează depășire" (charge overstay) is a dead placeholder.**
+   `AdminCheckIns.js:589` only fires an info toast ("coming soon"). v1.7 §C4
+   specified a charge dialog recording cash + an overstay `tokenTransactions` row.
+   Overstays can never be charged.
+4. **[MED] `activeCheckIns` lifecycle is inconsistent → dangling rows / false
+   "already checked in".** Check-in tab (`checkInBooking`) does **not** write
+   `activeCheckIns`; walk-in auto-check-in **does**. `checkOutBooking` frees the
+   spot but **never deletes** `activeCheckIns/{plate}`. A walk-in later checked
+   out keeps a stale row; if the plate returns, a credit check-in throws
+   `ALREADY_CHECKED_IN`. `AdminCapacity` can paint a freed spot with the stale
+   plate label.
+5. **[MED] Listener + popstate leak; page returns no cleanup.** The default export
+   returns nothing, so the router's cleanup is null. Teardown relies solely on a
+   `popstate` listener (`:513`), but in-app sidebar navigation uses `pushState`
+   (no `popstate`). Every visit adds a permanent `onSnapshot('bookings')`
+   listener — a steady leak on a page staff live in all day. Return
+   `() => { unsub(); window.removeEventListener('popstate', …) }`.
+6. **[MED] Double-click / re-render race on check-in & check-out.** The handler
+   disables the button synchronously, but the live subscription re-renders the
+   whole `<tbody>` on **every** snapshot (incl. unrelated changes), replacing the
+   disabled button with a fresh enabled one. `checkInBooking`/`checkOutBooking`
+   are plain read-then-write with no idempotency guard → a snapshot mid-action
+   re-enables the button and a second click double-runs (double spot assignment).
+7. **[MED] Pay-at-pickup amount due not shown on the row; collection is optional
+   and unguarded.** The only unpaid signal on the tab is the red badge; the amount
+   appears only inside the Collect dialog. Check-in and Collect are independent —
+   an agent can check a car in and never collect, with nothing flagging the still-
+   unpaid `active` booking.
+8. **[MED] Mobile uses a horizontally-scrolling table, not the documented card
+   layout.** `renderTable` (`:441`) emits a `<table>` in `overflow-x-auto`. v1.7
+   §C2/§C7 specified vertical cards + a 3-dot action menu below `md`. Staff on
+   phones must scroll horizontally to reach the rightmost action column — the
+   primary real-world use case.
+9. **[LOW] No subscription error state; empty masquerades as loading.**
+   `subscribeCollection` passes no `onSnapshot` error callback. A listener error
+   leaves the table on its initial render; first paint shows the populated empty
+   state ("Nicio rezervare în acest interval") instead of a loader.
+10. **[LOW] Plate search doesn't strip spaces.** `matchesSearch` lowercases but
+    keeps spaces, while plates are stored without them. Typing "B 123 ABC" returns
+    zero results.
+11. **[LOW] Hardcoded English "to" in the custom-range value** (`:400`). Briefly
+    visible in RO before flatpickr reformats.
+12. **[LOW] Dead code:** `bucharestDate` (`:57`) never called; `where`, `qs`
+    imported unused.
+13. **[LOW] Fragile XSS soft spot:** `paymentStatusBadge` (`:167`) emits the
+    `paidBy` chip and a status fallback raw — currently server-controlled enums so
+    not exploitable, but unsafe if those fields ever become free-text.
+
+**Correct (not re-flagged):** `checkins.*`/`transactions.*` i18n parity is
+complete; Cancel is confirm- and permission-gated (and re-checked server-side);
+the modal's balance lookup is race-safe; `cancelBookingWithRefund` is idempotent
+on terminal states; the collect dialog disables submit and restores on error.
