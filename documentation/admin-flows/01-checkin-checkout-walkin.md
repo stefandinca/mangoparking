@@ -149,22 +149,27 @@ standalone action and not a balance lookup.
    now call `createCreditCheckInBooking`, writing an `active` booking **and** the
    `activeCheckIns/{plate}` row, so commuters appear on the Check-out tab.
    Follow-up fixed today: the Check-out tab filtered credit bookings by their
-   check-in day's date window, and Overdue excludes credit — so a commuter
+   check-in day's date window (and Overdue then excluded credit), so a commuter
    checked in on a *previous* day was hidden on every tab and stranded `active`
    forever (plate stuck "checked in" on `/admin/capacity`, blocking re-check-in
    with `ALREADY_CHECKED_IN`). Now active credit bookings always show on
-   Check-out regardless of window (`AdminCheckIns.js` `renderBody`/`counts`).
+   Check-out regardless of window (`AdminCheckIns.js` `renderBody`/`counts`), and
+   overstayed commuters also surface on Overdue (Bug 3).
 2. **[PARTLY FIXED] Plate normalization mismatch on cancel cleanup.**
    `index.js:69` `normalizePlate` strips spaces **and** hyphens. `markNoShows`
    (`scheduled.js:303`) already strips both. `cancelBookingWithRefund`
    (`index.js:1699`) stripped spaces only — fixed today to call `normalizePlate`,
    so cancelling an active hyphenated-plate booking now deletes its
    `activeCheckIns` row.
-3. **[FIXED] "Taxează depășire" (charge overstay) works.** `openOverstayDialog`
-   (suggests extra-days × daily rate, editable) → `adminChargeOverstay` records
-   the cash/cashbook entry + a `lateFee` transaction. Also fixed today: it no
-   longer fires for **commuter** check-outs (their `pickupAt` == check-in time
-   would otherwise raise a bogus "late by N days" charge).
+3. **[FIXED] "Taxează depășire" (charge overstay) works for both types.**
+   `openOverstayDialog` (suggests extra-days × rate, editable) →
+   `adminChargeOverstay` records the cash/cashbook entry + a `lateFee`
+   transaction. Overstay now also applies to **commuters**: their deadline is
+   **20:00 Europe/Bucharest on the check-in day** (operating-hours end, matching
+   the 7PM "overnight fee" reminder), +2h grace → past 22:00 they owe extra
+   days valued at the per-credit price. Long-term still uses scheduled pick-up +
+   the booking's own daily rate. (`pickupDeadlineMs`/`overstayInfo` in
+   `AdminCheckIns.js`.)
 4. **[FIXED] `activeCheckIns` lifecycle.** `checkOutBooking` now frees the spot
    **and** deletes `activeCheckIns/{normalizedPlate}`; cancel does the same (Bug 2).
    Remaining by design: the Check-in tab (`checkInBooking`, long-term) does not

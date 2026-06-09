@@ -27,6 +27,7 @@ import { subscribeCollection, getCollection, getDocument, where } from '../../fi
 import { showToast } from '../../components/core/Toast.js';
 import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { checkInBooking, checkOutBooking } from '../../services/bookingService.js';
+import { getTokenPacks } from '../../services/tokenService.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
@@ -65,6 +66,52 @@ function bucharestDate(iso) {
       year: 'numeric', month: '2-digit', day: '2-digit',
     }).format(d);
   } catch { return null; }
+}
+
+// Europe/Bucharest UTC offset (minutes) at a given instant — anchors the
+// commuter 20:00 cutoff to local wall-clock time across DST.
+function bucharestOffsetMinutes(date) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Bucharest', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const p = dtf.formatToParts(date).reduce((a, x) => { a[x.type] = x.value; return a; }, {});
+  const hour = +p.hour === 24 ? 0 : +p.hour;
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, hour, +p.minute, +p.second);
+  return Math.round((asUtc - date.getTime()) / 60000);
+}
+
+// Absolute ms for `hour`:00 Europe/Bucharest on the local calendar day of `iso`.
+function bucharestCutoffMs(iso, hour = 20) {
+  const day = bucharestDate(iso);
+  if (!day) return null;
+  const guessUtc = Date.parse(`${day}T${String(hour).padStart(2, '0')}:00:00Z`);
+  if (!Number.isFinite(guessUtc)) return null;
+  const off = bucharestOffsetMinutes(new Date(guessUtc));
+  return guessUtc - off * 60000;
+}
+
+// The instant a booking's 2h overstay grace starts. Long-term: the scheduled
+// pick-up. Credit/commuter: 20:00 Europe/Bucharest on the check-in day — the
+// end of operating hours (matches the commuter 7PM "overnight fee" reminder).
+function pickupDeadlineMs(b) {
+  if (b.type === 'credit') {
+    return bucharestCutoffMs(b.checkinTimestamp || b.startDate, 20);
+  }
+  const pickup = b.pickupAt || b.endDate;
+  if (!pickup) return null;
+  const ms = new Date(pickup).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// Cheapest per-credit price across the active packs (matches BookingCredits'
+// custom-quantity rate). Used to value a commuter's overstay days.
+function perCreditPrice(packs) {
+  const rates = (packs || [])
+    .map((p) => Number(p.price) / Number(p.quantity))
+    .filter((r) => Number.isFinite(r) && r > 0);
+  return rates.length ? Math.round(Math.min(...rates)) : 0;
 }
 
 // Returns [startISO, endISO] for the active window. Accepts either a
@@ -135,12 +182,11 @@ function matchesSearch(b, q) {
 
 function isOverdue(booking) {
   if (booking.status !== 'active') return false;
-  // Commuters (credit) have no scheduled pick-up — they park for the day and
-  // leave when they leave, so "overdue" doesn't apply.
-  if (booking.type === 'credit') return false;
-  if (!booking.pickupAt && !booking.endDate) return false;
-  const pickup = booking.pickupAt || booking.endDate;
-  return Date.now() > new Date(pickup).getTime() + OVERDUE_THRESHOLD_MS;
+  // Both types can overstay: long-term past their pick-up, commuters past the
+  // 20:00 cutoff on their check-in day. pickupDeadlineMs encodes both.
+  const dl = pickupDeadlineMs(booking);
+  if (dl == null) return false;
+  return Date.now() > dl + OVERDUE_THRESHOLD_MS;
 }
 
 // Which timestamp decides Check-out-tab window membership. A commuter
@@ -152,10 +198,9 @@ function checkoutDate(b) {
 }
 
 function hoursOver(booking) {
-  const pickup = booking.pickupAt || booking.endDate;
-  if (!pickup) return 0;
-  const diffMs = Date.now() - new Date(pickup).getTime();
-  return Math.max(0, Math.floor(diffMs / 3_600_000));
+  const dl = pickupDeadlineMs(booking);
+  if (dl == null) return 0;
+  return Math.max(0, Math.floor((Date.now() - dl) / 3_600_000));
 }
 
 // Extra days owed when a car is checked out after its pick-up time. Uses
@@ -163,17 +208,22 @@ function hoursOver(booking) {
 // extra day at the booking's own daily rate (totalPrice / days). Returns
 // null when there's nothing extra to collect. Drives the late-check-out
 // warning so an agent never silently completes an overstay.
-function overstayInfo(b) {
-  const pickup = b.pickupAt || b.endDate;
-  if (!pickup) return null;
-  const pickMs = new Date(pickup).getTime();
-  if (!Number.isFinite(pickMs)) return null;
-  const overMs = Date.now() - pickMs - OVERDUE_THRESHOLD_MS;
+function overstayInfo(b, perCredit = 0) {
+  const dl = pickupDeadlineMs(b);
+  if (dl == null) return null;
+  const overMs = Date.now() - dl - OVERDUE_THRESHOLD_MS;
   if (overMs <= 0) return null;
   const daysLate = Math.max(1, Math.ceil(overMs / 86_400_000));
-  const days = Number(b.days) || 0;
-  const total = Number(b.totalPrice) || 0;
-  const perDay = days > 0 ? Math.round(total / days) : 0;
+  // Long-term: the booking's own daily rate. Commuter: each extra day is
+  // another credit, valued at the standard per-credit price.
+  let perDay;
+  if (b.type === 'credit') {
+    perDay = perCredit;
+  } else {
+    const days = Number(b.days) || 0;
+    const total = Number(b.totalPrice) || 0;
+    perDay = days > 0 ? Math.round(total / days) : 0;
+  }
   return { daysLate, perDay, amount: daysLate * perDay };
 }
 
@@ -388,6 +438,9 @@ export default async function AdminCheckIns(container) {
 
   // Pull users once for the walk-in modal (matches the AdminTransactions pattern).
   const users = await getCollection('users').catch(() => []);
+  // Credit packs → per-credit price, used to value a commuter's overstay days.
+  const creditPacks = await getTokenPacks().catch(() => []);
+  const creditPerDay = perCreditPrice(creditPacks);
 
   // Live booking data — single subscription, filtered client-side per tab.
   let bookings = [];
@@ -541,9 +594,8 @@ export default async function AdminCheckIns(container) {
     if (activeTab === 'checkout') {
       const range = windowRange(activeWindow);
       // An active booking is physically on the lot and must always be
-      // checkable-out. Commuters (credit) have no real pick-up deadline and
-      // are bucketed by check-in day, so a date window would hide one
-      // checked in on an earlier day (and Overdue excludes credit) —
+      // checkable-out. Commuters (credit) are bucketed by their check-in day,
+      // so a date window would hide one checked in on an earlier day —
       // stranding it "checked in" forever. Always include active credit
       // bookings; keep the window for long-term.
       const rows = bookings
@@ -656,10 +708,9 @@ export default async function AdminCheckIns(container) {
         await checkInBooking(bookingId);
         showToast(t('checkins.toastCheckedIn'), 'success');
       } else if (action === 'checkout') {
-        // Commuters (credit) have no scheduled pick-up — their pickupAt is
-        // just their check-in time, so overstayInfo would raise a bogus
-        // "late by N days" charge. Only long-term bookings can overstay.
-        const over = booking.type === 'credit' ? null : overstayInfo(booking);
+        // Overstay applies to both: long-term past their pick-up, commuters
+        // past the 20:00 cutoff on their check-in day (valued per-credit).
+        const over = overstayInfo(booking, creditPerDay);
         if (over) {
           const ok = await confirmModal(
             t('checkins.lateCheckoutWarn', { days: over.daysLate, amount: over.amount }),
@@ -685,7 +736,7 @@ export default async function AdminCheckIns(container) {
         await cancelBookingFn({ bookingId });
         showToast(t('checkins.toastCancelled'), 'success');
       } else if (action === 'overstay') {
-        await openOverstayDialog({ booking });
+        await openOverstayDialog({ booking, perCredit: creditPerDay });
       }
     } catch (err) {
       console.error(action, err);
@@ -817,9 +868,9 @@ function openCollectPaymentDialog({ orderId, booking }) {
 // ── Overstay charge dialog ──────────────────────────────────────────────
 // Suggests an amount (extra days × the booking's own daily rate) and lets
 // the agent edit it before recording the charge (cash → cashbook).
-function openOverstayDialog({ booking }) {
+function openOverstayDialog({ booking, perCredit = 0 }) {
   return new Promise((resolve) => {
-    const info = overstayInfo(booking) || { daysLate: 1, perDay: 0, amount: 0 };
+    const info = overstayInfo(booking, perCredit) || { daysLate: 1, perDay: 0, amount: 0 };
     const form = html`<form class="space-y-4" data-overstay-form>
       <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.overstayTitle')}</h3>
       <div class="rounded-xl bg-mango/10 border border-mango/30 px-4 py-3">
