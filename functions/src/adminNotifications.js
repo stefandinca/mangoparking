@@ -114,24 +114,22 @@ export const adminNotifyUserCreated = onDocumentCreated(
   async (event) => {
     const u = event.data?.data();
     if (!u?.email) return;
-    // Skip admin-created accounts (adminCreateUser stamps createdBy) and
-    // invite signups (adminSendInvite leaves a pendingInvites doc) — staff
-    // already know about those.
-    if (u.createdBy) return;
     const db = getFirestore();
-    const invite = await db.collection('pendingInvites').doc(String(u.email).toLowerCase()).get().catch(() => null);
-    if (invite?.exists) return;
 
     if (!(await claimOnce(db.collection('users').doc(event.params.uid), 'adminNotifiedAt'))) return;
 
+    // How the account came to be, so staff can tell self-signups apart from
+    // accounts they created/invited themselves.
+    const via = u.createdBy ? `creat de admin (${u.createdBy})` : 'înregistrare proprie';
     await notifyAdmin({
-      subject: `Înregistrare nouă: ${u.displayName || u.email}`,
+      subject: `Cont nou: ${u.displayName || u.email}`,
       heading: 'Cont nou creat',
       rows: [
         ['Nume', escHtml(u.displayName || '—')],
         ['Email', mailto(u.email)],
         ['Telefon', escHtml(u.phone || '—')],
         ['Rol', escHtml(u.role || 'customer')],
+        ['Mod', escHtml(via)],
         ['Limbă', escHtml((u.locale || 'ro').toUpperCase())],
         ['Creat', escHtml(fmtDateTime(u.createdAt))],
       ],
@@ -148,10 +146,10 @@ export const adminNotifyBookingCreated = onDocumentCreated(
   async (event) => {
     const b = event.data?.data();
     if (!b) return;
-    // Long-term web reservations only. Walk-in / admin / broker bookings are
-    // created by staff at the desk (source !== 'web'); credit check-ins are
-    // not "reservations".
-    if (b.type !== 'longTerm' || b.source !== 'web') return;
+    // All long-term reservations — web, walk-in, admin and broker. Credit
+    // check-ins (type 'credit') are daily operational check-ins, not
+    // reservations, so they're excluded here.
+    if (b.type !== 'longTerm') return;
 
     if (!(await claimOnce(getFirestore().collection('bookings').doc(event.params.id), 'adminNotifiedAt'))) return;
 
@@ -164,6 +162,7 @@ export const adminNotifyBookingCreated = onDocumentCreated(
       heading: 'Rezervare termen lung nouă',
       rows: [
         ['Cod', escHtml(code)],
+        ['Sursă', escHtml(b.source || 'web') + (b.brokerName ? ` — ${escHtml(b.brokerName)}` : '')],
         ['Nume', escHtml(b.contact?.name || '—')],
         ['Email', mailto(b.contact?.email)],
         ['Telefon', escHtml(b.contact?.phone || '—')],
@@ -174,7 +173,7 @@ export const adminNotifyBookingCreated = onDocumentCreated(
         ['Plată', escHtml(payState)],
       ],
       replyTo: replyToOf(b.contact?.email, b.contact?.name),
-      tags: ['reservation'],
+      tags: ['reservation', b.source || 'web'],
     });
   }
 );
@@ -192,15 +191,40 @@ export const adminNotifyBookingCancelled = onDocumentUpdated(
   async (event) => {
     const before = event.data?.before?.data();
     const after = event.data?.after?.data();
-    if (!after) return;
-    // Only the moment a booking transitions INTO a cancel-ish status.
-    if (before?.status === after.status) return;
+    if (!after || before?.status === after.status) return;
+
+    const ref = getFirestore().collection('bookings').doc(event.params.id);
+    const code = after.code || `LT-${event.params.id.slice(0, 5).toUpperCase()}`;
+
+    // Refund completed (adminMarkRefunded: refund-pending → refunded). Its own
+    // claim field, since the cancel notify already fired on the earlier
+    // transition into refund-pending.
+    if (after.status === 'refunded') {
+      if (!(await claimOnce(ref, 'adminRefundNotifiedAt'))) return;
+      await notifyAdmin({
+        subject: `Refund procesat: ${code} — ${after.licensePlate || '—'}`,
+        heading: 'Refund procesat',
+        rows: [
+          ['Cod', escHtml(code)],
+          ['Nume', escHtml(after.contact?.name || '—')],
+          ['Email', mailto(after.contact?.email)],
+          ['Plăcuță', escHtml(after.licensePlate || '—')],
+          ['Sumă', `${escHtml(String(after.totalPrice ?? 0))} lei`],
+          ['Metodă refund', escHtml(after.refundedVia || '—')],
+          ['Procesat de', escHtml(after.refundedBy || '—')],
+          ['Data', escHtml(fmtDateTime(after.refundedAt))],
+        ],
+        replyTo: replyToOf(after.contact?.email, after.contact?.name),
+        tags: ['refund'],
+      });
+      return;
+    }
+
     const heading = CANCEL_STATES[after.status];
     if (!heading) return;
 
-    if (!(await claimOnce(getFirestore().collection('bookings').doc(event.params.id), 'adminCancelNotifiedAt'))) return;
+    if (!(await claimOnce(ref, 'adminCancelNotifiedAt'))) return;
 
-    const code = after.code || `LT-${event.params.id.slice(0, 5).toUpperCase()}`;
     const by = after.cancelledBy || after.noShowDetectedBy || '—';
     await notifyAdmin({
       subject: `${heading}: ${code} — ${after.licensePlate || '—'}`,
@@ -229,9 +253,6 @@ export const adminNotifyCreditPurchase = onDocumentCreated(
   async (event) => {
     const tx = event.data?.data();
     if (!tx || tx.type !== 'purchase') return;
-    // Skip desk grants — grantCreditsForCash stamps grantedBy. Customer
-    // online/pay-at-pickup purchases leave it unset.
-    if (tx.grantedBy) return;
 
     if (!(await claimOnce(getFirestore().collection('tokenTransactions').doc(event.params.id), 'adminNotifiedAt'))) return;
 
@@ -255,6 +276,9 @@ export const adminNotifyCreditPurchase = onDocumentCreated(
         ['Nume', escHtml(buyerName || '—')],
         ['Email', mailto(buyerEmail)],
         ['Plată', escHtml(tx.paidBy || tx.source || '—')],
+        // Set when an agent grants credits for cash at the desk; absent for
+        // customer online / pay-at-pickup purchases.
+        ['Acordat de', escHtml(tx.grantedBy || '— (online)')],
         ['Data', escHtml(fmtDateTime(tx.timestamp))],
       ],
       replyTo: replyToOf(buyerEmail, buyerName),
@@ -262,3 +286,21 @@ export const adminNotifyCreditPurchase = onDocumentCreated(
     });
   }
 );
+
+// ── password-reset request ─────────────────────────────────────────────────
+// Not a Firestore trigger — called directly from the requestPasswordReset
+// callable AFTER a reset link was generated (i.e. the account exists), so it
+// never fires for unknown emails and can't be used to enumerate accounts.
+export async function notifyAdminPasswordReset({ email, displayName }) {
+  return notifyAdmin({
+    subject: `Resetare parolă cerută: ${displayName || email}`,
+    heading: 'Cerere de resetare parolă',
+    rows: [
+      ['Nume', escHtml(displayName || '—')],
+      ['Email', mailto(email)],
+      ['Data', escHtml(fmtDateTime(new Date().toISOString()))],
+    ],
+    replyTo: replyToOf(email, displayName),
+    tags: ['password-reset'],
+  });
+}

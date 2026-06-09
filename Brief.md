@@ -208,8 +208,9 @@ no-shows are explicit flows.
 - **Brevo email:** Firestore triggers + scheduled jobs send welcome, booking/credit
   confirmation, credit-used, low-credit, reminders (24h, commuter 7PM), refund, invite,
   and password-reset mails (customer-facing, Brevo templates). `adminNotifications.js`
-  also sends inline-HTML ops alerts to rezervari@ on customer signup / reservation /
-  cancellation / credit purchase (no Brevo template). Secret: `BREVO_API_KEY`.
+  also sends inline-HTML ops alerts to rezervari@ on signup / reservation /
+  cancellation / no-show / refund / credit purchase / password-reset — customer and
+  staff-initiated, no Brevo template. Secret: `BREVO_API_KEY`.
 - **SmartBill:** billing identity (PF: name/CNP/CI; PJ: company/CUI via ANAF `lookupCui`,
   24h-cached) is captured on orders/bookings for future invoice generation — no SmartBill
   API calls exist yet.

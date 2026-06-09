@@ -38,6 +38,7 @@ import {
 } from './netopia.js';
 import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
 import { sendRepayPaidEmail, sendRefundIssuedEmail } from './emails.js';
+import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
@@ -2475,6 +2476,9 @@ export const requestPasswordReset = onCall(
           expiresIn: locale === 'en' ? '1 hour' : '1 oră',
         },
       });
+      // Alert staff — only reached when the link generated, i.e. the account
+      // exists; never fires for unknown emails.
+      await notifyAdminPasswordReset({ email, displayName }).catch(() => {});
     } catch (err) {
       // Swallow — never reveal whether the email exists.
       console.warn('requestPasswordReset:', err?.message);
