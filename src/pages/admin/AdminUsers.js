@@ -21,6 +21,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { getCurrentUser } from '../../firebase/auth.js';
 import { isValidEmail } from '../../utils/validators.js';
+import { openUserDetailModal } from '../../components/admin/UserDetailModal.js';
 
 const adminCreateUserFn = httpsCallable(functions, 'adminCreateUser');
 const adminSendInviteFn = httpsCallable(functions, 'adminSendInvite');
@@ -78,6 +79,14 @@ export default function AdminUsers(container) {
   });
   qs('[data-create]', page).addEventListener('click', () => openCreateModal(reload));
   qs('[data-invite]', page).addEventListener('click', () => openInviteModal(reload));
+
+  // Delegate "view detail" clicks on the name cell.
+  rows.addEventListener('click', (e) => {
+    const viewBtn = e.target.closest('[data-action="view"]');
+    if (!viewBtn) return;
+    const user = users.find((u) => u.id === viewBtn.dataset.uid);
+    if (user) openUserDetailModal(user);
+  });
 
   // Delegate delete clicks across all per-role tables.
   rows.addEventListener('click', async (e) => {
@@ -178,7 +187,9 @@ export default function AdminUsers(container) {
                 const currentRole = normalizeRole(u.role);
                 return `
                   <tr class="border-t border-frost-deep">
-                    <td class="px-4 py-3">${escapeHtml(u.displayName || '—')}${isSelf ? ` <span class="text-[11px] text-dim ml-1">${t('admin.usersYou')}</span>` : ''}</td>
+                    <td class="px-4 py-3">
+                      <button data-action="view" data-uid="${escapeHtml(u.id)}" class="text-left font-medium text-blueberry hover:text-blueberry-hover hover:underline transition-colors">${escapeHtml(u.displayName || u.email || '—')}</button>${isSelf ? ` <span class="text-[11px] text-dim ml-1">${t('admin.usersYou')}</span>` : ''}
+                    </td>
                     <td class="px-4 py-3 font-mono text-[13px]">${escapeHtml(u.email || '—')}</td>
                     <td class="px-4 py-3 text-dim">${fmtDate(u.createdAt)}</td>
                     <td class="px-4 py-3">

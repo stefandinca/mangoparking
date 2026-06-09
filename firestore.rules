@@ -128,7 +128,8 @@ service cloud.firestore {
     // configured amount. Client cannot update/delete — the IPN callback
     // (admin SDK) flips status to 'redeemed' atomically with fulfilment.
     match /vouchers/{voucherId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Owner reads their own; admin reads any (for the /admin/users detail view).
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated()
                     && voucherId == request.auth.uid
                     && request.resource.data.userId == request.auth.uid
