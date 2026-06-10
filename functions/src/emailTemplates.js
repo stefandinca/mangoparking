@@ -39,8 +39,8 @@ const TEMPLATES = {
 
   // Vouchers — paste email-templates/voucher-assigned-*.html into Brevo, then
   // drop the numeric IDs here. Until set, the send skips gracefully.
-  'voucher-assigned-ro':            null,
-  'voucher-assigned-en':            null,
+  'voucher-assigned-ro':            23,
+  'voucher-assigned-en':            24,
 
   // Reminders (scheduled)
   'reminder-checkin-24h-ro':        15,
