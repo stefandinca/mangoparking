@@ -28,7 +28,7 @@ Booking records now store the actually-charged amount.
 
 | # | Item | Resolution |
 |---|------|-----------|
-| 23 | Homepage "de la 29 lei" vs "de la 22" | **Not yet done** — the hero hardcodes `29`; should read the cheapest tier dynamically. See Backlog. |
+| 23 | Homepage "de la 29 lei" vs "de la 22" | Fixed — the hero badge now reads the real cheapest tier (same `[data-long-from]` hook as the pricing preview). |
 
 ## Cluster C — booking flow & copy
 
@@ -68,7 +68,6 @@ Booking records now store the actually-charged amount.
 
 ## Backlog (not done this round)
 
-- **#23** homepage hero "de la 29 lei" → derive from the cheapest tier.
 - **#14** larger body font across all email templates (Brevo design pass).
 - Broker/prepaid (ParkVia) separate evidence + booking-code prefixes
   (LT0001 / N0001) — mentioned in the original list, not scoped here.
