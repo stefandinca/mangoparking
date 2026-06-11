@@ -5,7 +5,7 @@ import { html } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { getLongTermRates } from '../../services/longTermService.js';
-import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
+import { getOnlineDiscountPercent, onlineFromStandard } from '../../services/discountService.js';
 
 export default async function Pricing(container) {
   const locale = getLocale();
@@ -25,15 +25,15 @@ export default async function Pricing(container) {
   ]);
   const bestPack = packs.reduce((best, p) => (!best || p.quantity > best.quantity) ? p : best, null);
 
-  // Render an online price with an optional strikethrough "original" anchor.
-  // The discount is explained once per section (below), not crammed into
-  // each card, so the cards stay clean.
-  function priceBlock(online, suffix = 'lei') {
-    const original = originalFromOnline(online, discount);
-    const hasAnchor = original != null && original !== online;
+  // Render a standard price with the discounted online price as the headline
+  // and the standard price struck through. The discount is explained once per
+  // section (below), not crammed into each card, so the cards stay clean.
+  function priceBlock(standard, suffix = 'lei') {
+    const online = onlineFromStandard(standard, discount);
+    const hasDiscount = online != null;
     return `
-      ${hasAnchor ? `<p class="font-mono text-[14px] text-dim line-through leading-none mb-1">${original} ${suffix}</p>` : ''}
-      <p class="font-mono text-2xl font-bold text-blueberry-deep leading-none">${online} ${suffix}</p>
+      ${hasDiscount ? `<p class="font-mono text-[14px] text-dim line-through leading-none mb-1">${standard} ${suffix}</p>` : ''}
+      <p class="font-mono text-2xl font-bold text-blueberry-deep leading-none">${hasDiscount ? online : standard} ${suffix}</p>
     `;
   }
 
@@ -80,17 +80,17 @@ export default async function Pricing(container) {
         <p class="text-dim text-[15px] mb-6">${t('longTerm.tierNote')}</p>
         <div class="grid sm:grid-cols-3 gap-4 mb-6">
           ${rates.tiers.map((tier) => {
-            const original = originalFromOnline(tier.perDay, discount);
-            const showAnchor = original != null && original !== tier.perDay;
+            const online = onlineFromStandard(tier.perDay, discount);
+            const showAnchor = online != null;
             const range = `${tier.minDays}${tier.maxDays ? `–${tier.maxDays}` : '+'} ${t('longTerm.days')}`;
             return `
             <div class="relative overflow-hidden rounded-2xl bg-white border border-frost-deep shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
               <div class="absolute inset-y-0 left-0 w-1.5 bg-blueberry"></div>
               <div class="p-5 pl-6">
                 <p class="text-[11px] uppercase tracking-wider text-dim font-mono">${range}</p>
-                ${showAnchor ? `<p class="font-mono text-[13px] text-dim line-through leading-none mt-2.5">${original}</p>` : ''}
+                ${showAnchor ? `<p class="font-mono text-[13px] text-dim line-through leading-none mt-2.5">${tier.perDay}</p>` : ''}
                 <div class="flex items-baseline gap-1 ${showAnchor ? 'mt-0.5' : 'mt-2.5'}">
-                  <span class="font-heading font-bold text-4xl text-blueberry-deep leading-none">${tier.perDay}</span>
+                  <span class="font-heading font-bold text-4xl text-blueberry-deep leading-none">${showAnchor ? online : tier.perDay}</span>
                   <span class="text-dim text-[14px]">${t('longTerm.perDay')}</span>
                 </div>
               </div>

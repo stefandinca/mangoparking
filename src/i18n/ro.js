@@ -1099,7 +1099,7 @@ export default {
 
   // Online payment discount
   discount: {
-    online: 'include {percent}% reducere pentru plata online',
+    online: '−{percent}% la plata online',
     settingsTitle: 'Discount plată online',
     settingsHint: 'Procent aplicat tuturor prețurilor (0 = fără discount). Recomandat: 10%.',
     settingsLabel: 'Procent discount (%)',
@@ -1236,7 +1236,7 @@ export default {
     method: {
       title: 'Metodă de plată',
       online: 'Plătesc online acum',
-      onlineHint: 'Prețul afișat include deja reducerea online.',
+      onlineHint: 'Reducerea pentru plata online se aplică la finalizare.',
       pickup: 'Plătesc la sosire (cash sau card)',
       pickupHint: 'Plata se face direct la parcare. Tarif fără reducere.',
     },

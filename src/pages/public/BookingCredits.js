@@ -5,7 +5,7 @@ import { html, delegate, setFieldError, clearErrorOnInput } from '../../utils/do
 import { updateMeta } from '../../utils/seo.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { startNetopiaPayment } from '../../services/netopiaService.js';
-import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
+import { getOnlineDiscountPercent, onlineFromStandard } from '../../services/discountService.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
 import { getMyVoucher } from '../../services/voucherService.js';
 import { previewVoucher, normalizeCode } from '../../services/promoVoucherService.js';
@@ -117,8 +117,8 @@ export default async function Booking(container) {
       const isSelected = selectedPack?.id === p.id;
       const name = locale === 'ro' && p.nameRo ? p.nameRo : p.name;
       const perDay = p.quantity > 0 ? Math.round(p.price / p.quantity) : p.price;
-      const orig = originalFromOnline(p.price, discount);
-      const showAnchor = orig != null && orig !== p.price;
+      const online = onlineFromStandard(p.price, discount);
+      const showAnchor = online != null;
       return `
         <button data-pack-id="${p.id}" class="group relative overflow-hidden rounded-2xl bg-white border-2 ${isSelected ? 'border-mango ring-2 ring-mango/30' : 'border-frost-deep hover:border-blueberry/40'} shadow-sm text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
           <div data-stripe class="absolute inset-y-0 left-0 w-1.5 ${isSelected ? 'bg-mango' : 'bg-blueberry'}"></div>
@@ -132,9 +132,9 @@ export default async function Booking(container) {
             </div>
             <p class="text-dim text-[13px] mt-1.5">≈ ${perDay} ${t('longTerm.perDay')}</p>
             <div class="mt-4 pt-4 border-t border-frost-deep">
-              ${showAnchor ? `<p class="font-mono text-[13px] text-dim line-through leading-none mb-0.5">${orig} lei</p>` : ''}
+              ${showAnchor ? `<p class="font-mono text-[13px] text-dim line-through leading-none mb-0.5">${p.price} lei</p>` : ''}
               <div class="flex items-baseline gap-1">
-                <span class="font-mono font-bold text-xl text-blueberry-deep">${p.price}</span>
+                <span class="font-mono font-bold text-xl text-blueberry-deep">${showAnchor ? online : p.price}</span>
                 <span class="text-dim text-[13px]">lei</span>
               </div>
             </div>
@@ -302,10 +302,10 @@ export default async function Booking(container) {
     if (qty <= 0) {
       summary.innerHTML = `<p class="text-dim/60">${t('credit.selectPack')}</p>`;
     } else {
-      const orig = originalFromOnline(onlinePrice, discount);
+      const online = onlineFromStandard(onlinePrice, discount);
       const isPickup = paymentMethod === 'pay-at-pickup';
-      const displayPrice = isPickup && orig ? orig : onlinePrice;
-      const showAnchor = !isPickup && orig != null && orig !== onlinePrice;
+      const displayPrice = (!isPickup && online != null) ? online : onlinePrice;
+      const showAnchor = !isPickup && online != null;
       const voucherActive = !isPickup && voucher && voucher.status === 'unused' && onlinePrice > voucher.amount && !promoVoucher;
       const promoActive = !isPickup && promoVoucher?.discountAmount > 0;
       const promoLine = promoActive
@@ -314,7 +314,7 @@ export default async function Booking(container) {
       summary.innerHTML = `
         <div class="flex justify-between items-center mb-1"><span>${qty} ${t('credit.plural')}</span>
           <div class="text-right">
-            ${showAnchor ? `<div class="font-mono text-[13px] text-dim line-through leading-none">${orig} lei</div>` : ''}
+            ${showAnchor ? `<div class="font-mono text-[13px] text-dim line-through leading-none">${onlinePrice} lei</div>` : ''}
             <div class="font-mono font-semibold">${displayPrice} lei</div>
             ${showAnchor ? `<div class="text-[10px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</div>` : ''}
           </div>
@@ -444,11 +444,14 @@ export default async function Booking(container) {
         const plate = plateInput?.value.trim();
         if (!plate) { setVoucherError(t('voucher.errorNeedPlate')); return; }
         const base = (function () {
-          const qty = customQty || selectedPack?.quantity || 0;
           const price = selectedPack
             ? (customQty ? (customQty * (selectedPack.price / selectedPack.quantity)) : selectedPack.price)
             : 0;
-          return Math.round(price);
+          const standard = Math.round(price);
+          // Server applies the online discount before the voucher — preview
+          // against the discounted online amount to match the charge.
+          const online = onlineFromStandard(standard, discount);
+          return online != null ? online : standard;
         })();
         if (!base) { setVoucherError(t('voucher.errorNoBase')); return; }
         applyBtn.disabled = true;

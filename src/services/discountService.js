@@ -2,12 +2,14 @@
 //
 // Stored on `settings/global.onlineDiscountPercent` (admin-editable).
 // All prices in the database (`tokenPacks.price`, `longTermRates.tiers[].perDay`,
-// etc.) are the FINAL prices customers pay online. The "original" (anchor)
-// price shown crossed-out is computed on display:
+// etc.) are the STANDARD prices — what a customer pays on-site / at pickup.
+// Paying online applies a REAL discount on top, computed both on display and
+// at charge time (createPayment performs the same reduction server-side):
 //
-//     original = round(online / (1 - discount / 100))
+//     online = round(standard * (1 - discount / 100))
 //
-// e.g. 10% discount + online 90 lei → original 100 lei.
+// e.g. 10% discount + standard 100 lei → online 90 lei. Pay-at-pickup orders
+// are charged the standard price unchanged.
 
 import { getDocument, setDocument } from '../firebase/db.js';
 import { auditLog } from './auditService.js';
@@ -37,13 +39,15 @@ export async function saveOnlineDiscountPercent(percent) {
   await auditLog('online_discount_updated', 'settings', 'global', null, { onlineDiscountPercent: clean });
 }
 
-// Compute the strikethrough "original" price given the online price.
-// Returns null when no meaningful discount is configured (anchor identical
-// or zero) so callers can skip rendering the strikethrough.
-export function originalFromOnline(onlinePrice, discountPercent) {
-  const p = Number(onlinePrice);
+// Compute the discounted online price from the standard (listed) price.
+// Returns null when no meaningful discount applies (zero/invalid percent, or
+// rounding leaves the price unchanged) so callers can skip the strikethrough
+// anchor + "-X% online" badge.
+export function onlineFromStandard(standardPrice, discountPercent) {
+  const p = Number(standardPrice);
   const d = Number(discountPercent);
   if (!Number.isFinite(p) || p <= 0) return null;
   if (!Number.isFinite(d) || d <= 0) return null;
-  return Math.round(p / (1 - d / 100));
+  const online = Math.round(p * (1 - d / 100));
+  return online < p ? online : null;
 }

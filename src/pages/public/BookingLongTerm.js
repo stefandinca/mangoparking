@@ -6,7 +6,7 @@ import { updateMeta } from '../../utils/seo.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
 import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
 import { startNetopiaPayment } from '../../services/netopiaService.js';
-import { getOnlineDiscountPercent, originalFromOnline } from '../../services/discountService.js';
+import { getOnlineDiscountPercent, onlineFromStandard } from '../../services/discountService.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getMyVoucher } from '../../services/voucherService.js';
@@ -367,12 +367,13 @@ export default function BookingLongTerm(container) {
     quote = { ...calculateLongTermCost(days, ratesForQuote), hours };
     // Re-render tier cards so the active badge + numbers stay in sync.
     renderTiers();
-    const original = originalFromOnline(quote.total, discount);
+    // Stored tier prices are the STANDARD (on-site) price. Online pays a real
+    // discount on top, so online shows the discounted total with the standard
+    // price struck through; pay-at-pickup pays the standard price as-is.
+    const onlineTotal = onlineFromStandard(quote.total, discount);
     const isPickup = paymentMethod === 'pay-at-pickup';
-    const displayTotal = isPickup && original ? original : quote.total;
-    const displayPerDay = isPickup && original && quote.days
-      ? Math.round(original / quote.days)
-      : quote.perDay;
+    const displayTotal = (!isPickup && onlineTotal != null) ? onlineTotal : quote.total;
+    const displayPerDay = quote.perDay;
     // Promo voucher application — only on online payments. The displayed
     // total subtracts the discount; the voucher amount is also passed
     // into createPayment which re-validates server-side.
@@ -428,8 +429,9 @@ export default function BookingLongTerm(container) {
     // Strikethrough anchor + discount badge — only on the online branch.
     // For pay-at-pickup the displayed total IS the original, so there's
     // nothing left to strike through.
-    if (!isPickup && original != null && original !== quote.total) {
-      originalEl.textContent = `${original} lei`;
+    if (!isPickup && onlineTotal != null) {
+      // Anchor = the standard (pre-discount) total, struck through.
+      originalEl.textContent = `${quote.total} lei`;
       originalEl.classList.remove('hidden');
       discountBadgeEl.textContent = t('discount.online', { percent: discount });
       discountBadgeEl.classList.remove('hidden');
@@ -637,8 +639,10 @@ export default function BookingLongTerm(container) {
   }
 
   function voucherEligibleBase() {
-    // The server expects the ONLINE base (before pay-at-pickup gross-up).
-    return Number(quote?.total) || 0;
+    // The server applies the online discount BEFORE the voucher, so preview
+    // against the discounted online amount to match the pay-time charge.
+    const onlineTotal = onlineFromStandard(quote?.total, discount);
+    return Number(onlineTotal != null ? onlineTotal : quote?.total) || 0;
   }
 
   if (applyBtn) {
@@ -862,7 +866,8 @@ export default function BookingLongTerm(container) {
         dropoffAt: dropoffIso,
         pickupAt: pickupIso,
         days,
-        // Always send the ONLINE total (server grosses up for pay-at-pickup).
+        // Always send the STANDARD total (server applies the online discount
+        // for online orders; pay-at-pickup pays this as-is).
         totalPrice: quote.total,
         // Voucher only applies to the online branch.
         voucherId: paymentMethod === 'online' ? voucherIdToSend : null,

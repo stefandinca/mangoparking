@@ -1098,7 +1098,7 @@ export default {
 
   // Online payment discount
   discount: {
-    online: 'includes a {percent}% discount for paying online',
+    online: '−{percent}% when you pay online',
     settingsTitle: 'Online-payment discount',
     settingsHint: 'Applied to all displayed prices (0 = no discount). Recommended: 10%.',
     settingsLabel: 'Discount percent (%)',
@@ -1235,7 +1235,7 @@ export default {
     method: {
       title: 'Payment method',
       online: 'Pay online now',
-      onlineHint: 'The price shown already includes the online discount.',
+      onlineHint: 'The online-payment discount is applied at checkout.',
       pickup: 'Pay on arrival (cash or card)',
       pickupHint: 'Paid at the lot. Full price, no discount.',
     },

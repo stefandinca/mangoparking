@@ -224,6 +224,13 @@ async function createBookingFromOrder(orderId, order) {
   // correct paymentStatus atomically — the onBookingCreated trigger
   // reads this exact snapshot to pick the email-template branch.
   const isPickup = order.paymentMethod === 'pay-at-pickup';
+  // The booking total is what the customer is actually charged: online =
+  // standard price minus the online discount (and any voucher), pay-at-pickup
+  // = the standard price. `order.amount` carries that; fall back to the
+  // standard total only for older orders that predate the field.
+  const chargedAmount = Number.isFinite(Number(order.amount))
+    ? Math.round(Number(order.amount))
+    : Number(order.totalPrice);
   const bookingRef = await db.collection('bookings').add({
     code: generateBookingCode('longTerm'),
     type: 'longTerm',
@@ -236,9 +243,9 @@ async function createBookingFromOrder(orderId, order) {
     dropoffAt: order.dropoffAt || null,
     pickupAt: order.pickupAt || null,
     days: order.days,
-    basePrice: order.totalPrice,
+    basePrice: chargedAmount,
     latePrice: 0,
-    totalPrice: order.totalPrice,
+    totalPrice: chargedAmount,
     status: 'upcoming',
     contact: {
       name: order.customerData.name || '',
@@ -312,9 +319,9 @@ export const createPayment = onRequest(
     const orderId = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const paymentMethod = body.paymentMethod === 'pay-at-pickup' ? 'pay-at-pickup' : 'online';
 
-    // Compute amount (RON) per funnel. Stored prices are the ONLINE
-    // (post-discount) amount; pay-at-pickup loses the discount, so we
-    // gross up to the "original" anchor price.
+    // Compute amount (RON) per funnel. Stored prices are the STANDARD
+    // (on-site) price; online orders get the online-payment discount
+    // applied below, pay-at-pickup orders pay the standard price unchanged.
     let amount;
     let details;
     // Authoritative day-count + daily rate from the long-term recompute —
@@ -378,13 +385,15 @@ export const createPayment = onRequest(
       return res.status(400).json({ error: 'Missing or invalid amount' });
     }
 
-    if (paymentMethod === 'pay-at-pickup') {
-      // Look up the live online-discount percent and undo it to land on
-      // the cash/card price the customer owes at the lot.
+    if (paymentMethod === 'online') {
+      // Apply the live online-payment discount on top of the standard price.
+      // Runs BEFORE voucher resolution so the voucher subtracts from the
+      // already-discounted online amount. Pay-at-pickup skips this entirely
+      // and is charged the standard price.
       const settingsSnap = await getFirestore().collection('settings').doc('global').get();
       const discountPct = Number(settingsSnap.exists ? settingsSnap.data().onlineDiscountPercent : 10);
       if (Number.isFinite(discountPct) && discountPct > 0 && discountPct < 100) {
-        amount = Math.round(amount / (1 - discountPct / 100));
+        amount = Math.round(amount * (1 - discountPct / 100));
       }
     }
 
@@ -582,6 +591,7 @@ export const createPayment = onRequest(
         ...body,
         paymentMethod: 'online',
         paidBy: 'voucher',
+        amount: 0, // fully covered by the days voucher — nothing charged
       });
       pendingDoc.amount = 0;
       pendingDoc.status = 'paid';
@@ -612,7 +622,9 @@ export const createPayment = onRequest(
     // adminMarkOrderPaid callable). createBookingFromOrder writes the
     // correct paymentStatus from order.paymentMethod, no override needed.
     if (paymentMethod === 'pay-at-pickup' && orderType === 'longTerm') {
-      const bookingId = await createBookingFromOrder(orderId, { ...body, paymentMethod });
+      // `amount` here is the standard price (pay-at-pickup gets no discount) —
+      // that's what the customer will owe at the lot.
+      const bookingId = await createBookingFromOrder(orderId, { ...body, paymentMethod, amount });
       pendingDoc.bookingId = bookingId;
     }
 
@@ -2846,9 +2858,9 @@ export const repayOrder = onRequest(
       return res.status(400).json({ error: 'not_repayable' });
     }
 
-    // pending.amount is the gross-up (full lot price). Apply the live
-    // online-discount percent to land on what the customer would have
-    // paid originally — that's what we charge now.
+    // pending.amount is the STANDARD (on-site) price. Apply the live
+    // online-discount percent to land on the online price the customer pays
+    // now by choosing to pay online instead of at the lot.
     const settingsSnap = await db.collection('settings').doc('global').get();
     const discountPct = Number(settingsSnap.exists ? settingsSnap.data().onlineDiscountPercent : 10);
     let amount = Number(pending.amount);
