@@ -890,7 +890,11 @@ export default function BookingLongTerm(container) {
 
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
-    btn.textContent = t('longTerm.processing');
+    // Pay-at-pickup records a reservation (no card charge), so don't say
+    // "processing payment" — say "processing reservation".
+    btn.textContent = paymentMethod === 'pay-at-pickup'
+      ? t('longTerm.processingPickup')
+      : t('longTerm.processing');
 
     // Promo (new system) wins over signup (legacy) — they can't combine.
     // Both apply to online and pay-at-pickup; the server re-validates and
@@ -933,9 +937,23 @@ export default function BookingLongTerm(container) {
       console.error(err);
       showToast(t('common.error'), 'error');
       btn.disabled = false;
-      btn.textContent = t('longTerm.payNow');
+      recompute(); // restores the correct button label for the chosen method
     }
   });
 
+  // #20: if the customer goes to Netopia and hits Back, the browser may
+  // restore this page from the bfcache with the submit button still disabled
+  // (its mid-submit state). Re-enable it on bfcache restore so they can
+  // switch to pay-at-pickup and confirm. recompute() also fixes the label.
+  function onPageShow(e) {
+    if (!e.persisted) return;
+    const btn = page.querySelector('[data-pay-btn]');
+    if (btn) btn.disabled = false;
+    recompute();
+  }
+  window.addEventListener('pageshow', onPageShow);
+
   container.appendChild(page);
+
+  return () => window.removeEventListener('pageshow', onPageShow);
 }

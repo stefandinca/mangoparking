@@ -327,7 +327,9 @@ function rowHtml(b, { tab, locale, canCancel }) {
   if (unpaid && tab !== 'noshow') {
     actions.push(actionButton({ key: 'collect', label: t('checkins.actionCollect'), variant: 'warning', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-order="${escapeHtml(b.paymentId || '')}"` }));
   }
-  if (canCancel && cancellable) {
+  // Cancel belongs on the check-in (not-yet-arrived) tab. On the check-out
+  // tab the car is parked — you check it out, you don't cancel the booking.
+  if (canCancel && cancellable && tab !== 'checkout') {
     actions.push(actionButton({ key: 'cancel', label: t('checkins.actionCancelReservation'), variant: 'danger', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(code)}"` }));
   }
 

@@ -205,7 +205,10 @@ function renderPickup(order, orderId) {
       <p class="font-heading font-semibold text-blueberry-deep mb-1">${t('return.payOnlineNudgeTitle')}</p>
       <p class="text-charcoal/70 text-[14px]">${t('return.payOnlineNudge')}</p>
     </div>
-    <a href="${localePath('/')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
+    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="${localePath('/pay')}?orderId=${encodeURIComponent(orderId)}" class="bg-mango hover:bg-mango/90 text-charcoal font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('return.payOnlineCta')}</a>
+      <a href="${localePath('/')}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-6 py-3 rounded-xl transition-colors">${t('booking.backHome')}</a>
+    </div>
   `;
 }
 
