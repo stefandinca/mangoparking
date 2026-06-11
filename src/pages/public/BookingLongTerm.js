@@ -586,14 +586,23 @@ export default function BookingLongTerm(container) {
     }
     function applyLock() {
       const on = chk.checked;
+      // Keep the fields EDITABLE — disabling them traps the customer when the
+      // contact name is empty (#3). Tint to show they're synced; typing in
+      // them releases the sync (handler below).
       [billingFirst(), billingLast()].forEach((el) => {
         if (!el) return;
-        el.disabled = on;
         el.classList.toggle('bg-frost', on);
-        el.classList.toggle('text-dim', on);
       });
       if (on) syncFromContact();
     }
+    // Typing in a billing-name field while synced means the customer wants a
+    // different billing name — release the sync so they can edit freely.
+    // (Programmatic .value writes in syncFromContact don't dispatch 'input'.)
+    [billingFirst(), billingLast()].forEach((el) => {
+      el?.addEventListener('input', () => {
+        if (chk.checked) { chk.checked = false; applyLock(); }
+      });
+    });
     chk.addEventListener('change', applyLock);
     form.name?.addEventListener('input', syncFromContact);
     // Re-apply after a PF/PJ switch (the PF fields are re-shown) and hide the
