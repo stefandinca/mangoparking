@@ -246,6 +246,12 @@ export default function BookingLongTerm(container) {
 
           <!-- Terms + privacy agreement (separate consents) + pay -->
           <div class="md:col-span-2 flex flex-col items-start gap-3" data-step="terms">
+            <!-- Final to-pay amount, repeated here so it's visible right where
+                 the customer confirms (the live summary card is up top). -->
+            <div class="w-full flex items-baseline justify-between gap-4 rounded-2xl bg-blueberry-deep text-white px-5 py-4">
+              <span class="text-[12px] uppercase tracking-wider font-mono text-white/70">${t('longTerm.totalLabel')}</span>
+              <span class="font-heading font-bold text-3xl" data-pay-total>—</span>
+            </div>
             <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer max-w-full">
               <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
               <span>${t('legal.acceptTerms')}</span>
@@ -278,6 +284,7 @@ export default function BookingLongTerm(container) {
 
   const form = page.querySelector('[data-long-form]');
   const totalEl = page.querySelector('[data-quote-total]');
+  const payTotalEl = page.querySelector('[data-pay-total]');
   const daysEl = page.querySelector('[data-quote-days]');
   const perdayEl = page.querySelector('[data-quote-perday]');
   const hoursLineEl = page.querySelector('[data-quote-hours-line]');
@@ -371,17 +378,29 @@ export default function BookingLongTerm(container) {
     // into createPayment which re-validates server-side.
     let finalTotal = displayTotal;
     if (!isPickup && promoVoucher) {
-      // Days vouchers depend on the live quote — re-derive the discount
-      // whenever dates change so the display matches what the server will
-      // charge (min(remaining days, booked days) × the booking's daily
-      // rate). `daysAvailable` is the identity's remaining balance — days
-      // vouchers are splittable across multiple bookings.
+      // Re-derive the discount from the LIVE quote on every recompute so the
+      // displayed total stays correct when the customer changes dates after
+      // applying a code. The server re-validates at pay time; this is
+      // display-only, but it must mirror the server's formula per type.
       if (promoVoucher.type === 'days' && quote.days) {
+        // min(remaining balance, booked days) × the booking's daily rate.
+        // `daysAvailable` is the identity's remaining balance — days
+        // vouchers are splittable across multiple bookings.
         const available = promoVoucher.daysAvailable ?? promoVoucher.value;
         promoVoucher.daysGranted = Math.min(available, quote.days);
         promoVoucher.discountAmount = Math.min(
           promoVoucher.daysGranted * quote.perDay,
           displayTotal
+        );
+      } else if (promoVoucher.type === 'percent') {
+        promoVoucher.discountAmount = Math.min(
+          Math.round((displayTotal * promoVoucher.value) / 100),
+          Math.max(0, displayTotal - 1)
+        );
+      } else if (promoVoucher.type === 'fixed') {
+        promoVoucher.discountAmount = Math.min(
+          promoVoucher.value,
+          Math.max(0, displayTotal - 1)
         );
       }
       if (promoVoucher.discountAmount) {
@@ -393,6 +412,10 @@ export default function BookingLongTerm(container) {
       renderAppliedVoucher();
     }
     totalEl.textContent = quote.days ? String(finalTotal) : '—';
+    // Mirror the final to-pay amount next to the Pay button at the bottom of
+    // the form, so customers don't have to scroll back up to the summary
+    // card to see what a voucher / date change did to the price.
+    if (payTotalEl) payTotalEl.textContent = quote.days ? `${finalTotal} lei` : '—';
     // Fully-covered booking (days voucher): no Netopia charge happens, so
     // don't advertise Netopia on the submit button.
     const payBtnEl = page.querySelector('[data-pay-btn]');
