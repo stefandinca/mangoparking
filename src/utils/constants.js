@@ -32,7 +32,7 @@ export const CONTACT_ADDRESS = 'Strada Radarului nr. 1, Corbeanca, jud. Ilfov';
 // Registered address is in Bacău; the parking itself operates in Otopeni (see CONTACT_ADDRESS).
 export const COMPANY_LEGAL_NAME = 'TRIO SERVICES COMPACT SRL';
 export const CUI = 'RO32705476';
-export const REG_COM = 'J04/79/2014';
+export const REG_COM = 'J2014000079041';
 export const COMPANY_ADDRESS = 'Str. Castanilor, Nr.1, Sc.B, Ap.13, Bacău, Jud. Bacău';
 export const DPO_EMAIL = 'gdpr@mangoparking.ro'; // TODO(launch): dedicated DPO mailbox
 export const ANPC_SAL_URL = 'https://anpc.ro/ce-este-sal/';

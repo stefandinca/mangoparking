@@ -229,26 +229,9 @@ export default async function Booking(container) {
         </label>
         ${billingFieldsHtml(profile?.billing)}
 
-        <!-- Payment method -->
-        <div class="card-solid rounded-2xl p-6" data-paymethod-block>
-          <h3 class="font-heading font-semibold text-lg mb-4">${t('payment.method.title')}</h3>
-          <div class="grid sm:grid-cols-2 gap-3" data-paymethod-toggle>
-            <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-mango bg-mango/5 cursor-pointer transition-colors">
-              <input type="radio" name="paymentMethod" value="online" class="accent-mango w-4 h-4 mt-0.5" checked>
-              <div class="min-w-0">
-                <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.online')}</p>
-                <p class="text-[13px] text-leaf font-medium mt-0.5">${t('payment.method.onlineHint')}</p>
-              </div>
-            </label>
-            <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-frost-deep cursor-pointer transition-colors">
-              <input type="radio" name="paymentMethod" value="pay-at-pickup" class="accent-mango w-4 h-4 mt-0.5">
-              <div class="min-w-0">
-                <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.pickup')}</p>
-                <p class="text-[13px] text-dim mt-0.5">${t('payment.method.pickupHint')}</p>
-              </div>
-            </label>
-          </div>
-        </div>
+        <!-- Credit packs are online-only (#13b): pay-at-pickup is reserved for
+             walk-ins, which staff handle at the lot and can accept/refuse.
+             paymentMethod stays 'online' for the whole funnel. -->
 
         <!-- Voucher code -->
         <div class="card-solid rounded-2xl p-6" data-voucher-block>
