@@ -186,7 +186,12 @@ function isOverdue(booking) {
   // 20:00 cutoff on their check-in day. pickupDeadlineMs encodes both.
   const dl = pickupDeadlineMs(booking);
   if (dl == null) return false;
-  return Date.now() > dl + OVERDUE_THRESHOLD_MS;
+  // Commuters surface the moment they pass the 20:00 operating-hours cutoff
+  // (no grace) so staff see who's still on the lot after closing (#17). The
+  // extra-day CHARGE keeps the 2h grace (see overstayInfo). Long-term keeps
+  // the 2h grace before showing as overdue.
+  const grace = booking.type === 'credit' ? 0 : OVERDUE_THRESHOLD_MS;
+  return Date.now() > dl + grace;
 }
 
 // Which timestamp decides Check-out-tab window membership. A commuter
@@ -712,12 +717,23 @@ export default async function AdminCheckIns(container) {
         await checkInBooking(bookingId);
         showToast(t('checkins.toastCheckedIn'), 'success');
       } else if (action === 'checkout') {
-        // Overstay applies to both: long-term past their pick-up, commuters
-        // past the 20:00 cutoff on their check-in day (valued per-credit). The
-        // warning is folded into the confirmation modal when one applies.
+        // #18: an overstay must be settled before the car leaves. Overstay
+        // applies to both types (long-term past pick-up; commuters past the
+        // 20:00 cutoff, valued per-credit). If one is owed, open the charge
+        // dialog first; if the agent dismisses it, require an explicit
+        // "check out anyway" override. No overstay → the usual confirmation.
         const over = overstayInfo(booking, creditPerDay);
-        const ok = await openCheckActionConfirm({ booking, action: 'checkout', locale, over });
-        if (!ok) return;
+        let proceed;
+        if (over && over.amount > 0) {
+          const charged = await openOverstayDialog({ booking, perCredit: creditPerDay });
+          proceed = charged || await confirmModal(
+            t('checkins.checkoutWithoutOverstay', { amount: over.amount }),
+            { danger: true, confirmText: t('checkins.checkoutAnyway') },
+          );
+        } else {
+          proceed = await openCheckActionConfirm({ booking, action: 'checkout', locale, over: null });
+        }
+        if (!proceed) return;
         await checkOutBooking(bookingId);
         showToast(t('checkins.toastCheckedOut'), 'success');
       } else if (action === 'collect') {
@@ -899,6 +915,11 @@ function openCollectPaymentDialog({ orderId, booking }) {
         showToast(t('common.error'), 'error');
         return;
       }
+      // #22: confirm the cash/card collection before recording it.
+      const amountDue = form.querySelector('[data-amount-due]')?.textContent?.trim() || '';
+      const methodLabel = paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard');
+      const confirmed = await confirmModal(t('checkins.collectConfirm', { amount: amountDue, method: methodLabel }), { confirmText: t('checkins.confirmPayment') });
+      if (!confirmed) return;
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.textContent = t('common.loading');
@@ -952,7 +973,9 @@ function openOverstayDialog({ booking, perCredit = 0 }) {
       </div>
       <button type="submit" class="w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('checkins.overstayConfirm')}</button>
     </form>`;
-    const modal = openModal(form, { onClose: () => resolve() });
+    // resolve(true) once the overstay is actually charged; resolve(false) if
+    // the agent dismisses — callers (check-out gate) rely on this distinction.
+    const modal = openModal(form, { onClose: () => resolve(false) });
 
     form.querySelector('[data-paidby]').addEventListener('change', (e) => {
       if (!e.target.matches('input[name="paidBy"]')) return;
@@ -972,6 +995,10 @@ function openOverstayDialog({ booking, perCredit = 0 }) {
         showToast(t('checkins.overstayNoAmount'), 'error');
         return;
       }
+      // #22: confirm the cash/card collection before recording it.
+      const methodLabel = paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard');
+      const confirmed = await confirmModal(t('checkins.collectConfirm', { amount, method: methodLabel }), { confirmText: t('checkins.overstayConfirm') });
+      if (!confirmed) return;
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.textContent = t('common.loading');
@@ -979,7 +1006,7 @@ function openOverstayDialog({ booking, perCredit = 0 }) {
         await adminChargeOverstayFn({ bookingId: booking.id, amount, paidBy });
         showToast(t('checkins.toastOverstayCharged', { amount }), 'success');
         modal.close();
-        resolve();
+        resolve(true);
       } catch (err) {
         console.error('chargeOverstay', err);
         showToast(err?.message || t('common.error'), 'error');

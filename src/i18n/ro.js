@@ -1453,6 +1453,10 @@ export default {
     overstayAmountLabel: 'Sumă de încasat (lei)',
     overstayConfirm: 'Încasează depășirea',
     overstayNoAmount: 'Introdu o sumă validă.',
+    // Collection confirmation (cash/card) + overstay-before-checkout gate
+    collectConfirm: 'Confirmi încasarea de {amount} lei ({method})?',
+    checkoutWithoutOverstay: 'Mașina are o depășire neîncasată de {amount} lei. Faci check-out fără să încasezi?',
+    checkoutAnyway: 'Check-out oricum',
     // Errors
     errorInvalidPlate: 'Număr de înmatriculare invalid.',
     errorNoOrderId: 'Lipsește ID-ul comenzii.',
