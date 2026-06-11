@@ -141,7 +141,7 @@ export default function Home(container) {
               <div class="absolute bottom-0 right-0 glass rounded-2xl p-5 shadow-lg w-48">
                 <p class="text-[11px] font-mono uppercase text-dim tracking-[0.15em] mb-2">${t('hero.fromPrice')}</p>
                 <div class="flex items-baseline gap-1">
-                  <span class="font-heading font-bold text-3xl tracking-tight">29</span>
+                  <span data-long-from class="font-heading font-bold text-3xl tracking-tight">29</span>
                   <span class="text-dim text-sm">${t('hero.leiDay')}</span>
                 </div>
               </div>
@@ -497,9 +497,11 @@ export default function Home(container) {
     const creditsFrom = packs?.length
       ? Math.min(...packs.map(p => p.price / Math.max(p.quantity, 1)))
       : null;
-    const longEl = page.querySelector('[data-long-from]');
+    // Both the hero badge and the pricing-preview section carry
+    // [data-long-from], so update every match (not just the first) — keeps the
+    // hero's "from N lei" in sync with the real cheapest tier (#23).
     const creditsEl = page.querySelector('[data-credits-from]');
-    if (longEl && longFrom != null) longEl.textContent = longFrom;
+    if (longFrom != null) page.querySelectorAll('[data-long-from]').forEach((el) => { el.textContent = longFrom; });
     if (creditsEl && creditsFrom != null) creditsEl.textContent = Math.round(creditsFrom);
   }).catch(() => {});
 
