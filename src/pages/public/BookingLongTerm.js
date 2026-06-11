@@ -222,6 +222,10 @@ export default function BookingLongTerm(container) {
                 </div>
               </label>
             </div>
+            <div class="mt-4 flex items-baseline justify-between gap-4 rounded-xl bg-frost px-4 py-3 border border-frost-deep">
+              <span class="text-[13px] font-medium text-charcoal/70">${t('longTerm.totalLabel')}</span>
+              <span class="font-heading font-bold text-xl text-blueberry-deep" data-paymethod-amount>—</span>
+            </div>
             <div class="flex justify-end mt-5">
               <button type="button" data-next-step="terms" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
             </div>
@@ -246,11 +250,19 @@ export default function BookingLongTerm(container) {
 
           <!-- Terms + privacy agreement (separate consents) + pay -->
           <div class="md:col-span-2 flex flex-col items-start gap-3" data-step="terms">
-            <!-- Final to-pay amount, repeated here so it's visible right where
-                 the customer confirms (the live summary card is up top). -->
-            <div class="w-full flex items-baseline justify-between gap-4 rounded-2xl bg-blueberry-deep text-white px-5 py-4">
-              <span class="text-[12px] uppercase tracking-wider font-mono text-white/70">${t('longTerm.totalLabel')}</span>
-              <span class="font-heading font-bold text-3xl" data-pay-total>—</span>
+            <!-- Final to-pay amount + reductions breakdown (online discount,
+                 voucher), repeated here so it's visible right where the
+                 customer confirms (the live summary card is up top). -->
+            <div class="w-full rounded-2xl bg-blueberry-deep text-white px-5 py-4">
+              <div class="hidden text-[13px] space-y-1 mb-3 pb-3 border-b border-white/15" data-pay-breakdown>
+                <div class="flex justify-between text-white/70"><span>${t('longTerm.subtotal')}</span><span data-bd-subtotal>—</span></div>
+                <div class="flex justify-between text-leaf" style="display:none" data-bd-online-row><span data-bd-online-label>—</span><span data-bd-online>—</span></div>
+                <div class="flex justify-between text-mango" style="display:none" data-bd-voucher-row><span data-bd-voucher-label>—</span><span data-bd-voucher>—</span></div>
+              </div>
+              <div class="flex items-baseline justify-between gap-4">
+                <span class="text-[12px] uppercase tracking-wider font-mono text-white/70">${t('longTerm.totalLabel')}</span>
+                <span class="font-heading font-bold text-3xl" data-pay-total>—</span>
+              </div>
             </div>
             <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer max-w-full">
               <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
@@ -285,6 +297,15 @@ export default function BookingLongTerm(container) {
   const form = page.querySelector('[data-long-form]');
   const totalEl = page.querySelector('[data-quote-total]');
   const payTotalEl = page.querySelector('[data-pay-total]');
+  const payBreakdownEl = page.querySelector('[data-pay-breakdown]');
+  const bdSubtotalEl = page.querySelector('[data-bd-subtotal]');
+  const bdOnlineRow = page.querySelector('[data-bd-online-row]');
+  const bdOnlineLabel = page.querySelector('[data-bd-online-label]');
+  const bdOnlineEl = page.querySelector('[data-bd-online]');
+  const bdVoucherRow = page.querySelector('[data-bd-voucher-row]');
+  const bdVoucherLabel = page.querySelector('[data-bd-voucher-label]');
+  const bdVoucherEl = page.querySelector('[data-bd-voucher]');
+  const paymethodAmountEl = page.querySelector('[data-paymethod-amount]');
   const daysEl = page.querySelector('[data-quote-days]');
   const perdayEl = page.querySelector('[data-quote-perday]');
   const hoursLineEl = page.querySelector('[data-quote-hours-line]');
@@ -417,6 +438,24 @@ export default function BookingLongTerm(container) {
     // the form, so customers don't have to scroll back up to the summary
     // card to see what a voucher / date change did to the price.
     if (payTotalEl) payTotalEl.textContent = quote.days ? `${finalTotal} lei` : '—';
+    // Itemize the reductions next to the final total: the online discount
+    // (standard − online) and any applied voucher. Hidden when neither applies.
+    const onlineDiscountAmt = (!isPickup && onlineTotal != null) ? (quote.total - onlineTotal) : 0;
+    const voucherAmt = (!isPickup && promoVoucher?.discountAmount) ? promoVoucher.discountAmount : 0;
+    if (payBreakdownEl) {
+      const hasReductions = !!quote.days && (onlineDiscountAmt > 0 || voucherAmt > 0);
+      payBreakdownEl.classList.toggle('hidden', !hasReductions);
+      if (bdSubtotalEl) bdSubtotalEl.textContent = `${quote.total} lei`;
+      if (bdOnlineRow) bdOnlineRow.style.display = onlineDiscountAmt > 0 ? 'flex' : 'none';
+      if (bdOnlineLabel) bdOnlineLabel.textContent = t('discount.online', { percent: discount });
+      if (bdOnlineEl) bdOnlineEl.textContent = `−${onlineDiscountAmt} lei`;
+      if (bdVoucherRow) bdVoucherRow.style.display = voucherAmt > 0 ? 'flex' : 'none';
+      if (bdVoucherLabel && promoVoucher) bdVoucherLabel.textContent = promoVoucher.code;
+      if (bdVoucherEl) bdVoucherEl.textContent = `−${voucherAmt} lei`;
+    }
+    // Echo the live amount in the payment-method step so customers see the
+    // price react when they switch online/pickup or apply a voucher.
+    if (paymethodAmountEl) paymethodAmountEl.textContent = quote.days ? `${finalTotal} lei` : '—';
     // Fully-covered booking (days voucher): no Netopia charge happens, so
     // don't advertise Netopia on the submit button.
     const payBtnEl = page.querySelector('[data-pay-btn]');

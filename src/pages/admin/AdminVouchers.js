@@ -167,14 +167,23 @@ export default async function AdminVouchers(container) {
 
   function openVoucherModal(existing) {
     const isEdit = !!existing;
+    // Default a NEW voucher to "valid from today for a year" so it works
+    // immediately — a future start date silently yields a "not yet valid"
+    // refusal at checkout, which is easy to hit by leaving the field blank.
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const yearOut = new Date(now);
+    yearOut.setFullYear(yearOut.getFullYear() + 1);
+    const yearOutStr = `${yearOut.getFullYear()}-${pad(yearOut.getMonth() + 1)}-${pad(yearOut.getDate())}`;
     const init = existing || {
       code: '',
       name: '',
       active: true,
       type: 'percent',
       value: 10,
-      startDate: '',
-      endDate: '',
+      startDate: todayStr,
+      endDate: yearOutStr,
       visibility: 'public',
       assignedUserIds: [],
       maxRedemptionsTotal: '',

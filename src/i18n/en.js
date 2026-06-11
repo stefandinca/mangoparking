@@ -1187,6 +1187,7 @@ export default {
     oneDay: '1 day',
     perDay: 'lei / day',
     totalLabel: 'Total',
+    subtotal: 'Subtotal',
     vehicleInfo: 'Vehicle info',
     contactInfo: 'Contact info',
     payNow: 'Pay with Netopia',

@@ -401,6 +401,20 @@ export default async function Booking(container) {
     const form = pageEl.querySelector('[data-purchase-form]');
     if (!form) return;
 
+    // Resolve the plate from the selected saved vehicle (logged-in users pick
+    // via radio) or the typed input. Used by both the voucher apply and the
+    // submit handler so a preselected vehicle counts as a valid plate.
+    function resolveCreditPlate() {
+      const fd = new FormData(form);
+      let plate = fd.get('licensePlate');
+      const vehicleChoice = fd.get('vehicleChoice');
+      if (user && profileVehicles.length > 0 && vehicleChoice !== 'new' && vehicleChoice != null) {
+        const idx = parseInt(vehicleChoice, 10);
+        plate = profileVehicles[idx]?.plate || plate;
+      }
+      return String(plate || '').trim();
+    }
+
     // Promo voucher apply / remove — see BookingLongTerm.js for the same
     // pattern. Re-bound on every render (this page rebuilds the DOM
     // on confirmation, vehicle toggle, etc.) so the handlers always
@@ -440,8 +454,7 @@ export default async function Booking(container) {
         setVoucherError('');
         const code = normalizeCode(voucherInput.value);
         if (!code) { setVoucherError(t('voucher.errorEmpty')); return; }
-        const plateInput = form.licensePlate || form.querySelector('input[name="licensePlate"]');
-        const plate = plateInput?.value.trim();
+        const plate = resolveCreditPlate();
         if (!plate) { setVoucherError(t('voucher.errorNeedPlate')); return; }
         const base = (function () {
           const price = selectedPack
@@ -563,12 +576,7 @@ export default async function Booking(container) {
       const email = fd.get('email');
 
       // Resolve license plate from saved vehicle or new input
-      let licensePlate = fd.get('licensePlate');
-      const vehicleChoice = fd.get('vehicleChoice');
-      if (user && profileVehicles.length > 0 && vehicleChoice !== 'new' && vehicleChoice != null) {
-        const idx = parseInt(vehicleChoice, 10);
-        licensePlate = profileVehicles[idx]?.plate || licensePlate;
-      }
+      const licensePlate = resolveCreditPlate();
 
       // Validate everything up-front so we can highlight all bad fields at once.
       const errors = [];

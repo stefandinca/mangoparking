@@ -1188,6 +1188,7 @@ export default {
     oneDay: '1 zi',
     perDay: 'lei / zi',
     totalLabel: 'Total de plată',
+    subtotal: 'Subtotal',
     vehicleInfo: 'Informații vehicul',
     contactInfo: 'Informații contact',
     payNow: 'Plătește cu Netopia',

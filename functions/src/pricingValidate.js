@@ -159,8 +159,12 @@ export async function resolveVoucher({ code, plate, baseAmount, authedUid, order
   if (!v.active) return { ok: false, error: 'inactive' };
 
   const today = bucharestDay(new Date().toISOString());
-  if (v.startDate && today < v.startDate) return { ok: false, error: 'not-yet-active' };
-  if (v.endDate && today > v.endDate) return { ok: false, error: 'expired' };
+  // Compare on date-only strings — tolerate any accidental time component on
+  // the stored value so a "2026-06-11T00:00:00" can't read as after today.
+  const startDay = v.startDate ? String(v.startDate).slice(0, 10) : null;
+  const endDay = v.endDate ? String(v.endDate).slice(0, 10) : null;
+  if (startDay && today < startDay) return { ok: false, error: 'not-yet-active' };
+  if (endDay && today > endDay) return { ok: false, error: 'expired' };
 
   if (v.visibility === 'private') {
     if (!authedUid) return { ok: false, error: 'must-be-logged-in' };
