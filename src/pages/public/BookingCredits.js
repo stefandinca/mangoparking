@@ -307,7 +307,7 @@ export default async function Booking(container) {
       const displayPrice = (!isPickup && online != null) ? online : onlinePrice;
       const showAnchor = !isPickup && online != null;
       const voucherActive = !isPickup && voucher && voucher.status === 'unused' && onlinePrice > voucher.amount && !promoVoucher;
-      const promoActive = !isPickup && promoVoucher?.discountAmount > 0;
+      const promoActive = promoVoucher?.discountAmount > 0;
       const promoLine = promoActive
         ? `<p class="text-[13px] text-leaf mt-2">${t('voucher.summaryLine', { code: promoVoucher.code, amount: promoVoucher.discountAmount })}</p>`
         : '';
@@ -461,8 +461,9 @@ export default async function Booking(container) {
             ? (customQty ? (customQty * (selectedPack.price / selectedPack.quantity)) : selectedPack.price)
             : 0;
           const standard = Math.round(price);
-          // Server applies the online discount before the voucher — preview
-          // against the discounted online amount to match the charge.
+          // Match the pay-time base: pay-at-pickup uses the standard price;
+          // online uses the discounted amount (discount applied before voucher).
+          if (paymentMethod === 'pay-at-pickup') return standard;
           const online = onlineFromStandard(standard, discount);
           return online != null ? online : standard;
         })();
@@ -642,7 +643,7 @@ export default async function Booking(container) {
       const voucherIdToSend = (!promoVoucher && voucher && voucher.status === 'unused' && getSelectedPrice() > voucher.amount)
         ? voucher.userId
         : null;
-      const voucherCodeToSend = promoVoucher && paymentMethod === 'online' ? promoVoucher.code : null;
+      const voucherCodeToSend = promoVoucher ? promoVoucher.code : null;
 
       try {
         await startNetopiaPayment({
@@ -650,9 +651,10 @@ export default async function Booking(container) {
           paymentMethod,
           packId,
           quantity: qty,
-          // Always send the ONLINE price; the function grosses up to the
-          // original anchor when paymentMethod is pay-at-pickup.
+          // Always send the STANDARD pack price; the server applies the online
+          // discount (online only) and any voucher on top.
           packPrice: getSelectedPrice(),
+          // Legacy signup voucher stays online-only; promo codes apply to both.
           voucherId: paymentMethod === 'online' ? voucherIdToSend : null,
           voucherCode: voucherCodeToSend,
           customerData: {

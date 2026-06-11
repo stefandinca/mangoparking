@@ -395,11 +395,12 @@ export default function BookingLongTerm(container) {
     const isPickup = paymentMethod === 'pay-at-pickup';
     const displayTotal = (!isPickup && onlineTotal != null) ? onlineTotal : quote.total;
     const displayPerDay = quote.perDay;
-    // Promo voucher application — only on online payments. The displayed
-    // total subtracts the discount; the voucher amount is also passed
-    // into createPayment which re-validates server-side.
+    // Promo voucher application — applies to BOTH online and pay-at-pickup.
+    // The displayed total subtracts the discount from the method-appropriate
+    // base (online = discounted, pickup = standard); createPayment re-validates
+    // and the agent collects the reduced amount for pickup.
     let finalTotal = displayTotal;
-    if (!isPickup && promoVoucher) {
+    if (promoVoucher) {
       // Re-derive the discount from the LIVE quote on every recompute so the
       // displayed total stays correct when the customer changes dates after
       // applying a code. The server re-validates at pay time; this is
@@ -441,7 +442,7 @@ export default function BookingLongTerm(container) {
     // Itemize the reductions next to the final total: the online discount
     // (standard − online) and any applied voucher. Hidden when neither applies.
     const onlineDiscountAmt = (!isPickup && onlineTotal != null) ? (quote.total - onlineTotal) : 0;
-    const voucherAmt = (!isPickup && promoVoucher?.discountAmount) ? promoVoucher.discountAmount : 0;
+    const voucherAmt = promoVoucher?.discountAmount ? promoVoucher.discountAmount : 0;
     if (payBreakdownEl) {
       const hasReductions = !!quote.days && (onlineDiscountAmt > 0 || voucherAmt > 0);
       payBreakdownEl.classList.toggle('hidden', !hasReductions);
@@ -456,11 +457,14 @@ export default function BookingLongTerm(container) {
     // Echo the live amount in the payment-method step so customers see the
     // price react when they switch online/pickup or apply a voucher.
     if (paymethodAmountEl) paymethodAmountEl.textContent = quote.days ? `${finalTotal} lei` : '—';
-    // Fully-covered booking (days voucher): no Netopia charge happens, so
-    // don't advertise Netopia on the submit button.
+    // Submit-button copy: a fully-covered booking (days voucher) charges
+    // nothing on either method, so show the "free" label; otherwise reflect
+    // the chosen method (Netopia vs confirm-at-lot).
     const payBtnEl = page.querySelector('[data-pay-btn]');
-    if (payBtnEl && !isPickup) {
-      payBtnEl.textContent = finalTotal === 0 ? t('longTerm.payNowFree') : t('longTerm.payNow');
+    if (payBtnEl) {
+      payBtnEl.textContent = finalTotal === 0
+        ? t('longTerm.payNowFree')
+        : (isPickup ? t('longTerm.payNowPickup') : t('longTerm.payNow'));
     }
     daysEl.textContent = quote.days || '—';
     perdayEl.textContent = displayPerDay || '—';
@@ -678,8 +682,10 @@ export default function BookingLongTerm(container) {
   }
 
   function voucherEligibleBase() {
-    // The server applies the online discount BEFORE the voucher, so preview
-    // against the discounted online amount to match the pay-time charge.
+    // Preview against the method-appropriate base so it matches the pay-time
+    // charge: pay-at-pickup uses the standard total; online uses the
+    // already-discounted amount (the server applies the online discount first).
+    if (paymentMethod === 'pay-at-pickup') return Number(quote?.total) || 0;
     const onlineTotal = onlineFromStandard(quote?.total, discount);
     return Number(onlineTotal != null ? onlineTotal : quote?.total) || 0;
   }
@@ -886,12 +892,13 @@ export default function BookingLongTerm(container) {
     btn.disabled = true;
     btn.textContent = t('longTerm.processing');
 
-    // Apply voucher only if it would still leave a positive Netopia charge.
     // Promo (new system) wins over signup (legacy) — they can't combine.
+    // Both apply to online and pay-at-pickup; the server re-validates and
+    // (for pickup) the agent collects the reduced amount.
     const voucherIdToSend = (!promoVoucher && voucher && voucher.status === 'unused' && quote.total > voucher.amount)
       ? voucher.userId
       : null;
-    const voucherCodeToSend = promoVoucher && paymentMethod === 'online' ? promoVoucher.code : null;
+    const voucherCodeToSend = promoVoucher ? promoVoucher.code : null;
 
     try {
       await startNetopiaPayment({
@@ -908,7 +915,7 @@ export default function BookingLongTerm(container) {
         // Always send the STANDARD total (server applies the online discount
         // for online orders; pay-at-pickup pays this as-is).
         totalPrice: quote.total,
-        // Voucher only applies to the online branch.
+        // Legacy signup voucher stays online-only; promo codes apply to both.
         voucherId: paymentMethod === 'online' ? voucherIdToSend : null,
         voucherCode: voucherCodeToSend,
         customerData: {

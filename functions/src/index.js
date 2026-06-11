@@ -402,14 +402,16 @@ export const createPayment = onRequest(
     // system (admin-created codes). Promo wins when both are submitted —
     // vouchers cannot be combined.
     //
-    // Skipped entirely for pay-at-pickup orders so the customer pays the
-    // displayed lot price; vouchers only apply to online payments.
+    // Applied to BOTH online and pay-at-pickup orders. `amount` is already
+    // method-correct here (online = discounted, pickup = standard), so the
+    // voucher subtracts from the right base; for pickup the reduced amount is
+    // what the agent collects at the lot.
     let voucherAmount = 0;
     let voucherId = null;       // legacy signup voucher id (== uid)
     let promoVoucherCode = null; // new promoVouchers code
     let promoVoucherDoc = null;  // resolved voucher details for the redemption record
 
-    if (paymentMethod === 'online') {
+    {
       // Establish caller identity once — used by both voucher paths.
       const idToken = (req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
       let authedUid = null;
@@ -576,11 +578,11 @@ export const createPayment = onRequest(
 
     // Free-order short-circuit: a days-type voucher can cover the WHOLE
     // amount (fixed/percent are capped at base-1, credits can never reach
-    // 0). Netopia refuses zero-amount charges, so fulfil immediately —
-    // create the booking as paid (paidBy='voucher'), mark the order paid,
-    // and send the client straight to the confirmation page. The
-    // redemption record was already written atomically above.
-    if (paymentMethod === 'online' && amount <= 0) {
+    // 0). Nothing to charge online and nothing to collect at the lot, so
+    // fulfil immediately regardless of the chosen method — create the booking
+    // as paid (paidBy='voucher') and send the client to the confirmation
+    // page. The redemption record was already written atomically above.
+    if (amount <= 0) {
       if (orderType !== 'longTerm') {
         // Defensive — resolveVoucher refuses days vouchers on credits.
         console.warn('createPayment: zero amount on non-longTerm order refused', { orderId, orderType });
@@ -1171,9 +1173,10 @@ export const adminMarkOrderPaid = onCall(
     // Cashbook ledger — only cash. Card payments stay on the order doc
     // but don't enter the cashbook (per ops requirement).
     if (paidBy === 'cash') {
-      const cashAmount = pending.orderType === 'credits'
-        ? Number(pending.amount) || 0
-        : Number(pending.totalPrice) || 0;
+      // Record what's actually collected: pending.amount is the standard
+      // price minus any voucher (and is what the collect dialog shows). Using
+      // totalPrice here would ignore a pay-at-pickup voucher and overstate.
+      const cashAmount = Number(pending.amount) || 0;
       await recordCashEntry({
         agentUid: uid,
         amount: cashAmount,
