@@ -241,7 +241,7 @@ export default async function Booking(container) {
             ${nextBtn('billing')}
           ` })}
 
-          ${stepCard({ step: 'billing', num: 3, title: t('billing.title'), optional: true, body: `
+          ${stepCard({ step: 'billing', num: 3, title: t('billing.title'), body: `
             <label class="flex items-center gap-2.5 text-[14px] text-charcoal/80 cursor-pointer mb-3" data-billing-same-wrap>
               <input type="checkbox" name="billingSameAsContact" class="accent-blueberry w-4 h-4 shrink-0">
               <span>${t('billing.sameAsContact')}</span>
