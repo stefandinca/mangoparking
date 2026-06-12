@@ -973,6 +973,7 @@ export default {
   billing: {
     title: 'Billing details',
     sameAsContact: 'Same as my contact details (auto-fills the name)',
+    name: 'Full name',
     typePF: 'Individual',
     typePJ: 'Company',
     firstName: 'First name',
@@ -986,6 +987,7 @@ export default {
     regCom: 'Trade reg. nr. (optional)',
     companyAddress: 'Company address',
     errors: {
+      name: 'Enter the full name.',
       firstName: 'Enter the first name.',
       lastName: 'Enter the last name.',
       locality: 'Enter the city or town.',

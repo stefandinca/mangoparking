@@ -81,6 +81,21 @@ export default async function Dashboard(container) {
     lang: locale,
   });
 
+  // One-line summary of the saved billing identity, shown in the profile view
+  // so customers can see it's on file (it's pre-filled into the booking flow).
+  const savedBilling = profile?.billing;
+  const billingSummary = (() => {
+    const b = savedBilling;
+    if (!b || (!b.companyName && !b.name && !b.firstName && !b.lastName && !b.cui)) {
+      return locale === 'ro'
+        ? 'Necompletate — apasă „Editează” pentru a le adăuga (se precompletează la rezervare).'
+        : 'Not set — tap “Edit” to add them (they pre-fill at booking).';
+    }
+    if (b.type === 'PJ') return [b.companyName, b.cui].filter(Boolean).join(' · ');
+    const nm = b.name || [b.firstName, b.lastName].filter(Boolean).join(' ');
+    return [nm, b.locality].filter(Boolean).join(' · ');
+  })();
+
   const content = `
     <!-- Welcome -->
     <div class="mb-8">
@@ -99,6 +114,10 @@ export default async function Dashboard(container) {
           <div><span class="text-dim text-[13px]">${t('booking.name')}</span><p class="font-medium">${profile?.displayName || '—'}</p></div>
           <div><span class="text-dim text-[13px]">${t('booking.email')}</span><p class="font-medium">${profile?.email || '—'}</p></div>
           <div><span class="text-dim text-[13px]">${t('booking.phone')}</span><p class="font-medium">${profile?.phone || '—'}</p></div>
+        </div>
+        <div class="mt-3 pt-3 border-t border-frost-deep">
+          <span class="text-dim text-[13px]">${t('billing.title')}</span>
+          <p class="font-medium text-[14px]">${billingSummary}</p>
         </div>
       </div>
       <form data-profile-form class="hidden">

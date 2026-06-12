@@ -974,6 +974,7 @@ export default {
   billing: {
     title: 'Date de facturare',
     sameAsContact: 'Aceleași date ca la contact (completează automat numele)',
+    name: 'Nume complet',
     typePF: 'Persoană fizică',
     typePJ: 'Persoană juridică',
     firstName: 'Prenume',
@@ -987,6 +988,7 @@ export default {
     regCom: 'Nr. Reg. Com. (opțional)',
     companyAddress: 'Adresa firmei',
     errors: {
+      name: 'Introdu numele complet.',
       firstName: 'Introdu prenumele.',
       lastName: 'Introdu numele.',
       locality: 'Introdu localitatea.',

@@ -554,36 +554,28 @@ export default function BookingLongTerm(container) {
     const chk = form.querySelector('[name="billingSameAsContact"]');
     const wrap = form.querySelector('[data-billing-same-wrap]');
     if (!chk) return;
-    const billingFirst = () => form.querySelector('[name="billingFirstName"]');
-    const billingLast = () => form.querySelector('[name="billingLastName"]');
+    const billingName = () => form.querySelector('[name="billingName"]');
     const isPF = () => (form.querySelector('input[name="billingType"]:checked')?.value || 'PF') !== 'PJ';
 
     function syncFromContact() {
       if (!chk.checked) return;
-      const parts = String(form.name?.value || '').trim().split(/\s+/).filter(Boolean);
-      const fn = billingFirst();
-      const ln = billingLast();
-      if (fn) fn.value = parts[0] || '';
-      if (ln) ln.value = parts.length > 1 ? parts.slice(1).join(' ') : '';
+      const el = billingName();
+      if (el) el.value = String(form.name?.value || '').trim();
     }
     function applyLock() {
       const on = chk.checked;
-      // Keep the fields EDITABLE — disabling them traps the customer when the
-      // contact name is empty (#3). Tint to show they're synced; typing in
-      // them releases the sync (handler below).
-      [billingFirst(), billingLast()].forEach((el) => {
-        if (!el) return;
-        el.classList.toggle('bg-frost', on);
-      });
+      // Keep the field EDITABLE — disabling it traps the customer when the
+      // contact name is empty (#3). Tint to show it's synced; typing in it
+      // releases the sync (handler below).
+      const el = billingName();
+      if (el) el.classList.toggle('bg-frost', on);
       if (on) syncFromContact();
     }
-    // Typing in a billing-name field while synced means the customer wants a
+    // Typing in the billing-name field while synced means the customer wants a
     // different billing name — release the sync so they can edit freely.
     // (Programmatic .value writes in syncFromContact don't dispatch 'input'.)
-    [billingFirst(), billingLast()].forEach((el) => {
-      el?.addEventListener('input', () => {
-        if (chk.checked) { chk.checked = false; applyLock(); }
-      });
+    billingName()?.addEventListener('input', () => {
+      if (chk.checked) { chk.checked = false; applyLock(); }
     });
     chk.addEventListener('change', applyLock);
     form.name?.addEventListener('input', syncFromContact);
@@ -817,9 +809,7 @@ export default function BookingLongTerm(container) {
     if (step === 'billing') {
       const isPJ = (form.querySelector('input[name="billingType"]:checked')?.value || 'PF') === 'PJ';
       if (isPJ) return form.querySelector('[name="billingCompanyName"]')?.value?.trim() || t('billing.typePJ');
-      const fn = form.querySelector('[name="billingFirstName"]')?.value?.trim() || '';
-      const ln = form.querySelector('[name="billingLastName"]')?.value?.trim() || '';
-      return [fn, ln].filter(Boolean).join(' ') || t('billing.typePF');
+      return form.querySelector('[name="billingName"]')?.value?.trim() || t('billing.typePF');
     }
     if (step === 'paymethod') return paymentMethod === 'pay-at-pickup' ? t('payment.method.pickup') : t('payment.method.online');
     if (step === 'voucher') return promoVoucher ? promoVoucher.code : '—';

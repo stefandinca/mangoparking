@@ -1,6 +1,6 @@
 // PF/PJ billing fields — reusable block for booking forms + account profile.
 //
-// PF (Persoană fizică) captures: first name, last name, locality (oraș),
+// PF (Persoană fizică) captures: full name (one field), locality (oraș),
 // address, and an OPTIONAL CNP. Per client feedback in v1.1 we no longer
 // force a CNP/CI/Passport choice — most retail customers just want to pay,
 // and only some need fiscal-grade invoicing.
@@ -41,15 +41,9 @@ export function billingFieldsHtml(initial = {}) {
 
       <!-- Personal block — PF only. PJ invoicing uses company data alone. -->
       <div class="space-y-3 ${isPJ ? 'hidden' : ''}" data-billing-pf-fields>
-        <div class="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.firstName')} *</label>
-            <input type="text" name="billingFirstName" value="${initial.firstName || ''}" autocomplete="given-name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-          </div>
-          <div>
-            <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.lastName')} *</label>
-            <input type="text" name="billingLastName" value="${initial.lastName || ''}" autocomplete="family-name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-          </div>
+        <div>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.name')} *</label>
+          <input type="text" name="billingName" value="${initial.name || [initial.firstName, initial.lastName].filter(Boolean).join(' ')}" autocomplete="name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         <div class="grid sm:grid-cols-2 gap-3">
           <div>
@@ -148,7 +142,7 @@ export function wireBillingToggle(scope) {
 
   // Clear error styling as the user edits any field.
   [
-    'billingFirstName', 'billingLastName', 'billingLocality', 'billingCnp',
+    'billingName', 'billingLocality', 'billingCnp',
     'billingPersonalAddress',
     'billingCompanyName', 'billingCui', 'billingRegCom', 'billingCompanyAddress',
   ].forEach((n) => {
@@ -160,7 +154,8 @@ export function wireBillingToggle(scope) {
 // failure. Field-level errors are highlighted in-place; caller decides
 // whether to also surface a toast.
 //
-// PF returns: { type:'PF', firstName, lastName, locality, address, cnp? }
+// PF returns: { type:'PF', name, firstName, lastName, locality, address, cnp? }
+//   (firstName/lastName are derived from `name` for backward compatibility.)
 // PJ returns: { type:'PJ', companyName, cui, regCom, companyAddress }
 export function readBilling(scope) {
   const block = scope.querySelector('[data-billing-block]');
@@ -176,15 +171,13 @@ export function readBilling(scope) {
   const checks = [];
 
   if (type === 'PF') {
-    const firstName = valueOf('billingFirstName');
-    const lastName = valueOf('billingLastName');
+    const name = valueOf('billingName');
     const locality = valueOf('billingLocality');
     const address = valueOf('billingPersonalAddress');
     const cnp = valueOf('billingCnp');
 
     checks.push(
-      [get('billingFirstName'), required(firstName), 'billing.errors.firstName'],
-      [get('billingLastName'), required(lastName), 'billing.errors.lastName'],
+      [get('billingName'), required(name), 'billing.errors.name'],
       [get('billingLocality'), required(locality), 'billing.errors.locality'],
       [get('billingPersonalAddress'), required(address), 'billing.errors.personalAddress'],
     );
@@ -199,7 +192,14 @@ export function readBilling(scope) {
     }
     if (errors.length) return { error: errors[0] };
 
-    const result = { type, firstName, lastName, locality, address };
+    // A single full-name field is captured. We still derive firstName/lastName
+    // (first token / the rest) so existing consumers — the admin payer form,
+    // user-detail display, future SmartBill — keep working unchanged, and we
+    // store the canonical `name` alongside.
+    const parts = name.split(/\s+/).filter(Boolean);
+    const firstName = parts[0] || name;
+    const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+    const result = { type, name, firstName, lastName, locality, address };
     if (cnp) result.cnp = cnp;
     return result;
   }
