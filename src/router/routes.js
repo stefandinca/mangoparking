@@ -207,6 +207,11 @@ export const routes = [
     component: () => import('../pages/admin/AdminUsers.js'),
     guards: ['auth', 'admin', 'perm:users'],
   },
+  {
+    path: '/admin/help',
+    component: () => import('../pages/admin/AdminHelp.js'),
+    guards: ['auth', 'admin', 'perm:help'],
+  },
   // MVP: hidden
   // {
   //   path: '/admin/reports',

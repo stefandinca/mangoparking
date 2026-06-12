@@ -39,18 +39,19 @@ export const PERM = Object.freeze({
   REFUNDS:      'refunds',
   VOUCHERS:     'vouchers',
   PROMOTIONS:   'promotions',
+  HELP:         'help',
 });
 
 const ROLE_PERMISSIONS = {
   [ROLE_ADMIN]:    Object.values(PERM),
   [ROLE_AGENT]:    [
     PERM.DASHBOARD, PERM.CHECKINS, PERM.TRANSACTIONS, PERM.CASHBOOK,
-    PERM.CAPACITY, PERM.SHUTTLE, PERM.REVIEWS, PERM.REFUNDS,
+    PERM.CAPACITY, PERM.SHUTTLE, PERM.REVIEWS, PERM.REFUNDS, PERM.HELP,
     // Intentionally excluded: PRICING, USERS, LEGAL, VOUCHERS, PROMOTIONS
     // — agents see ops, not configuration. Firestore rules also gate
     // writes to settings docs to isAdmin() so even direct API access fails.
   ],
-  [ROLE_DRIVER]:   [PERM.DASHBOARD, PERM.CHECKINS, PERM.CAPACITY, PERM.SHUTTLE],
+  [ROLE_DRIVER]:   [PERM.DASHBOARD, PERM.CHECKINS, PERM.CAPACITY, PERM.SHUTTLE, PERM.HELP],
   [ROLE_CUSTOMER]: [],
 };
 

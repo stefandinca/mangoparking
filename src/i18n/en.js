@@ -588,6 +588,7 @@ export default {
     reviews: 'Reviews',
     users: 'Users',
     legal: 'Legal pages',
+    help: 'Guide',
     legalSubtitle: 'Edit Terms, Privacy, GDPR, Delivery, and Cancellation copy.',
     legalTitle: 'Page title',
     legalIntro: 'Intro',

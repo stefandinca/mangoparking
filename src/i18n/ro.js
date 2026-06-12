@@ -589,6 +589,7 @@ export default {
     reviews: 'Recenzii',
     users: 'Utilizatori',
     legal: 'Pagini legale',
+    help: 'Ghid',
     legalSubtitle: 'Editează termenii, politica de confidențialitate, GDPR, livrare și anulare.',
     legalTitle: 'Titlu pagină',
     legalIntro: 'Introducere',
