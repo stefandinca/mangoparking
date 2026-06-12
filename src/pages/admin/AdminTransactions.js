@@ -74,7 +74,7 @@ export default async function AdminTransactions(container) {
             : tx.type === 'purchase' ? 'paid'
             : (tx.type || '—'),
       sum: tx.type === 'lateFee'
-        ? `${tx.feeAmount ?? 0} ${t('common.lei')}`
+        ? `${tx.amount ?? tx.feeAmount ?? 0} ${t('common.lei')}`
         : tx.type === 'use' ? String(tx.quantity || 0)
         : `+${tx.quantity || 0}`,
       plate: tx.licensePlate || '',

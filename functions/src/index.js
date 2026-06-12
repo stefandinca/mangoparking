@@ -552,8 +552,15 @@ export const createPayment = onRequest(
             });
           }
 
-          const redemptionRef = getFirestore().collection('voucherRedemptions').doc();
-          tx.set(redemptionRef, {
+          // Days vouchers split across bookings (many redemptions per
+          // identity) → auto-id, with the balance doc above as the lock.
+          // Fixed/percent are one-shot per identity → deterministic id so a
+          // concurrent second redemption hits tx.create's already-exists and
+          // is rejected (the plain `where` query above isn't transactional).
+          const redemptionRef = isDays
+            ? getFirestore().collection('voucherRedemptions').doc()
+            : getFirestore().collection('voucherRedemptions').doc(`${promoVoucherCode}_${promoVoucherDoc.identityKey}`);
+          const redemptionData = {
             voucherCode: promoVoucherCode,
             identityKey: promoVoucherDoc.identityKey,
             userId: cd.customerId || null,
@@ -565,7 +572,9 @@ export const createPayment = onRequest(
             value: promoVoucherDoc.value,
             daysUsed: isDays ? Number(promoVoucherDoc.daysUsed) : null,
             redeemedAt: new Date().toISOString(),
-          });
+          };
+          if (isDays) tx.set(redemptionRef, redemptionData);
+          else tx.create(redemptionRef, redemptionData);
           if (isFirstUse) {
             tx.update(voucherRef, { redeemedCount: (Number(vData.redeemedCount) || 0) + 1 });
           }
@@ -750,6 +759,15 @@ export const netopiaCallback = onRequest(
               paymentMethod: 'online',
               paymentId: orderId,
             };
+            // Repay charges the online-discounted amount, but the booking was
+            // pre-created (pay-at-pickup) at the STANDARD price. Reconcile the
+            // booking to what was actually charged so revenue/invoicing aren't
+            // overstated. `repayAmount` is stamped by repayOrder.
+            const chargedNow = Number(pending.repayAmount);
+            if (Number.isFinite(chargedNow) && chargedNow > 0) {
+              patch.totalPrice = chargedNow;
+              patch.basePrice = chargedNow;
+            }
             if (bookingSnap.exists && !bookingSnap.data().spotId) {
               const spotId = await reserveAvailableSpot(bookingId);
               if (spotId) patch.spotId = spotId;
@@ -766,8 +784,24 @@ export const netopiaCallback = onRequest(
             paymentStatus: 'paid',
             paidAt: nowIso,
             paidBy: 'netopia',
+            // Keep the order's amount in step with what was charged on repay.
+            ...(Number.isFinite(Number(pending.repayAmount)) && Number(pending.repayAmount) > 0
+              ? { amount: Number(pending.repayAmount) }
+              : {}),
             repayInProgress: FieldValue.delete(),
           });
+          // Stamp the promo redemption (if any) with the booking it produced —
+          // online longTerm orders only reach here after payment. Mirrors the
+          // free-order path; best-effort, never blocks fulfilment.
+          try {
+            const redSnap = await db.collection('voucherRedemptions')
+              .where('orderId', '==', orderId).limit(1).get();
+            if (!redSnap.empty && !redSnap.docs[0].data().bookingId) {
+              await redSnap.docs[0].ref.update({ bookingId });
+            }
+          } catch (err) {
+            console.warn('IPN redemption bookingId stamp failed:', err?.message);
+          }
           // For repays, the onBookingCreated trigger already fired (with
           // paid=false). Send a fresh "payment received" email so the
           // customer gets confirmation. New bookings get this email via
@@ -1301,6 +1335,21 @@ export const adminMarkOrderUnpaid = onCall(
       throw new HttpsError('invalid-argument', `Unknown orderType: ${pending.orderType}`);
     }
 
+    // Reverse the cash-drawer entry that adminMarkOrderPaid created for cash
+    // payments (this function is the "misclick recovery"). Only delete OPEN
+    // entries — a closed/handed-over entry lives in a generated report and
+    // mustn't be silently removed. Single-field query → no composite index.
+    if (pending.paidBy === 'admin-cash') {
+      try {
+        const cashSnap = await db.collection('cashEntries').where('orderId', '==', orderId).get();
+        const dels = [];
+        cashSnap.forEach((d) => { if (!d.data().closedAt) dels.push(d.ref.delete()); });
+        await Promise.all(dels);
+      } catch (err) {
+        console.warn('adminMarkOrderUnpaid: cash entry cleanup failed', err?.message);
+      }
+    }
+
     await db.collection('auditLog').add({
       action: 'order_marked_unpaid',
       entityType: 'pendingOrder',
@@ -1432,12 +1481,22 @@ export const closeCashbook = onCall(
     // its own without cross-referencing cashHandovers separately.
     const days = [...new Set(entries.map((e) => e.paidAtDay))];
     const handovers = [];
+    const seenHandovers = new Set();
     for (const day of days) {
-      const h = await db.collection('cashHandovers')
-        .where('day', '==', day)
-        .where('handedBy', '==', targetUid)
-        .get();
-      h.forEach((doc) => handovers.push({ id: doc.id, ...doc.data() }));
+      // Match the cash OWNER (forAgentUid), not who physically recorded it —
+      // an admin recording a handover on an agent's behalf sets handedBy=admin
+      // but forAgentUid=agent, so a handedBy filter dropped it from the agent's
+      // report. Filter in code (single-field day query, no composite index)
+      // and fall back to handedBy for legacy rows without forAgentUid.
+      const h = await db.collection('cashHandovers').where('day', '==', day).get();
+      h.forEach((doc) => {
+        const d = doc.data();
+        const owner = d.forAgentUid || d.handedBy;
+        if (owner === targetUid && !seenHandovers.has(doc.id)) {
+          seenHandovers.add(doc.id);
+          handovers.push({ id: doc.id, ...d });
+        }
+      });
     }
 
     const nowIso = new Date().toISOString();

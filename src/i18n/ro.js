@@ -1013,6 +1013,7 @@ export default {
     apply: 'Aplică',
     remove: 'Elimină',
     appliedToast: 'Cod aplicat cu succes.',
+    payFailed: 'Codul voucher nu a putut fi aplicat la plată și a fost eliminat. Verifică suma și încearcă din nou.',
     appliedPercent: 'Reducere {value}% (−{amount} lei)',
     appliedFixed: 'Reducere −{amount} lei',
     appliedDays: '{value} zile gratuite (−{amount} lei)',

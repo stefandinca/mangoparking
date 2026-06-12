@@ -311,14 +311,16 @@ export default async function Booking(container) {
       const showAnchor = !isPickup && online != null;
       const voucherActive = !isPickup && voucher && voucher.status === 'unused' && onlinePrice > voucher.amount && !promoVoucher;
       const promoActive = promoVoucher?.discountAmount > 0;
+      // Headline must equal what the server charges: standard − online − promo.
+      const finalPrice = promoActive ? Math.max(1, displayPrice - promoVoucher.discountAmount) : displayPrice;
       const promoLine = promoActive
         ? `<p class="text-[13px] text-leaf mt-2">${t('voucher.summaryLine', { code: promoVoucher.code, amount: promoVoucher.discountAmount })}</p>`
         : '';
       summary.innerHTML = `
         <div class="flex justify-between items-center mb-1"><span>${qty} ${t('credit.plural')}</span>
           <div class="text-right">
-            ${showAnchor ? `<div class="font-mono text-[13px] text-dim line-through leading-none">${onlinePrice} lei</div>` : ''}
-            <div class="font-mono font-semibold">${displayPrice} lei</div>
+            ${(showAnchor || promoActive) ? `<div class="font-mono text-[13px] text-dim line-through leading-none">${showAnchor ? onlinePrice : displayPrice} lei</div>` : ''}
+            <div class="font-mono font-semibold">${finalPrice} lei</div>
             ${showAnchor ? `<div class="text-[10px] font-bold uppercase tracking-wider text-leaf mt-0.5">${t('discount.online', { percent: discount })}</div>` : ''}
           </div>
         </div>
@@ -798,7 +800,21 @@ export default async function Booking(container) {
         // Browser is navigating to Netopia — nothing else to do.
       } catch (err) {
         console.error(err);
-        showToast(t('common.error'), 'error');
+        // Voucher rejected at pay time (expired / used up / race) — strip the
+        // code and reset the voucher UI so the customer can pay, rather than a
+        // generic error that leaves the dead code applied.
+        if (/voucher:/i.test(err?.message || '') && promoVoucher) {
+          promoVoucher = null;
+          const vb = pageEl.querySelector('[data-voucher-block]');
+          vb?.querySelector('[data-voucher-input-wrap]')?.classList.remove('hidden');
+          vb?.querySelector('[data-voucher-applied]')?.classList.add('hidden');
+          const vi = vb?.querySelector('input[name="voucherCode"]');
+          if (vi) vi.value = '';
+          updateSummary(pageEl);
+          showToast(t('voucher.payFailed'), 'error');
+        } else {
+          showToast(t('common.error'), 'error');
+        }
         processing = false;
         if (btn) { btn.disabled = false; btn.textContent = t('credit.payNow'); }
       }

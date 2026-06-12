@@ -219,9 +219,12 @@ export default async function AdminDashboard(container) {
   );
   const refundPendingTotal = refundPending.reduce((acc, b) => acc + (Number(b.totalPrice) || 0), 0);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const tokensUsedToday = tokenTx.filter(tx => tx.type === 'use' && tx.timestamp?.slice(0, 10) === today).length;
-  const tokensPurchasedToday = tokenTx.filter(tx => tx.type === 'purchase' && tx.timestamp?.slice(0, 10) === today).reduce((sum, tx) => sum + (tx.quantity || 0), 0);
+  // Bucket "today" in Europe/Bucharest (same as the activity chart's
+  // localDay), not UTC — otherwise rows between local midnight and 02:00–03:00
+  // get mis-dated and the stat cards disagree with the chart.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Bucharest' });
+  const tokensUsedToday = tokenTx.filter(tx => tx.type === 'use' && localDay(tx.timestamp) === today).length;
+  const tokensPurchasedToday = tokenTx.filter(tx => tx.type === 'purchase' && localDay(tx.timestamp) === today).reduce((sum, tx) => sum + (tx.quantity || 0), 0);
 
   const STATS = {
     totalSpots: capacity.total,

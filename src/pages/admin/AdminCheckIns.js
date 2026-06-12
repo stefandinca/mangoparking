@@ -651,9 +651,6 @@ export default async function AdminCheckIns(container) {
     rerender();
   });
 
-  // Tear down subscription on navigation away.
-  window.addEventListener('popstate', () => { if (unsub) unsub(); });
-
   setUrl();
   rerender();
 
@@ -783,6 +780,11 @@ export default async function AdminCheckIns(container) {
     setUrl();
     rerender();
   });
+
+  // Tear down the bookings listener when the router navigates away (it calls
+  // the returned cleanup before rendering the next route). Replaces the old
+  // popstate-only teardown, which leaked on pushState/SPA-link navigation.
+  return () => { if (unsub) unsub(); };
 }
 
 // ── Check-in / check-out confirmation ────────────────────────────────────

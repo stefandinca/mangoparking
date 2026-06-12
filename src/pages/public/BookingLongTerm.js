@@ -287,7 +287,6 @@ export default function BookingLongTerm(container) {
 
   const form = page.querySelector('[data-long-form]');
   const totalEl = page.querySelector('[data-quote-total]');
-  const payTotalEl = page.querySelector('[data-pay-total]');
   const payBreakdownEl = page.querySelector('[data-pay-breakdown]');
   const bdSubtotalEl = page.querySelector('[data-bd-subtotal]');
   const bdOnlineRow = page.querySelector('[data-bd-online-row]');
@@ -296,7 +295,6 @@ export default function BookingLongTerm(container) {
   const bdVoucherRow = page.querySelector('[data-bd-voucher-row]');
   const bdVoucherLabel = page.querySelector('[data-bd-voucher-label]');
   const bdVoucherEl = page.querySelector('[data-bd-voucher]');
-  const paymethodAmountEl = page.querySelector('[data-paymethod-amount]');
   const daysEl = page.querySelector('[data-quote-days]');
   const perdayEl = page.querySelector('[data-quote-perday]');
   const hoursLineEl = page.querySelector('[data-quote-hours-line]');
@@ -426,10 +424,6 @@ export default function BookingLongTerm(container) {
       renderAppliedVoucher();
     }
     totalEl.textContent = quote.days ? String(finalTotal) : '—';
-    // Mirror the final to-pay amount next to the Pay button at the bottom of
-    // the form, so customers don't have to scroll back up to the summary
-    // card to see what a voucher / date change did to the price.
-    if (payTotalEl) payTotalEl.textContent = quote.days ? `${finalTotal} lei` : '—';
     // Itemize the reductions next to the final total: the online discount
     // (standard − online) and any applied voucher. Hidden when neither applies.
     const onlineDiscountAmt = (!isPickup && onlineTotal != null) ? (quote.total - onlineTotal) : 0;
@@ -445,9 +439,6 @@ export default function BookingLongTerm(container) {
       if (bdVoucherLabel && promoVoucher) bdVoucherLabel.textContent = promoVoucher.code;
       if (bdVoucherEl) bdVoucherEl.textContent = `−${voucherAmt} lei`;
     }
-    // Echo the live amount in the payment-method step so customers see the
-    // price react when they switch online/pickup or apply a voucher.
-    if (paymethodAmountEl) paymethodAmountEl.textContent = quote.days ? `${finalTotal} lei` : '—';
     // Submit-button copy: a fully-covered booking (days voucher) charges
     // nothing on either method, so show the "free" label; otherwise reflect
     // the chosen method (Netopia vs confirm-at-lot).
@@ -1011,9 +1002,20 @@ export default function BookingLongTerm(container) {
       // nothing else to do here.
     } catch (err) {
       console.error(err);
-      showToast(t('common.error'), 'error');
+      // The server rejects a voucher that expired / sold out / lost the race
+      // between preview and pay with an error like "voucher: expired". Strip
+      // the now-invalid code and say so, instead of a generic error that
+      // leaves the customer unable to pay.
+      if (/voucher:/i.test(err?.message || '') && promoVoucher) {
+        promoVoucher = null;
+        if (voucherInput) voucherInput.value = '';
+        renderAppliedVoucher();
+        showToast(t('voucher.payFailed'), 'error');
+      } else {
+        showToast(t('common.error'), 'error');
+      }
       btn.disabled = false;
-      recompute(); // restores the correct button label for the chosen method
+      recompute(); // restores the correct button label + price for the method
     }
   });
 

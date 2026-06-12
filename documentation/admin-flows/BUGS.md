@@ -81,3 +81,53 @@ per-flow docs for line refs.
 > None of these were changed during this review — it is read-only documentation.
 > Recommend smoke-testing the "dead button" items (#8 Add Departure, #29 Edit) in
 > a browser before fixing, in case a handler is wired in a path not covered here.
+
+---
+
+## 2026-06 deep review — voucher / booking / admin (applied this round)
+
+Fixed in this pass (verified: vite build, `node --check`, i18n parity 1357/1357,
+headless smoke of both booking pages):
+
+- **Repay stored the standard price, not the discounted charge.** The IPN repay
+  branch patched only payment fields, leaving the pre-created booket at the
+  standard `totalPrice`; it now reconciles `totalPrice`/`basePrice`/order `amount`
+  to `repayAmount`. (`functions/src/index.js`, IPN longTerm repay)
+- **Fixed/percent promo double-redeem race.** The in-transaction dup check was a
+  non-transactional `where` query writing an auto-id doc. Fixed/percent now use a
+  deterministic `voucherRedemptions/{CODE}_{identityKey}` id with `tx.create`, so a
+  concurrent second redemption is rejected. (`createPayment`)
+- **Online promo redemptions never got their `bookingId`.** IPN now stamps it
+  (mirrors the free-order path). (`netopiaCallback`)
+- **Handover recorded by an admin for another agent dropped from that agent's
+  closed cashbook.** `closeCashbook` matched `handedBy`; now matches the cash
+  owner (`forAgentUid`, falling back to `handedBy`).
+- **mark-unpaid left the cash-drawer entry.** `adminMarkOrderUnpaid` now deletes
+  the OPEN `cashEntries` row it reversed (closed/reported entries untouched).
+- **Overstay late-fee always showed `0 lei`** in /admin/transactions — read
+  `tx.amount`, not the non-existent `tx.feeAmount`. (`AdminTransactions.js`)
+- **Dashboard `today` tallies used UTC**, disagreeing with the Bucharest-day
+  chart — now both use Europe/Bucharest. (`AdminDashboard.js`)
+- **AdminCheckIns bookings listener leaked** on SPA navigation (torn down only on
+  `popstate`) — page now returns a cleanup the router invokes.
+- **`saveVoucher` could roll `redeemedCount` back** to a stale list value on edit —
+  now preserves the live server count. (`promoVoucherService.js`)
+- **Credits headline ignored the applied promo** — now shows the post-voucher
+  total like the long-term page. (`BookingCredits.js`)
+- **Voucher rejected at pay time showed a generic error** — both booking pages now
+  strip the dead code and show `voucher.payFailed`.
+- Removed dead `data-pay-total`/`data-paymethod-amount` refs left by the accordion
+  rebuild. (`BookingLongTerm.js`)
+
+### Deferred (need Netopia-sandbox testing before touching the capture path)
+
+- **Promo redemption is committed at order creation, not released on an
+  abandoned/declined/cancelled online payment** — a one-shot code is burned and a
+  days-balance loses days even though nothing was paid. Proper fix: write the
+  redemption `pending` and finalize/roll back on IPN outcome + on cancel/refund,
+  plus a scheduled sweep for abandoned holds. High value, but spans the
+  money-critical IPN path.
+- **IPN fulfilment is not transactional** — the `status===paid` idempotency guard
+  is a non-atomic read, so two near-simultaneous Netopia confirmations could
+  double-create a booking / double-grant credits. Fix: claim+fulfil inside a
+  transaction or key the booking doc by order id.

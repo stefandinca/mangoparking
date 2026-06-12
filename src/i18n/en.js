@@ -1012,6 +1012,7 @@ export default {
     apply: 'Apply',
     remove: 'Remove',
     appliedToast: 'Code applied.',
+    payFailed: 'The voucher code could not be applied at payment and was removed. Check the amount and try again.',
     appliedPercent: '{value}% off (−{amount} lei)',
     appliedFixed: '−{amount} lei off',
     appliedDays: '{value} free days (−{amount} lei)',

@@ -75,10 +75,18 @@ export async function saveVoucher(data) {
     throw new Error('Invalid code format');
   }
   const nowIso = new Date().toISOString();
+  // redeemedCount is owned by the server (incremented in createPayment). This
+  // write overwrites the whole doc, so re-read the live count and preserve it
+  // — using the value the admin form carried (a stale list snapshot) would
+  // roll the counter back and re-open an already-capped voucher.
+  const current = await getDocument(COLLECTION, code).catch(() => null);
+  const redeemedCount = current && Number.isFinite(Number(current.redeemedCount))
+    ? Number(current.redeemedCount)
+    : (Number(data.redeemedCount) || 0);
   const docData = {
     ...data,
     code,
-    redeemedCount: data.redeemedCount || 0,
+    redeemedCount,
     updatedAt: nowIso,
     createdAt: data.createdAt || nowIso,
   };
