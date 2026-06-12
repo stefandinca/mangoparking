@@ -73,12 +73,12 @@ export default function About(container) {
           <h2 class="font-heading text-2xl font-bold mb-6">${t('gallery.label')}</h2>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             ${[
-              'https://images.unsplash.com/photo-1573348722427-f1d6819fdf98?w=600&q=80',
-              'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=600&q=80',
-              'https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=600&q=80',
-            ].map(src => `
+              { src: '/images/welcome.jpg', alt: 'ManGO Parking facility' },
+              { src: '/images/gate.jpg', alt: 'Automatic gate access' },
+              { src: '/images/bus.jpg', alt: 'Free ManGO shuttle' },
+            ].map(({ src, alt }) => `
               <div class="rounded-2xl overflow-hidden h-48">
-                <img src="${src}" alt="Facility" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+                <img src="${src}" alt="${alt}" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
               </div>
             `).join('')}
           </div>

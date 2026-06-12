@@ -23,3 +23,6 @@ en_keys.txt
 ro_keys.txt
 used_keys.txt
 locale_params.json
+
+# Raw client image masters — optimized web copies live in public/images/
+src/images/

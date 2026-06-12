@@ -128,7 +128,7 @@ export default function Home(container) {
           <div class="lg:col-span-5 relative hidden lg:block">
             <div class="relative w-full aspect-square max-w-md mx-auto">
               <div class="absolute inset-8 rounded-[32px] overflow-hidden shadow-2xl">
-                <img src="https://images.unsplash.com/photo-1568738009519-52d1bad47858?q=80&w=774&auto=format&fit=crop" alt="Secure gated parking" class="img-cover" loading="eager">
+                <img src="/images/welcome.jpg" alt="ManGO Parking facility" class="img-cover" loading="eager">
               </div>
               <img src="/images/logo.png" alt="" aria-hidden="true" class="absolute -bottom-6 -left-6 w-40 h-40 object-contain drop-shadow-2xl rotate-[-8deg] pointer-events-none select-none" />
 
@@ -160,9 +160,9 @@ export default function Home(container) {
         </div>
         <div class="grid md:grid-cols-3 gap-6">
           ${[
-            { num: '01', title: t('howItWorks.step1Title'), desc: t('howItWorks.step1Desc'), img: 'https://images.unsplash.com/photo-1520088096110-20308c23a3cd?q=80&w=1740&auto=format&fit=crop' },
-            { num: '02', title: t('howItWorks.step2Title'), desc: t('howItWorks.step2Desc'), img: 'https://images.unsplash.com/photo-1559050695-edde77c73609?w=600&auto=format&fit=crop&q=60' },
-            { num: '03', title: t('howItWorks.step3Title'), desc: t('howItWorks.step3Desc'), img: 'https://images.unsplash.com/photo-1574113230879-84d1bb15d277?q=80&w=872&auto=format&fit=crop' },
+            { num: '01', title: t('howItWorks.step1Title'), desc: t('howItWorks.step1Desc'), img: '/images/parking-1.jpg' },
+            { num: '02', title: t('howItWorks.step2Title'), desc: t('howItWorks.step2Desc'), img: '/images/bus.jpg' },
+            { num: '03', title: t('howItWorks.step3Title'), desc: t('howItWorks.step3Desc'), img: '/images/gate.jpg' },
           ].map(step => `
             <div class="card-solid rounded-3xl overflow-hidden">
               <div class="h-48 overflow-hidden">
@@ -342,16 +342,16 @@ export default function Home(container) {
       </div>
       <div class="flex gap-4 px-6 max-w-7xl mx-auto">
         <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80">
-          <img src="https://images.unsplash.com/photo-1573348722427-f1d6819fdf98?w=800&q=80" alt="Organized parking" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+          <img src="/images/entrance.jpg" alt="ManGO Parking entrance" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
         </div>
         <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden sm:block">
-          <img src="https://images.unsplash.com/photo-1494515843206-f3117d3f51b7?w=800&q=80" alt="Airplane" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+          <img src="/images/bus-2.jpg" alt="Free ManGO shuttle" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
         </div>
         <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden md:block">
-          <img src="https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800&q=80" alt="Security camera" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+          <img src="/images/parking-1.jpg" alt="Organized parking lot" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
         </div>
         <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden lg:block">
-          <img src="https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&q=80" alt="Airport terminal" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
+          <img src="/images/bus-3.jpg" alt="Shuttle to the airport" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
         </div>
       </div>
     </section>
