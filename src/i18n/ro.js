@@ -960,6 +960,15 @@ export default {
     packSaved: 'Pachetele de credite au fost salvate!',
   },
 
+  // Booking wizard (accordion steps on the booking pages)
+  wizard: {
+    datesStep: 'Perioada parcării',
+    packStep: 'Alege creditele',
+    contactStep: 'Vehicul și contact',
+    reviewPay: 'Sumar și plată',
+    optional: 'opțional',
+  },
+
   // Billing (PF / PJ — invoicing data for SmartBill)
   billing: {
     title: 'Date de facturare',

@@ -56,11 +56,33 @@ export default async function Booking(container) {
     return 0;
   }
 
+  // Accordion step card — clickable header (badge + title + collapsed summary
+  // + Edit) over a body shown only while active. Mirrors BookingLongTerm.
+  const stepCard = ({ step, num, title, optional = false, body }) => `
+    <div class="card-solid rounded-2xl overflow-hidden" data-step="${step}">
+      <button type="button" data-step-head class="w-full flex items-center justify-between gap-3 px-6 py-5 text-left">
+        <span class="flex items-center gap-3 min-w-0">
+          <span data-step-badge class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-frost-deep text-charcoal/60 text-[13px] font-bold shrink-0 transition-colors">${num}</span>
+          <span class="min-w-0">
+            <span class="block font-heading font-semibold text-lg text-blueberry-deep leading-tight">${title}${optional ? ` <span class="text-[12px] font-normal text-dim">(${t('wizard.optional')})</span>` : ''}</span>
+            <span data-step-summary class="hidden text-[13px] text-dim truncate">—</span>
+          </span>
+        </span>
+        <span data-step-edit class="hidden text-mango text-[13px] font-semibold shrink-0">${t('common.edit')}</span>
+      </button>
+      <div data-step-body class="px-6 pb-6">${body}</div>
+    </div>`;
+
+  const nextBtn = (to) => `
+    <div class="flex justify-end mt-5">
+      <button type="button" data-next-step="${to}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+    </div>`;
+
   function render() {
     const page = html`<div>
       <div data-navbar></div>
       <section class="pt-32 pb-20">
-        <div class="max-w-3xl mx-auto px-6">
+        <div class="max-w-5xl mx-auto px-6">
           <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${t('credit.pageTitle')}</h1>
           ${confirmed ? '' : `
             <p class="text-dim text-[17px] mb-5">${t('credit.introLead')}</p>
@@ -120,7 +142,7 @@ export default async function Booking(container) {
       const online = onlineFromStandard(p.price, discount);
       const showAnchor = online != null;
       return `
-        <button data-pack-id="${p.id}" class="group relative overflow-hidden rounded-2xl bg-white border-2 ${isSelected ? 'border-mango ring-2 ring-mango/30' : 'border-frost-deep hover:border-blueberry/40'} shadow-sm text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+        <button type="button" data-pack-id="${p.id}" class="group relative overflow-hidden rounded-2xl bg-white border-2 ${isSelected ? 'border-mango ring-2 ring-mango/30' : 'border-frost-deep hover:border-blueberry/40'} shadow-sm text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
           <div data-stripe class="absolute inset-y-0 left-0 w-1.5 ${isSelected ? 'bg-mango' : 'bg-blueberry'}"></div>
           ${isBest ? `<span data-best class="absolute top-3.5 right-4 text-[10px] font-bold uppercase tracking-wider bg-mango text-charcoal px-2.5 py-1 rounded-full ${isSelected ? 'hidden' : ''}">${t('credit.bestValue')}</span>` : ''}
           <div data-check class="absolute top-3.5 right-4 w-7 h-7 rounded-full bg-mango items-center justify-center ${isSelected ? 'flex' : 'hidden'}"><svg class="w-4 h-4 text-charcoal" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>
@@ -144,135 +166,133 @@ export default async function Booking(container) {
       `;
     }).join('');
 
-    return `
-      <!-- Pack selection -->
-      <div class="mb-8">
-        <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.selectPack')}</h3>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          ${packCards}
-        </div>
+    const vehicleBody = `
+      ${user && profileVehicles.length > 0 ? `
+      <div class="space-y-2 mb-4" data-vehicle-options>
+        ${profileVehicles.map((v, i) => `
+          <label class="flex items-center gap-3 p-3 rounded-xl border-2 border-frost-deep hover:border-mango/30 cursor-pointer transition-colors ${i === 0 ? 'border-mango bg-mango/5' : ''}">
+            <input type="radio" name="vehicleChoice" value="${i}" class="accent-mango w-4 h-4" ${i === 0 ? 'checked' : ''}>
+            <span class="font-mono font-semibold text-[15px]">${v.plate}</span>
+            <span class="text-dim text-[14px]">${v.make} ${v.model}</span>
+          </label>
+        `).join('')}
+        <label class="flex items-center gap-3 p-3 rounded-xl border-2 border-frost-deep hover:border-mango/30 cursor-pointer transition-colors">
+          <input type="radio" name="vehicleChoice" value="new" class="accent-mango w-4 h-4">
+          <span class="text-[15px] font-medium">${locale === 'ro' ? '+ Vehicul nou' : '+ New vehicle'}</span>
+        </label>
       </div>
+      <div class="grid sm:grid-cols-2 gap-4 hidden" data-new-vehicle-fields>
+      ` : `
+      <div class="grid sm:grid-cols-2 gap-4" data-new-vehicle-fields>
+      `}
+        <div>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
+          <input type="text" name="licensePlate" placeholder="B 123 ABC" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 uppercase">
+        </div>
+        <div>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.makeModel')}</label>
+          <input type="text" name="makeModel" placeholder="Dacia Logan" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40">
+        </div>
+      </div>`;
 
-      <form data-purchase-form class="space-y-6">
-        <!-- Vehicle -->
-        <div class="card-solid rounded-2xl p-6">
-          <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.vehicleInfo')}</h3>
-          ${user && profileVehicles.length > 0 ? `
-          <div class="space-y-2 mb-4" data-vehicle-options>
-            ${profileVehicles.map((v, i) => `
-              <label class="flex items-center gap-3 p-3 rounded-xl border-2 border-frost-deep hover:border-mango/30 cursor-pointer transition-colors ${i === 0 ? 'border-mango bg-mango/5' : ''}">
-                <input type="radio" name="vehicleChoice" value="${i}" class="accent-mango w-4 h-4" ${i === 0 ? 'checked' : ''}>
-                <span class="font-mono font-semibold text-[15px]">${v.plate}</span>
-                <span class="text-dim text-[14px]">${v.make} ${v.model}</span>
-              </label>
-            `).join('')}
-            <label class="flex items-center gap-3 p-3 rounded-xl border-2 border-frost-deep hover:border-mango/30 cursor-pointer transition-colors">
-              <input type="radio" name="vehicleChoice" value="new" class="accent-mango w-4 h-4">
-              <span class="text-[15px] font-medium">${locale === 'ro' ? '+ Vehicul nou' : '+ New vehicle'}</span>
+    const contactBody = user ? `
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[13px] font-medium text-charcoal/60 uppercase tracking-wider font-mono">${t('booking.contactInfo')}</span>
+        <a href="${localePath('/account')}" class="text-mango text-[13px] font-semibold hover:text-mango-hover transition-colors">${t('common.edit')} →</a>
+      </div>
+      <div class="flex flex-wrap gap-x-6 gap-y-1 text-[15px] text-dim">
+        <span>${profile?.displayName || '—'}</span>
+        <span>${profile?.email || '—'}</span>
+        ${profile?.phone ? `<span>${profile.phone}</span>` : ''}
+      </div>
+      <input type="hidden" name="name" value="${profile?.displayName || ''}">
+      <input type="hidden" name="email" value="${profile?.email || ''}">
+      <input type="hidden" name="phone" value="${profile?.phone || ''}">
+    ` : `
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.name')} *</label>
+          <input type="text" name="name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40" required>
+        </div>
+        <div>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.phone')} *</label>
+          <input type="tel" name="phone" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40" required>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.email')} *</label>
+          <input type="email" name="email" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40" required>
+        </div>
+      </div>`;
+
+    return `
+      <form data-purchase-form novalidate class="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+        <!-- LEFT: accordion steps -->
+        <div class="space-y-4 min-w-0">
+
+          ${stepCard({ step: 'pack', num: 1, title: t('wizard.packStep'), body: `
+            <div class="grid sm:grid-cols-2 gap-3">${packCards}</div>
+            ${nextBtn('details')}
+          ` })}
+
+          ${stepCard({ step: 'details', num: 2, title: t('wizard.contactStep'), body: `
+            <h3 class="font-heading font-semibold text-[15px] text-blueberry-deep mb-3">${t('credit.vehicleInfo')}</h3>
+            ${vehicleBody}
+            <div class="mt-6">${contactBody}</div>
+            ${nextBtn('billing')}
+          ` })}
+
+          ${stepCard({ step: 'billing', num: 3, title: t('billing.title'), optional: true, body: `
+            <label class="flex items-center gap-2.5 text-[14px] text-charcoal/80 cursor-pointer mb-3" data-billing-same-wrap>
+              <input type="checkbox" name="billingSameAsContact" class="accent-blueberry w-4 h-4 shrink-0">
+              <span>${t('billing.sameAsContact')}</span>
             </label>
-          </div>
-          <div class="grid md:grid-cols-2 gap-4 hidden" data-new-vehicle-fields>
-          ` : `
-          <div class="grid md:grid-cols-2 gap-4" data-new-vehicle-fields>
-          `}
-            <div>
-              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
-              <input type="text" name="licensePlate" placeholder="B 123 ABC" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 uppercase">
+            ${billingFieldsHtml(profile?.billing)}
+            ${nextBtn('voucher')}
+          ` })}
+
+          ${stepCard({ step: 'voucher', num: 4, title: t('voucher.codeTitle'), optional: true, body: `
+            <div data-voucher-block>
+              <div class="flex flex-col sm:flex-row gap-2" data-voucher-input-wrap>
+                <input type="text" name="voucherCode" placeholder="${t('voucher.codePlaceholder')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono uppercase focus:outline-none focus:border-blueberry">
+                <button type="button" data-apply-voucher class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-3 rounded-xl transition-colors">${t('voucher.apply')}</button>
+              </div>
+              <div class="hidden mt-3 flex items-center justify-between gap-3 bg-leaf/5 border border-leaf/30 rounded-xl px-4 py-3" data-voucher-applied>
+                <div class="min-w-0">
+                  <p class="text-[14px] font-semibold text-leaf" data-voucher-applied-name>—</p>
+                  <p class="text-[12px] text-charcoal/70" data-voucher-applied-detail>—</p>
+                </div>
+                <button type="button" data-remove-voucher class="text-[13px] text-red-500 hover:underline font-semibold shrink-0">${t('voucher.remove')}</button>
+              </div>
+              <p class="hidden mt-2 text-[13px] text-red-500" data-voucher-error></p>
             </div>
-            <div>
-              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.makeModel')}</label>
-              <input type="text" name="makeModel" placeholder="Dacia Logan" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40">
-            </div>
-          </div>
+          ` })}
+
         </div>
 
-        <!-- Contact Info -->
-        ${user ? `
-        <div class="card-solid rounded-2xl p-6">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="font-heading font-semibold text-lg">${t('booking.contactInfo')}</h3>
-            <a href="${localePath('/account')}" class="text-mango text-[13px] font-semibold hover:text-mango-hover transition-colors">${t('common.edit')} →</a>
-          </div>
-          <div class="flex flex-wrap gap-x-6 gap-y-1 text-[15px] text-dim">
-            <span>${profile?.displayName || '—'}</span>
-            <span>${profile?.email || '—'}</span>
-            ${profile?.phone ? `<span>${profile.phone}</span>` : ''}
-          </div>
-          <input type="hidden" name="name" value="${profile?.displayName || ''}">
-          <input type="hidden" name="email" value="${profile?.email || ''}">
-          <input type="hidden" name="phone" value="${profile?.phone || ''}">
-        </div>
-        ` : `
-        <div class="card-solid rounded-2xl p-6">
-          <h3 class="font-heading font-semibold text-lg mb-4">${t('booking.contactInfo')}</h3>
-          <div class="grid md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.name')} *</label>
-              <input type="text" name="name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40" required>
-            </div>
-            <div>
-              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.phone')} *</label>
-              <input type="tel" name="phone" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40" required>
+        <!-- RIGHT: sticky summary + consents + pay -->
+        <aside class="lg:sticky lg:top-24 space-y-4">
+          <div class="card-solid rounded-2xl p-6" data-summary>
+            <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.summary')}</h3>
+            <div data-price-summary>
+              <p class="text-dim/60">${t('credit.selectPack')}</p>
             </div>
           </div>
-          <div class="mt-4">
-            <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.email')} *</label>
-            <input type="email" name="email" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40" required>
+          <div class="card-solid rounded-2xl p-5 flex flex-col gap-3">
+            <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
+              <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
+              <span>${t('legal.acceptTerms')}</span>
+            </label>
+            <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
+              <input type="checkbox" name="acceptPrivacy" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
+              <span>${t('legal.acceptPrivacy')}</span>
+            </label>
+            <button type="submit" data-pay-btn class="mt-1 w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
+              ${processing
+                ? (paymentMethod === 'pay-at-pickup' ? t('credit.processingPickup') : t('credit.processing'))
+                : (paymentMethod === 'pay-at-pickup' ? t('credit.payNowPickup') : t('credit.payNow'))}
+            </button>
           </div>
-        </div>
-        `}
-
-        <!-- Billing (PF/PJ) -->
-        <label class="flex items-center gap-2.5 text-[14px] text-charcoal/80 cursor-pointer px-1 mb-2" data-billing-same-wrap>
-          <input type="checkbox" name="billingSameAsContact" class="accent-blueberry w-4 h-4 shrink-0">
-          <span>${t('billing.sameAsContact')}</span>
-        </label>
-        ${billingFieldsHtml(profile?.billing)}
-
-        <!-- Credit packs are online-only (#13b): pay-at-pickup is reserved for
-             walk-ins, which staff handle at the lot and can accept/refuse.
-             paymentMethod stays 'online' for the whole funnel. -->
-
-        <!-- Voucher code -->
-        <div class="card-solid rounded-2xl p-6" data-voucher-block>
-          <h3 class="font-heading font-semibold text-lg mb-3">${t('voucher.codeTitle')}</h3>
-          <div class="flex flex-col sm:flex-row gap-2" data-voucher-input-wrap>
-            <input type="text" name="voucherCode" placeholder="${t('voucher.codePlaceholder')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono uppercase focus:outline-none focus:border-blueberry">
-            <button type="button" data-apply-voucher class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-3 rounded-xl transition-colors">${t('voucher.apply')}</button>
-          </div>
-          <div class="hidden mt-3 flex items-center justify-between gap-3 bg-leaf/5 border border-leaf/30 rounded-xl px-4 py-3" data-voucher-applied>
-            <div class="min-w-0">
-              <p class="text-[14px] font-semibold text-leaf" data-voucher-applied-name>—</p>
-              <p class="text-[12px] text-charcoal/70" data-voucher-applied-detail>—</p>
-            </div>
-            <button type="button" data-remove-voucher class="text-[13px] text-red-500 hover:underline font-semibold shrink-0">${t('voucher.remove')}</button>
-          </div>
-          <p class="hidden mt-2 text-[13px] text-red-500" data-voucher-error></p>
-        </div>
-
-        <!-- Summary -->
-        <div class="card-solid rounded-2xl p-6" data-summary>
-          <h3 class="font-heading font-semibold text-lg mb-4">${t('credit.summary')}</h3>
-          <div data-price-summary>
-            <p class="text-dim/60">${t('credit.selectPack')}</p>
-          </div>
-        </div>
-
-        <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
-          <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
-          <span>${t('legal.acceptTerms')}</span>
-        </label>
-
-        <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
-          <input type="checkbox" name="acceptPrivacy" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
-          <span>${t('legal.acceptPrivacy')}</span>
-        </label>
-
-        <button type="submit" data-pay-btn class="w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] py-4 rounded-2xl transition-colors shadow-md disabled:opacity-50" ${!selectedPack ? 'disabled' : ''}>
-          ${processing
-            ? (paymentMethod === 'pay-at-pickup' ? t('credit.processingPickup') : t('credit.processing'))
-            : (paymentMethod === 'pay-at-pickup' ? t('credit.payNowPickup') : t('credit.payNow'))}
-        </button>
+        </aside>
       </form>
     `;
   }
@@ -559,6 +579,121 @@ export default async function Booking(container) {
       });
     }
 
+    // ── Accordion controller ───────────────────────────────────────────
+    // Only one step open at a time; completed steps collapse to a one-line
+    // summary with "Edit". Per-step validation gates "Next"; the summary
+    // (price) + consents + pay live in the sticky aside.
+    const STEP_ORDER = ['pack', 'details', 'billing', 'voucher'];
+
+    function summarizeStep(step) {
+      if (step === 'pack') {
+        const qty = getSelectedQty();
+        if (qty <= 0) return '—';
+        const price = getSelectedPrice();
+        const online = onlineFromStandard(price, discount);
+        const shown = (online != null) ? online : price;
+        return `${qty} ${t('credit.plural')} · ${shown} lei`;
+      }
+      if (step === 'details') {
+        const p = resolveCreditPlate();
+        const n = user ? (profile?.displayName || '') : String(form.elements.name?.value || '').trim();
+        return [p, n].filter(Boolean).join(' · ') || '—';
+      }
+      if (step === 'billing') {
+        const isPJ = (form.querySelector('input[name="billingType"]:checked')?.value || 'PF') === 'PJ';
+        if (isPJ) return form.querySelector('[name="billingCompanyName"]')?.value?.trim() || t('billing.typePJ');
+        const fn = form.querySelector('[name="billingFirstName"]')?.value?.trim() || '';
+        const ln = form.querySelector('[name="billingLastName"]')?.value?.trim() || '';
+        return [fn, ln].filter(Boolean).join(' ') || t('billing.typePF');
+      }
+      if (step === 'voucher') return promoVoucher ? promoVoucher.code : '—';
+      return '';
+    }
+
+    function openStep(name, { scroll = true } = {}) {
+      STEP_ORDER.forEach((s) => {
+        const el = pageEl.querySelector(`[data-step="${s}"]`);
+        if (!el) return;
+        const active = s === name;
+        const completed = el.dataset.completed === '1';
+        el.classList.toggle('ring-2', active);
+        el.classList.toggle('ring-mango/20', active);
+        const body = el.querySelector('[data-step-body]');
+        const summary = el.querySelector('[data-step-summary]');
+        const edit = el.querySelector('[data-step-edit]');
+        if (body) body.classList.toggle('hidden', !active);
+        if (summary) {
+          const show = !active && completed;
+          summary.classList.toggle('hidden', !show);
+          if (show) summary.textContent = summarizeStep(s);
+        }
+        if (edit) edit.classList.toggle('hidden', !(completed && !active));
+      });
+      if (scroll) {
+        pageEl.querySelector(`[data-step="${name}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function completeStep(name) {
+      const el = pageEl.querySelector(`[data-step="${name}"]`);
+      if (!el) return;
+      el.dataset.completed = '1';
+      const badge = el.querySelector('[data-step-badge]');
+      if (badge) {
+        badge.textContent = '✓';
+        badge.classList.remove('bg-frost-deep', 'text-charcoal/60');
+        badge.classList.add('bg-leaf', 'text-white');
+      }
+    }
+
+    function validateCreditStep(step) {
+      if (step === 'pack') {
+        if (getSelectedQty() <= 0) { showToast(t('credit.selectPack'), 'error'); return false; }
+        return true;
+      }
+      if (step === 'details') {
+        const plate = resolveCreditPlate();
+        const plateOk = !!plate && isValidLicensePlate(plate);
+        if (!plateOk && form.elements.licensePlate) setFieldError(form.elements.licensePlate, true);
+        let ok = plateOk;
+        if (!user) {
+          const nameOk = required(form.elements.name?.value);
+          const phoneOk = isValidPhone(form.elements.phone?.value);
+          const emailOk = isValidEmail(form.elements.email?.value);
+          setFieldError(form.elements.name, !nameOk);
+          setFieldError(form.elements.phone, !phoneOk);
+          setFieldError(form.elements.email, !emailOk);
+          ok = ok && nameOk && phoneOk && emailOk;
+        }
+        if (!ok) { showToast(t('common.error'), 'error'); return false; }
+        return true;
+      }
+      if (step === 'billing') {
+        const billing = readBilling(form);
+        if (billing.error) { showToast(billing.error, 'error'); return false; }
+        return true;
+      }
+      return true;
+    }
+
+    pageEl.addEventListener('click', (e) => {
+      const nextStepBtn = e.target.closest('[data-next-step]');
+      if (nextStepBtn) {
+        const cur = nextStepBtn.closest('[data-step]')?.dataset.step;
+        if (cur && !validateCreditStep(cur)) return;
+        if (cur) completeStep(cur);
+        openStep(nextStepBtn.dataset.nextStep);
+        return;
+      }
+      const head = e.target.closest('[data-step-head]');
+      if (head) {
+        const step = head.closest('[data-step]')?.dataset.step;
+        if (step) openStep(step);
+      }
+    });
+
+    openStep('pack', { scroll: false });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (processing) return;
@@ -588,6 +723,7 @@ export default async function Booking(container) {
       if (!plateOk && form.elements.licensePlate) setFieldError(form.elements.licensePlate, true);
       if (!plateOk) errors.push(t('booking.errors.plate'));
       if (errors.length) {
+        openStep('details');
         showToast(errors[0], 'error');
         return;
       }
@@ -604,13 +740,14 @@ export default async function Booking(container) {
 
       const billing = readBilling(form);
       if (billing.error) {
+        openStep('billing');
         showToast(billing.error, 'error');
         return;
       }
 
       const qty = getSelectedQty();
       const packId = selectedPack?.id || null;
-      if (qty <= 0) { showToast(t('credit.selectPack'), 'error'); return; }
+      if (qty <= 0) { openStep('pack'); showToast(t('credit.selectPack'), 'error'); return; }
 
       processing = true;
       const btn = form.querySelector('[type="submit"]');

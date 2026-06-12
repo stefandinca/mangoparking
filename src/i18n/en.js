@@ -959,6 +959,15 @@ export default {
     packSaved: 'Credit packs saved!',
   },
 
+  // Booking wizard (accordion steps on the booking pages)
+  wizard: {
+    datesStep: 'Parking dates',
+    packStep: 'Choose credits',
+    contactStep: 'Vehicle & contact',
+    reviewPay: 'Summary & payment',
+    optional: 'optional',
+  },
+
   // Billing (PF / PJ — invoicing data for SmartBill)
   billing: {
     title: 'Billing details',

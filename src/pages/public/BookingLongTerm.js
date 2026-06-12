@@ -77,207 +77,198 @@ export default function BookingLongTerm(container) {
   let quote = { days: 1, perDay: 0, total: 0, hours: 24 };
   let paymentMethod = 'online';   // 'online' | 'pay-at-pickup'
 
+  // Accordion step card scaffold — a clickable header (number badge + title +
+  // collapsed summary + Edit affordance) over a body that only shows while the
+  // step is active. Keeps the page short: one step open at a time.
+  const stepCard = ({ step, num, title, optional = false, body }) => `
+    <div class="card-solid rounded-3xl overflow-hidden" data-step="${step}">
+      <button type="button" data-step-head class="w-full flex items-center justify-between gap-3 px-6 py-5 text-left">
+        <span class="flex items-center gap-3 min-w-0">
+          <span data-step-badge class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-frost-deep text-charcoal/60 text-[13px] font-bold shrink-0 transition-colors">${num}</span>
+          <span class="min-w-0">
+            <span class="block font-heading font-bold text-lg text-blueberry-deep leading-tight">${title}${optional ? ` <span class="text-[12px] font-sans font-normal text-dim">(${t('wizard.optional')})</span>` : ''}</span>
+            <span data-step-summary class="hidden text-[13px] text-dim truncate">—</span>
+          </span>
+        </span>
+        <span data-step-edit class="hidden text-blueberry text-[13px] font-semibold shrink-0">${t('common.edit')}</span>
+      </button>
+      <div data-step-body class="px-6 pb-6">${body}</div>
+    </div>`;
+
+  const nextBtn = (to) => `
+    <div class="flex justify-end mt-5">
+      <button type="button" data-next-step="${to}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
+    </div>`;
+
   const page = html`<div>
     <div data-navbar></div>
 
     <section class="pt-28 pb-16 bg-frost min-h-screen">
-      <div class="max-w-4xl mx-auto px-6">
-        <div class="text-center mb-10">
+      <div class="max-w-5xl mx-auto px-6">
+        <div class="text-center mb-8">
           <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3">${t('funnel.longTerm.title')}</p>
           <h1 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep mb-3">${t('longTerm.pageTitle')}</h1>
           <p class="text-dim text-[17px]">${t('longTerm.pageSubtitle')}</p>
         </div>
 
-        <form data-long-form class="grid md:grid-cols-2 gap-6">
-          <!-- Drop-off / Pick-up date+time -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-step="dates">
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('longTerm.dropoffAt')} / ${t('longTerm.pickupAt')}</h3>
-            <div class="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
-                  <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">1</span>
-                  ${t('longTerm.dropoffAt')} *
-                </label>
-                ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true, stepToNext: 'pickupAt' })}
-              </div>
-              <div>
-                <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
-                  <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">2</span>
-                  ${t('longTerm.pickupAt')} *
-                </label>
-                ${dateTimeFieldHtml({ name: 'pickupAt', value: toLocalDatetimeValue(dayAfter10), min: toLocalDatetimeValue(tomorrow10), required: true })}
-              </div>
-            </div>
-            <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>
-            <p class="text-[12px] text-dim mt-1">${t('longTerm.tierNote')}</p>
-            <div class="flex justify-end mt-5">
-              <button type="button" data-next-step="details" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
-            </div>
-          </div>
+        <form data-long-form novalidate class="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+          <!-- LEFT: accordion steps -->
+          <div class="space-y-4 min-w-0">
 
-          <!-- Price tiers — informational only (intentionally flat, not a
-               card, so nobody mistakes it for a selectable option). -->
-          <div class="md:col-span-2 px-1 -mt-2">
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-1.5">
-              <span class="text-[12px] font-mono uppercase tracking-wider text-dim">${t('rates.longTermRates')}</span>
-              <span class="text-[11px] text-dim/70">· ${t('longTerm.tiersInfoNote')}</span>
-              <span class="hidden text-[11px] uppercase tracking-wider font-mono font-semibold text-mango-deep" data-seasonal-badge></span>
-            </div>
-            <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]" data-tiers>
-              <!-- populated after getLongTermRates() resolves -->
-            </div>
-          </div>
-
-          <!-- Summary (live total) -->
-          <div class="rounded-3xl p-6 md:col-span-2 bg-blueberry-deep text-white shadow-lg">
-            <p class="text-[12px] text-white/70 uppercase tracking-wider font-mono mb-2">${t('longTerm.totalLabel')}</p>
-            <p class="text-white/50 line-through font-mono text-[15px] hidden" data-quote-original></p>
-            <div class="flex items-baseline gap-2 mb-2">
-              <span class="font-heading font-bold text-5xl" data-quote-total>—</span>
-              <span class="text-white/70 text-lg">lei</span>
-              <span class="text-[11px] font-bold uppercase tracking-wider text-mango ml-2 hidden" data-quote-discount-badge></span>
-            </div>
-            <p class="text-[14px] text-white/70"><span data-quote-days>—</span> ${t('longTerm.days')} × <span data-quote-perday>—</span> ${t('longTerm.perDay')}</p>
-            <p class="text-[12px] text-white/50 mt-1" data-quote-hours-line>—</p>
-            <p class="text-[13px] text-mango mt-2 hidden" data-voucher-line></p>
-          </div>
-
-          <!-- Vehicle + contact (one step). Contact precedes billing so the
-               "same as contact" checkbox can prefill the billing name. -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-step="details">
-            <!-- Vehicle -->
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-3">${t('longTerm.vehicleInfo')}</h3>
-            ${user && profileVehicles.length > 0 ? `
-              <div class="space-y-2 mb-3" data-vehicle-options>
-                ${profileVehicles.map((v, i) => `
-                  <label class="flex items-center gap-3 p-3 rounded-xl border-2 ${i === 0 ? 'border-blueberry bg-blueberry/5' : 'border-frost-deep'} hover:border-blueberry/40 cursor-pointer transition-colors">
-                    <input type="radio" name="vehicleChoice" value="${i}" class="accent-blueberry w-4 h-4" ${i === 0 ? 'checked' : ''}>
-                    <span class="font-mono font-semibold text-[15px]">${escapeHtml(v.plate || '')}</span>
-                    ${(v.make || v.model) ? `<span class="text-dim text-[14px]">${escapeHtml(((v.make || '') + ' ' + (v.model || '')).trim())}</span>` : ''}
+            ${stepCard({ step: 'dates', num: 1, title: t('wizard.datesStep'), body: `
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
+                    <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">1</span>
+                    ${t('longTerm.dropoffAt')} *
                   </label>
-                `).join('')}
-                <label class="flex items-center gap-3 p-3 rounded-xl border-2 border-frost-deep hover:border-blueberry/40 cursor-pointer transition-colors">
-                  <input type="radio" name="vehicleChoice" value="new" class="accent-blueberry w-4 h-4">
-                  <span class="text-[15px] font-medium">${locale === 'ro' ? '+ Vehicul nou' : '+ New vehicle'}</span>
+                  ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true, stepToNext: 'pickupAt' })}
+                </div>
+                <div>
+                  <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
+                    <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">2</span>
+                    ${t('longTerm.pickupAt')} *
+                  </label>
+                  ${dateTimeFieldHtml({ name: 'pickupAt', value: toLocalDatetimeValue(dayAfter10), min: toLocalDatetimeValue(tomorrow10), required: true })}
+                </div>
+              </div>
+              <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>
+              <p class="text-[12px] text-dim mt-1">${t('longTerm.tierNote')}</p>
+              <div class="mt-4 pt-4 border-t border-frost-deep">
+                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-1.5">
+                  <span class="text-[12px] font-mono uppercase tracking-wider text-dim">${t('rates.longTermRates')}</span>
+                  <span class="hidden text-[11px] uppercase tracking-wider font-mono font-semibold text-mango-deep" data-seasonal-badge></span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]" data-tiers></div>
+              </div>
+              ${nextBtn('details')}
+            ` })}
+
+            ${stepCard({ step: 'details', num: 2, title: t('wizard.contactStep'), body: `
+              <h3 class="font-heading font-bold text-[15px] text-blueberry-deep mb-3">${t('longTerm.vehicleInfo')}</h3>
+              ${user && profileVehicles.length > 0 ? `
+                <div class="space-y-2 mb-3" data-vehicle-options>
+                  ${profileVehicles.map((v, i) => `
+                    <label class="flex items-center gap-3 p-3 rounded-xl border-2 ${i === 0 ? 'border-blueberry bg-blueberry/5' : 'border-frost-deep'} hover:border-blueberry/40 cursor-pointer transition-colors">
+                      <input type="radio" name="vehicleChoice" value="${i}" class="accent-blueberry w-4 h-4" ${i === 0 ? 'checked' : ''}>
+                      <span class="font-mono font-semibold text-[15px]">${escapeHtml(v.plate || '')}</span>
+                      ${(v.make || v.model) ? `<span class="text-dim text-[14px]">${escapeHtml(((v.make || '') + ' ' + (v.model || '')).trim())}</span>` : ''}
+                    </label>
+                  `).join('')}
+                  <label class="flex items-center gap-3 p-3 rounded-xl border-2 border-frost-deep hover:border-blueberry/40 cursor-pointer transition-colors">
+                    <input type="radio" name="vehicleChoice" value="new" class="accent-blueberry w-4 h-4">
+                    <span class="text-[15px] font-medium">${locale === 'ro' ? '+ Vehicul nou' : '+ New vehicle'}</span>
+                  </label>
+                </div>
+                <div class="hidden" data-new-vehicle-fields>
+              ` : `
+                <div data-new-vehicle-fields>
+              `}
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
+                <input type="text" name="licensePlate" placeholder="B 123 ABC" value="${(user && profileVehicles.length > 0) ? '' : escapeHtml(profile?.vehicles?.[0]?.plate || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
+              </div>
+
+              <h3 class="font-heading font-bold text-[15px] text-blueberry-deep mt-6 mb-3">${t('longTerm.contactInfo')}</h3>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.name')} *</label>
+                  <input type="text" name="name" required value="${escapeHtml(profile?.displayName || user?.displayName || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                </div>
+                <div class="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.email')} *</label>
+                    <input type="email" name="email" required value="${escapeHtml(profile?.email || user?.email || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                  </div>
+                  <div>
+                    <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')}</label>
+                    <input type="tel" name="phone" value="${escapeHtml(profile?.phone || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                  </div>
+                </div>
+              </div>
+              ${nextBtn('billing')}
+            ` })}
+
+            ${stepCard({ step: 'billing', num: 3, title: t('billing.title'), optional: true, body: `
+              <label class="flex items-center gap-2.5 text-[14px] text-charcoal/80 cursor-pointer mb-3" data-billing-same-wrap>
+                <input type="checkbox" name="billingSameAsContact" class="accent-blueberry w-4 h-4 shrink-0">
+                <span>${t('billing.sameAsContact')}</span>
+              </label>
+              ${billingFieldsHtml(profile?.billing)}
+              ${nextBtn('paymethod')}
+            ` })}
+
+            <div data-paymethod-block>${stepCard({ step: 'paymethod', num: 4, title: t('payment.method.title'), body: `
+              <div class="grid sm:grid-cols-2 gap-3" data-paymethod-toggle>
+                <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-mango bg-mango/5 cursor-pointer transition-colors">
+                  <input type="radio" name="paymentMethod" value="online" class="accent-mango w-4 h-4 mt-0.5" checked>
+                  <div class="min-w-0">
+                    <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.online')}</p>
+                    <p class="text-[13px] text-leaf font-medium mt-0.5" data-paymethod-online-hint>${t('payment.method.onlineHint')}</p>
+                  </div>
+                </label>
+                <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-frost-deep cursor-pointer transition-colors">
+                  <input type="radio" name="paymentMethod" value="pay-at-pickup" class="accent-mango w-4 h-4 mt-0.5">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.pickup')}</p>
+                    <p class="text-[13px] text-dim mt-0.5">${t('payment.method.pickupHint')}</p>
+                  </div>
                 </label>
               </div>
-              <div class="hidden" data-new-vehicle-fields>
-            ` : `
-              <div data-new-vehicle-fields>
-            `}
-              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.licensePlate')} *</label>
-              <input type="text" name="licensePlate" placeholder="B 123 ABC" value="${(user && profileVehicles.length > 0) ? '' : escapeHtml(profile?.vehicles?.[0]?.plate || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
-            </div>
+              ${nextBtn('voucher')}
+            ` })}</div>
 
-            <!-- Contact -->
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mt-6 mb-3">${t('longTerm.contactInfo')}</h3>
-            <div class="space-y-3">
-              <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.name')} *</label>
-                <input type="text" name="name" required value="${escapeHtml(profile?.displayName || user?.displayName || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+            <div data-voucher-block>${stepCard({ step: 'voucher', num: 5, title: t('voucher.codeTitle'), optional: true, body: `
+              <div class="flex flex-col sm:flex-row gap-2" data-voucher-input-wrap>
+                <input type="text" name="voucherCode" placeholder="${t('voucher.codePlaceholder')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono uppercase focus:outline-none focus:border-blueberry">
+                <button type="button" data-apply-voucher class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-3 rounded-xl transition-colors">${t('voucher.apply')}</button>
               </div>
-              <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.form.email')} *</label>
-                <input type="email" name="email" required value="${escapeHtml(profile?.email || user?.email || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-              </div>
-              <div>
-                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')}</label>
-                <input type="tel" name="phone" value="${escapeHtml(profile?.phone || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
-              </div>
-            </div>
-
-            <div class="flex justify-end mt-5">
-              <button type="button" data-next-step="billing" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
-            </div>
-          </div>
-
-          <!-- Billing (PF/PJ) -->
-          <div class="md:col-span-2 space-y-3" data-step="billing">
-            <label class="flex items-center gap-2.5 text-[14px] text-charcoal/80 cursor-pointer px-1" data-billing-same-wrap>
-              <input type="checkbox" name="billingSameAsContact" class="accent-blueberry w-4 h-4 shrink-0">
-              <span>${t('billing.sameAsContact')}</span>
-            </label>
-            ${billingFieldsHtml(profile?.billing)}
-            <div class="flex justify-end mt-5">
-              <button type="button" data-next-step="paymethod" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
-            </div>
-          </div>
-
-          <!-- Payment method -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-paymethod-block data-step="paymethod">
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-4">${t('payment.method.title')}</h3>
-            <div class="grid sm:grid-cols-2 gap-3" data-paymethod-toggle>
-              <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-mango bg-mango/5 cursor-pointer transition-colors">
-                <input type="radio" name="paymentMethod" value="online" class="accent-mango w-4 h-4 mt-0.5" checked>
+              <div class="hidden mt-3 flex items-center justify-between gap-3 bg-leaf/5 border border-leaf/30 rounded-xl px-4 py-3" data-voucher-applied>
                 <div class="min-w-0">
-                  <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.online')}</p>
-                  <p class="text-[13px] text-leaf font-medium mt-0.5" data-paymethod-online-hint>${t('payment.method.onlineHint')}</p>
+                  <p class="text-[14px] font-semibold text-leaf" data-voucher-applied-name>—</p>
+                  <p class="text-[12px] text-charcoal/70" data-voucher-applied-detail>—</p>
                 </div>
-              </label>
-              <label class="flex items-start gap-3 p-4 rounded-2xl border-2 border-frost-deep cursor-pointer transition-colors">
-                <input type="radio" name="paymentMethod" value="pay-at-pickup" class="accent-mango w-4 h-4 mt-0.5">
-                <div class="min-w-0">
-                  <p class="font-semibold text-[15px] text-charcoal">${t('payment.method.pickup')}</p>
-                  <p class="text-[13px] text-dim mt-0.5">${t('payment.method.pickupHint')}</p>
-                </div>
-              </label>
-            </div>
-            <div class="mt-4 flex items-baseline justify-between gap-4 rounded-xl bg-frost px-4 py-3 border border-frost-deep">
-              <span class="text-[13px] font-medium text-charcoal/70">${t('longTerm.totalLabel')}</span>
-              <span class="font-heading font-bold text-xl text-blueberry-deep" data-paymethod-amount>—</span>
-            </div>
-            <div class="flex justify-end mt-5">
-              <button type="button" data-next-step="terms" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
-            </div>
-          </div>
-
-          <!-- Voucher code -->
-          <div class="card-solid rounded-3xl p-6 md:col-span-2" data-voucher-block>
-            <h3 class="font-heading font-bold text-lg text-blueberry-deep mb-3">${t('voucher.codeTitle')}</h3>
-            <div class="flex flex-col sm:flex-row gap-2" data-voucher-input-wrap>
-              <input type="text" name="voucherCode" placeholder="${t('voucher.codePlaceholder')}" class="flex-1 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] font-mono uppercase focus:outline-none focus:border-blueberry">
-              <button type="button" data-apply-voucher class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-3 rounded-xl transition-colors">${t('voucher.apply')}</button>
-            </div>
-            <div class="hidden mt-3 flex items-center justify-between gap-3 bg-leaf/5 border border-leaf/30 rounded-xl px-4 py-3" data-voucher-applied>
-              <div class="min-w-0">
-                <p class="text-[14px] font-semibold text-leaf" data-voucher-applied-name>—</p>
-                <p class="text-[12px] text-charcoal/70" data-voucher-applied-detail>—</p>
+                <button type="button" data-remove-voucher class="text-[13px] text-red-500 hover:underline font-semibold shrink-0">${t('voucher.remove')}</button>
               </div>
-              <button type="button" data-remove-voucher class="text-[13px] text-red-500 hover:underline font-semibold shrink-0">${t('voucher.remove')}</button>
-            </div>
-            <p class="hidden mt-2 text-[13px] text-red-500" data-voucher-error></p>
+              <p class="hidden mt-2 text-[13px] text-red-500" data-voucher-error></p>
+            ` })}</div>
+
           </div>
 
-          <!-- Terms + privacy agreement (separate consents) + pay -->
-          <div class="md:col-span-2 flex flex-col items-start gap-3" data-step="terms">
-            <!-- Final to-pay amount + reductions breakdown (online discount,
-                 voucher), repeated here so it's visible right where the
-                 customer confirms (the live summary card is up top). -->
-            <div class="w-full rounded-2xl bg-blueberry-deep text-white px-5 py-4">
-              <div class="hidden text-[13px] space-y-1 mb-3 pb-3 border-b border-white/15" data-pay-breakdown>
+          <!-- RIGHT: sticky summary + consents + pay -->
+          <aside class="lg:sticky lg:top-24 space-y-4">
+            <div class="rounded-3xl p-6 bg-blueberry-deep text-white shadow-lg">
+              <p class="text-[12px] text-white/70 uppercase tracking-wider font-mono mb-2">${t('longTerm.totalLabel')}</p>
+              <p class="text-white/50 line-through font-mono text-[15px] hidden" data-quote-original></p>
+              <div class="flex items-baseline gap-2 mb-2">
+                <span class="font-heading font-bold text-5xl" data-quote-total>—</span>
+                <span class="text-white/70 text-lg">lei</span>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-mango ml-1 hidden" data-quote-discount-badge></span>
+              </div>
+              <p class="text-[14px] text-white/70"><span data-quote-days>—</span> ${t('longTerm.days')} × <span data-quote-perday>—</span> ${t('longTerm.perDay')}</p>
+              <p class="text-[12px] text-white/50 mt-1" data-quote-hours-line>—</p>
+              <p class="text-[13px] text-mango mt-2 hidden" data-voucher-line></p>
+              <div class="hidden text-[13px] space-y-1 mt-4 pt-4 border-t border-white/15" data-pay-breakdown>
                 <div class="flex justify-between text-white/70"><span>${t('longTerm.subtotal')}</span><span data-bd-subtotal>—</span></div>
                 <div class="flex justify-between text-leaf" style="display:none" data-bd-online-row><span data-bd-online-label>—</span><span data-bd-online>—</span></div>
                 <div class="flex justify-between text-mango" style="display:none" data-bd-voucher-row><span data-bd-voucher-label>—</span><span data-bd-voucher>—</span></div>
               </div>
-              <div class="flex items-baseline justify-between gap-4">
-                <span class="text-[12px] uppercase tracking-wider font-mono text-white/70">${t('longTerm.totalLabel')}</span>
-                <span class="font-heading font-bold text-3xl" data-pay-total>—</span>
-              </div>
             </div>
-            <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer max-w-full">
-              <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
-              <span>${t('legal.acceptTerms')}</span>
-            </label>
-            <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer max-w-full">
-              <input type="checkbox" name="acceptPrivacy" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
-              <span>${t('legal.acceptPrivacy')}</span>
-            </label>
-            <button type="submit" data-pay-btn class="mt-2 bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-10 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
-          </div>
+            <div class="card-solid rounded-3xl p-5 flex flex-col gap-3">
+              <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
+                <input type="checkbox" name="acceptTerms" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
+                <span>${t('legal.acceptTerms')}</span>
+              </label>
+              <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
+                <input type="checkbox" name="acceptPrivacy" required class="accent-blueberry w-4 h-4 mt-1 shrink-0">
+                <span>${t('legal.acceptPrivacy')}</span>
+              </label>
+              <button type="submit" data-pay-btn class="mt-1 w-full bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[16px] px-6 py-4 rounded-2xl shadow-md transition-colors">${t('longTerm.payNow')}</button>
+            </div>
+          </aside>
         </form>
 
         <!-- Confirmation (hidden until success) -->
-        <div data-confirmation class="hidden card-solid rounded-3xl p-10 text-center mt-6">
+        <div data-confirmation class="hidden card-solid rounded-3xl p-10 text-center mt-6 max-w-2xl mx-auto">
           <div class="w-16 h-16 rounded-2xl bg-leaf/10 flex items-center justify-center mx-auto mb-5">
             <svg class="w-8 h-8 text-leaf" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </div>
@@ -819,18 +810,89 @@ export default function BookingLongTerm(container) {
     }
   }
 
+  // ── Accordion controller ──────────────────────────────────────────────
+  // Only one step is expanded at a time; completed steps collapse to a
+  // one-line summary with an "Edit" link. Keeps the funnel short while the
+  // existing per-step validation (validateStep) still gates "Next".
+  const STEP_ORDER = ['dates', 'details', 'billing', 'paymethod', 'voucher'];
+
+  function summarizeStep(step) {
+    if (step === 'dates') return quote.days ? `${quote.days} ${t('longTerm.days')}` : '—';
+    if (step === 'details') {
+      const p = resolvePlate();
+      const n = String(form.name?.value || '').trim();
+      return [p, n].filter(Boolean).join(' · ') || '—';
+    }
+    if (step === 'billing') {
+      const isPJ = (form.querySelector('input[name="billingType"]:checked')?.value || 'PF') === 'PJ';
+      if (isPJ) return form.querySelector('[name="billingCompanyName"]')?.value?.trim() || t('billing.typePJ');
+      const fn = form.querySelector('[name="billingFirstName"]')?.value?.trim() || '';
+      const ln = form.querySelector('[name="billingLastName"]')?.value?.trim() || '';
+      return [fn, ln].filter(Boolean).join(' ') || t('billing.typePF');
+    }
+    if (step === 'paymethod') return paymentMethod === 'pay-at-pickup' ? t('payment.method.pickup') : t('payment.method.online');
+    if (step === 'voucher') return promoVoucher ? promoVoucher.code : '—';
+    return '';
+  }
+
+  function openStep(name, { scroll = true } = {}) {
+    STEP_ORDER.forEach((s) => {
+      const el = page.querySelector(`[data-step="${s}"]`);
+      if (!el) return;
+      const active = s === name;
+      const completed = el.dataset.completed === '1';
+      el.classList.toggle('ring-2', active);
+      el.classList.toggle('ring-blueberry/20', active);
+      const body = el.querySelector('[data-step-body]');
+      const summary = el.querySelector('[data-step-summary]');
+      const edit = el.querySelector('[data-step-edit]');
+      if (body) body.classList.toggle('hidden', !active);
+      if (summary) {
+        const show = !active && completed;
+        summary.classList.toggle('hidden', !show);
+        if (show) summary.textContent = summarizeStep(s);
+      }
+      if (edit) edit.classList.toggle('hidden', !(completed && !active));
+    });
+    if (scroll) {
+      const el = page.querySelector(`[data-step="${name}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      focusFirstField(el?.querySelector('[data-step-body]'));
+    }
+  }
+
+  function completeStep(name) {
+    const el = page.querySelector(`[data-step="${name}"]`);
+    if (!el) return;
+    el.dataset.completed = '1';
+    const badge = el.querySelector('[data-step-badge]');
+    if (badge) {
+      badge.textContent = '✓';
+      badge.classList.remove('bg-frost-deep', 'text-charcoal/60');
+      badge.classList.add('bg-leaf', 'text-white');
+    }
+  }
+
   page.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-next-step]');
-    if (!btn) return;
-    const currentCard = btn.closest('[data-step]');
-    const currentStep = currentCard?.dataset.step;
-    if (currentStep && !validateStep(currentStep)) return;
-    const nextStep = btn.dataset.nextStep;
-    const target = page.querySelector(`[data-step="${nextStep}"]`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    focusFirstField(target);
+    const nextStepBtn = e.target.closest('[data-next-step]');
+    if (nextStepBtn) {
+      const card = nextStepBtn.closest('[data-step]');
+      const currentStep = card?.dataset.step;
+      if (currentStep && !validateStep(currentStep)) return;
+      if (currentStep) completeStep(currentStep);
+      openStep(nextStepBtn.dataset.nextStep);
+      return;
+    }
+    // Header click — re-open a step to edit it (collapses whatever's open).
+    const head = e.target.closest('[data-step-head]');
+    if (head) {
+      const step = head.closest('[data-step]')?.dataset.step;
+      if (step) openStep(step);
+    }
   });
+
+  // Start with only the first step expanded.
+  openStep('dates', { scroll: false });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -841,6 +903,7 @@ export default function BookingLongTerm(container) {
     if (!dropoffIso || !pickupIso) {
       setFieldError(form.dropoffAt, !dropoffIso);
       setFieldError(form.pickupAt, !pickupIso);
+      openStep('dates');
       showToast(t('longTerm.invalidDates'), 'error');
       return;
     }
@@ -848,16 +911,18 @@ export default function BookingLongTerm(container) {
     const pickupMs = new Date(pickupIso).getTime();
     if (pickupMs <= dropoffMs) {
       setFieldError(form.pickupAt, true);
+      openStep('dates');
       showToast(t('longTerm.invalidDates'), 'error');
       return;
     }
     if (pickupMs - dropoffMs < 60 * 60 * 1000) {
       setFieldError(form.pickupAt, true);
+      openStep('dates');
       showToast(t('longTerm.minDuration'), 'error');
       return;
     }
     const days = billingDays(dropoffMs, pickupMs);
-    if (days < 1) { showToast(t('longTerm.invalidDates'), 'error'); return; }
+    if (days < 1) { openStep('dates'); showToast(t('longTerm.invalidDates'), 'error'); return; }
 
     const licensePlate = resolvePlate();
     const name = form.name.value.trim();
@@ -887,12 +952,14 @@ export default function BookingLongTerm(container) {
       return;
     }
     if (hasError) {
+      openStep('details');
       showToast(t('common.error'), 'error');
       return;
     }
 
     const billing = readBilling(form);
     if (billing.error) {
+      openStep('billing');
       showToast(billing.error, 'error');
       return;
     }
