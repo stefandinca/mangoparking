@@ -1332,6 +1332,7 @@ export default {
     createAmount: 'Sumă încasată (lei)',
     createPaidBy: 'Plătit prin',
     paidByBroker: 'Broker / preplătit',
+    paidByLater: 'Plată ulterioară (rezervare)',
     brokerNameLabel: 'Broker (preplătit)',
     brokerNamePlaceholder: 'ex. ParkVia',
     createSubmit: 'Salvează',

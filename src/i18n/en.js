@@ -1331,6 +1331,7 @@ export default {
     createAmount: 'Amount paid (RON)',
     createPaidBy: 'Paid by',
     paidByBroker: 'Broker / prepaid',
+    paidByLater: 'Pay later (reservation)',
     brokerNameLabel: 'Broker (prepaid)',
     brokerNamePlaceholder: 'e.g. ParkVia',
     createSubmit: 'Save',

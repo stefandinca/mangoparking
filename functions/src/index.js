@@ -2075,21 +2075,31 @@ export const adminCreateLongtermBooking = onCall(
     if (!Number.isFinite(total) || total <= 0) {
       throw new HttpsError('invalid-argument', 'totalPrice must be positive');
     }
-    if (!['cash', 'card', 'broker'].includes(paidBy)) {
-      throw new HttpsError('invalid-argument', 'paidBy must be cash, card or broker');
+    if (!['cash', 'card', 'broker', 'later'].includes(paidBy)) {
+      throw new HttpsError('invalid-argument', 'paidBy must be cash, card, broker or later');
     }
+    // 'later' = an unpaid reservation the customer pays afterwards (online via
+    // the confirmation-email link, or at the lot). It rides the same rails as
+    // a customer pay-at-pickup booking — see the pendingOrder created below.
+    const payLater = paidBy === 'later';
 
     // paidBy → stored marker + booking source. Broker/prepaid reservations
     // already collected the money off-lot (ParkVia et al.), so they carry a
     // 'broker' marker (no cashbook entry) and a 'broker' source for separate
-    // tracking; cash/card walk-ins keep their admin- markers.
+    // tracking; cash/card walk-ins keep their admin- markers; pay-later has
+    // no payer yet (null).
     const storedPaidBy = paidBy === 'cash' ? 'admin-cash'
       : paidBy === 'card' ? 'admin-card'
-      : 'broker';
+      : paidBy === 'broker' ? 'broker'
+      : null;
     const bookingSource = paidBy === 'broker' ? 'broker' : 'admin';
 
     const db = getFirestore();
     const nowIso = new Date().toISOString();
+    // Pay-later reservations get a pendingOrder so they're payable online
+    // (/pay → repayOrder) and collectable later (Check-in "Collect" →
+    // adminMarkOrderPaid), exactly like a customer pay-at-pickup booking.
+    const orderId = payLater ? `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
     const bookingRef = await db.collection('bookings').add({
       code: generateBookingCode('longTerm'),
       type: 'longTerm',
@@ -2110,10 +2120,10 @@ export const adminCreateLongtermBooking = onCall(
         phone: payerPhone || '',
       },
       billing: { type: 'PF' },
-      paymentId: null,
-      paymentMethod: paidBy === 'broker' ? 'broker' : 'admin',
-      paymentStatus: 'paid',
-      paidAt: nowIso,
+      paymentId: orderId,
+      paymentMethod: payLater ? 'pay-at-pickup' : (paidBy === 'broker' ? 'broker' : 'admin'),
+      paymentStatus: payLater ? 'unpaid' : 'paid',
+      paidAt: payLater ? null : nowIso,
       paidBy: storedPaidBy,
       brokerName: paidBy === 'broker' ? (String(brokerName || '').trim() || null) : null,
       spotId: null,
@@ -2123,12 +2133,41 @@ export const adminCreateLongtermBooking = onCall(
       createdBy: uid,
     });
 
-    // Auto-reserve a spot — admin-created bookings are always paid, so the
-    // reservation is real immediately. Surfaces as a blue tile on the
-    // capacity map until check-in flips it to occupied.
-    const spotId = await reserveAvailableSpot(bookingRef.id);
-    if (spotId) {
-      await bookingRef.update({ spotId });
+    // Auto-reserve a spot for PAID bookings — the reservation is real
+    // immediately (a blue tile on the capacity map until check-in). Pay-later
+    // bookings reserve nothing until payment lands (same as a customer
+    // pay-at-pickup booking), so an unpaid no-show never orphans a spot.
+    let spotId = null;
+    if (!payLater) {
+      spotId = await reserveAvailableSpot(bookingRef.id);
+      if (spotId) {
+        await bookingRef.update({ spotId });
+      }
+    } else {
+      await db.collection('pendingOrders').doc(orderId).set({
+        orderType: 'longTerm',
+        paymentMethod: 'pay-at-pickup',
+        status: 'pending',
+        paymentStatus: 'unpaid',
+        amount: total,
+        totalPrice: total,
+        days: d,
+        startDate: dropoffAt,
+        endDate: pickupAt,
+        dropoffAt,
+        pickupAt,
+        bookingId: bookingRef.id,
+        customerData: {
+          customerId: customerId || null,
+          licensePlate: normalizePlate(plate),
+          name: payerName || '',
+          email: payerEmail || '',
+          phone: payerPhone || '',
+          billing: { type: 'PF' },
+        },
+        createdAt: nowIso,
+        createdBy: uid,
+      });
     }
 
     await db.collection('auditLog').add({
@@ -2158,7 +2197,7 @@ export const adminCreateLongtermBooking = onCall(
     // (reservation auto-happens for paid admin bookings), so we just need
     // to mark it occupied and write the activeCheckIns row.
     let checkedIn = false;
-    if (autoCheckIn) {
+    if (autoCheckIn && !payLater) {
       const checkinIso = new Date().toISOString();
       await bookingRef.update({
         status: 'active',

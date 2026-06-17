@@ -218,6 +218,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
           <option value="cash">${t('checkins.payCash')}</option>
           <option value="card">${t('checkins.payCard')}</option>
           <option value="broker" data-broker-opt>${t('transactions.paidByBroker')}</option>
+          <option value="later" data-later-opt>${t('transactions.paidByLater')}</option>
         </select>
       </div>
 
@@ -351,8 +352,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
   const paidbyWrap = qs('[data-paidby-wrap]', contentEl);
   const paidBySelect = qs('[name="paidBy"]', contentEl);
   const brokerOpt = qs('[data-broker-opt]', contentEl);
+  const laterOpt = qs('[data-later-opt]', contentEl);
   const brokerWrap = qs('[data-broker-wrap]', contentEl);
   const autoCheckInWrap = qs('[data-autocheckin-wrap]', contentEl);
+  const autoCheckInInput = qs('input[name="autoCheckIn"]', contentEl);
   const submitBtn = qs('[data-submit]', contentEl);
   const balanceDisplay = qs('[data-balance-display]', contentEl);
 
@@ -377,23 +380,26 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     if (crUse) crUse.classList.toggle('hidden', !useExisting);
     // Money + walk-in affordances are irrelevant when spending existing credits.
     paidbyWrap?.classList.toggle('hidden', useExisting);
-    autoCheckInWrap?.classList.toggle('hidden', useExisting);
-    // Broker/prepaid is a long-term-only payment route. Hide the option on
-    // the credit funnel (grantCreditsForCash only takes cash/card) and snap
-    // the selector back to cash if it was left on broker.
+    // Broker/prepaid and pay-later are long-term-only payment routes. Hide
+    // both options on the credit funnel (grantCreditsForCash only takes
+    // cash/card) and snap the selector back to cash if it was left on either.
     if (brokerOpt) brokerOpt.hidden = !isLT;
-    if (!isLT && paidBySelect?.value === 'broker') paidBySelect.value = 'cash';
+    if (laterOpt) laterOpt.hidden = !isLT;
+    if (!isLT && (paidBySelect?.value === 'broker' || paidBySelect?.value === 'later')) paidBySelect.value = 'cash';
     if (brokerWrap) brokerWrap.classList.toggle('hidden', !(isLT && paidBySelect?.value === 'broker'));
+    // Pay-later is an unpaid reservation — you can't auto-check-in an unpaid
+    // car (payment-first), so hide the walk-in checkbox and clear it.
+    const isPayLater = isLT && paidBySelect?.value === 'later';
+    autoCheckInWrap?.classList.toggle('hidden', useExisting || isPayLater);
+    if (isPayLater && autoCheckInInput) autoCheckInInput.checked = false;
     submitBtn.textContent = useExisting
       ? t('transactions.createCheckInSubmit')
       : t('transactions.createSubmit');
   }
 
-  // Toggle the broker-name field as the payment method changes.
-  paidBySelect?.addEventListener('change', () => {
-    const showBroker = getType() === 'longterm' && paidBySelect.value === 'broker';
-    brokerWrap?.classList.toggle('hidden', !showBroker);
-  });
+  // Re-apply visibility as the payment method changes — handles the broker
+  // name field and the pay-later (unpaid) affordances.
+  paidBySelect?.addEventListener('change', applyVisibility);
 
   typeToggle.addEventListener('change', (e) => {
     if (!e.target.matches('input[name="tType"]')) return;
