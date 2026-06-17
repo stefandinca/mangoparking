@@ -46,6 +46,10 @@ function fmtDateTime(iso, locale) {
   if (Number.isNaN(d.getTime())) return iso;
   try {
     return d.toLocaleString(locale === 'en' ? 'en-GB' : 'ro-RO', {
+      // Stored times are absolute (UTC); the Functions runtime is UTC, so we
+      // must pin the zone or emails render 3h off the website (which shows
+      // local Bucharest time). Matches adminNotifications.js / scheduled.js.
+      timeZone: 'Europe/Bucharest',
       day: 'numeric', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
@@ -559,6 +563,7 @@ function fmtDateOnly(iso, locale) {
   if (Number.isNaN(d.getTime())) return String(iso);
   try {
     return d.toLocaleDateString(locale === 'en' ? 'en-GB' : 'ro-RO', {
+      timeZone: 'Europe/Bucharest',
       day: '2-digit', month: 'short', year: 'numeric',
     });
   } catch { return String(iso); }
