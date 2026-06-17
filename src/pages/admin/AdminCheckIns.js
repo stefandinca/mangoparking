@@ -33,6 +33,7 @@ import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { hasPermission, PERM } from '../../utils/permissions.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
+import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
@@ -355,7 +356,7 @@ function rowHtml(b, { tab, locale, canCancel }) {
       </td>
       <td class="px-4 py-3 align-top text-[13px]">
         <div class="mb-1">${typeBadge(b)}</div>
-        <div class="font-medium">${escapeHtml(name)}</div>
+        <div class="font-medium">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name })}</div>
         <div class="text-[11px] text-dim truncate" title="${escapeHtml(b.contact?.email || '')}">${escapeHtml(b.contact?.email || '')}</div>
       </td>
       <td class="px-4 py-3 align-top text-[13px] font-mono">${escapeHtml(plate)}</td>
@@ -479,6 +480,7 @@ export default async function AdminCheckIns(container) {
   `);
 
   initAdminNav(page);
+  wireUserLinks(page);
   container.appendChild(page);
 
   const tabsEl = page.querySelector('[data-tabs]');

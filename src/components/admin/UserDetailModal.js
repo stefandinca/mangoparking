@@ -18,6 +18,7 @@ import { html, qs, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { getCollection, getDocument, where, orderBy, limit } from '../../firebase/db.js';
 import { getBalance, getTransactions } from '../../services/tokenService.js';
+import { showToast } from '../core/Toast.js';
 
 function fmtDateTime(iso) {
   if (!iso) return '—';
@@ -307,14 +308,18 @@ async function loadAndRender(user, body) {
   `;
   body.innerHTML = staticHtml;
 
+  // uid-keyed lookups only run for a real account. A guest reference (opened
+  // from a booking with no customerId) has uid=null — we'd otherwise query
+  // `customerId == null` and pull EVERY guest's rows. Bookings still resolve
+  // by email so their history shows.
   const [balance, txns, byId, byEmail, promos, redemptions, legacy] = await Promise.all([
-    getBalance(uid).catch(() => null),
-    getTransactions(uid, 50).catch(() => []),
-    getCollection('bookings', where('customerId', '==', uid)).catch(() => []),
+    uid ? getBalance(uid).catch(() => null) : Promise.resolve(null),
+    uid ? getTransactions(uid, 50).catch(() => []) : Promise.resolve([]),
+    uid ? getCollection('bookings', where('customerId', '==', uid)).catch(() => []) : Promise.resolve([]),
     email ? getCollection('bookings', where('contact.email', '==', email)).catch(() => []) : Promise.resolve([]),
-    getCollection('promoVouchers', where('assignedUserIds', 'array-contains', uid)).catch(() => []),
-    getCollection('voucherRedemptions', where('userId', '==', uid)).catch(() => []),
-    getDocument('vouchers', uid).catch(() => null),
+    uid ? getCollection('promoVouchers', where('assignedUserIds', 'array-contains', uid)).catch(() => []) : Promise.resolve([]),
+    uid ? getCollection('voucherRedemptions', where('userId', '==', uid)).catch(() => []) : Promise.resolve([]),
+    uid ? getDocument('vouchers', uid).catch(() => null) : Promise.resolve(null),
   ]);
 
   // Merge bookings from both link paths, dedupe by doc id, newest first.
@@ -338,4 +343,61 @@ async function loadAndRender(user, body) {
   qs('[data-vouchers-slot]', body).innerHTML = vouchersHtml(promos, redemptionsByCode, legacy);
   qs('[data-bookings-slot]', body).innerHTML = bookingsHtml(bookings);
   qs('[data-transactions-slot]', body).innerHTML = transactionsHtml(txns);
+}
+
+// ── Open-from-anywhere helpers ──────────────────────────────────────────
+// Other admin pages (check-ins, transactions, …) only have a customerId
+// and/or a contact email, not the full users/{uid} doc. This resolves the
+// reference to a user and opens the same modal. For a guest booking with no
+// account, it opens a minimal record (email-only) so their booking history
+// still shows.
+
+export async function openUserDetail({ customerId = null, email = null, displayName = '' } = {}) {
+  const cid = customerId && String(customerId).trim() ? String(customerId).trim() : null;
+  const mail = email && String(email).trim() ? String(email).trim() : null;
+  if (!cid && !mail) {
+    showToast(t('admin.usersDetail.noRef'), 'info');
+    return null;
+  }
+
+  let user = null;
+  if (cid) {
+    user = await getDocument('users', cid).catch(() => null);
+    if (user && !user.id) user.id = cid;
+  }
+  if (!user && mail) {
+    const matches = await getCollection('users', where('email', '==', mail)).catch(() => []);
+    user = matches[0] || null;
+  }
+  // No account on file — open a minimal record so bookings-by-email still show.
+  if (!user) user = { id: cid, email: mail || '', displayName: displayName || mail || '' };
+  return openUserDetailModal(user);
+}
+
+// Render a customer name as a clickable element that opens the detail modal.
+// Falls back to a plain span when there's nothing to resolve (no id/email).
+export function userNameButton({ customerId = null, email = null, name = '', className = '' } = {}) {
+  const label = escapeHtml(name || email || '—');
+  if (!customerId && !email) return `<span class="${className}">${label}</span>`;
+  return `<button type="button" data-user-link data-uid="${escapeHtml(customerId || '')}" data-email="${escapeHtml(email || '')}" class="text-left hover:text-blueberry hover:underline transition-colors cursor-pointer ${className}">${label}</button>`;
+}
+
+// Delegate clicks on any [data-user-link] within a scope to the detail modal.
+// Idempotent per scope; the listener lives on the page root so it survives
+// in-place re-renders of the content below it.
+export function wireUserLinks(scopeEl) {
+  if (!scopeEl || scopeEl.__userLinksWired) return;
+  scopeEl.__userLinksWired = true;
+  scopeEl.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-user-link]');
+    if (!el || !scopeEl.contains(el)) return;
+    // Don't let the name click bubble to a row-level handler (e.g. the
+    // overdue accordion toggle, which also guards against [data-user-link]).
+    e.stopPropagation();
+    openUserDetail({
+      customerId: el.dataset.uid || null,
+      email: el.dataset.email || null,
+      displayName: el.textContent.trim(),
+    });
+  });
 }

@@ -7,6 +7,7 @@ import { openModal } from '../../components/core/Modal.js';
 import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
+import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 
 const adminMarkRefundedFn = httpsCallable(functions, 'adminMarkRefunded');
 const adminResendRefundEmailFn = httpsCallable(functions, 'adminResendRefundEmail');
@@ -100,7 +101,7 @@ function rowHtml(b, locale) {
     <tr class="border-t border-frost-deep">
       <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(code)}</td>
       <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(b.licensePlate || '—')}</td>
-      <td class="px-4 py-3 text-[13px]">${escapeHtml(b.contact?.name || b.contact?.email || '—')}</td>
+      <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
       <td class="px-4 py-3 text-[13px] text-dim">${fmtDate(b.cancelledAt, locale)}</td>
       <td class="px-4 py-3 text-[13px]">${escapeHtml(paidByLabel(paidBy))}</td>
       <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right">${Number(b.totalPrice || 0)} ${t('common.lei')}</td>
@@ -150,7 +151,7 @@ export default async function AdminRefunds(container) {
       <tr class="border-t border-frost-deep">
         <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(code)}</td>
         <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(b.licensePlate || '—')}</td>
-        <td class="px-4 py-3 text-[13px]">${escapeHtml(b.contact?.name || b.contact?.email || '—')}</td>
+        <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
         <td class="px-4 py-3 text-[13px] text-dim">${fmtDateTime(b.refundedAt, locale)}</td>
         <td class="px-4 py-3 text-[13px]">${escapeHtml(refundedViaLabel(b.refundedVia))}</td>
         <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right">${Number(b.totalPrice || 0)} ${t('common.lei')}</td>
@@ -245,6 +246,7 @@ export default async function AdminRefunds(container) {
 
   const page = AdminLayout('/admin/refunds', content);
   initAdminNav(page);
+  wireUserLinks(page);
   container.appendChild(page);
 
   page.addEventListener('click', async (e) => {

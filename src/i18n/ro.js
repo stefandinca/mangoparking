@@ -656,6 +656,7 @@ export default {
       close: 'Închide',
       loading: 'Se încarcă…',
       none: 'Nimic de afișat.',
+      noRef: 'Niciun client de afișat pentru acest rând.',
       profile: 'Profil & contact',
       email: 'Email',
       phone: 'Telefon',

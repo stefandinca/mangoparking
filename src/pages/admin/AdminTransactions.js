@@ -5,6 +5,7 @@ import { getAllRecentTransactions } from '../../services/tokenService.js';
 import { getCollection } from '../../firebase/db.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
+import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 
 // /admin/transactions — unified ledger.
 //
@@ -78,6 +79,7 @@ export default async function AdminTransactions(container) {
         : tx.type === 'use' ? String(tx.quantity || 0)
         : `+${tx.quantity || 0}`,
       plate: tx.licensePlate || '',
+      customerId: tx.customerId || null,
       email: (tx.customerId && emailByUid.get(tx.customerId)) || tx.billing?.email || '',
       code: '',
     });
@@ -91,6 +93,7 @@ export default async function AdminTransactions(container) {
       status: b.status || 'upcoming',
       sum: typeof b.totalPrice === 'number' ? `${b.totalPrice} ${t('common.lei')}` : '',
       plate: b.licensePlate || '',
+      customerId: b.customerId || null,
       email: b.contact?.email || (b.customerId && emailByUid.get(b.customerId)) || '',
       code: b.code || '',
     });
@@ -154,6 +157,7 @@ export default async function AdminTransactions(container) {
   `);
 
   initAdminNav(page);
+  wireUserLinks(page);
   container.appendChild(page);
 
   const tbody = qs('[data-rows]', page);
@@ -186,7 +190,7 @@ export default async function AdminTransactions(container) {
         <td class="px-4 py-3"><span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_STYLES[r.status] || 'bg-gray-100 text-gray-600'}">${r.status || '—'}</span></td>
         <td class="px-4 py-3 text-right font-mono font-semibold">${escapeHtml(r.sum)}</td>
         <td class="px-4 py-3 font-mono">${escapeHtml(r.plate || '—')}</td>
-        <td class="px-4 py-3 font-mono text-[13px] text-dim">${escapeHtml(r.email || '—')}</td>
+        <td class="px-4 py-3 font-mono text-[13px] text-dim">${userNameButton({ customerId: r.customerId, email: r.email, name: r.email })}</td>
         <td class="px-4 py-3 font-mono text-[13px]">${escapeHtml(r.code || '—')}</td>
       </tr>
     `).join('');

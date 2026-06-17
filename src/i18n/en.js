@@ -655,6 +655,7 @@ export default {
       close: 'Close',
       loading: 'Loading…',
       none: 'Nothing to show.',
+      noRef: 'No customer to show for this row.',
       profile: 'Profile & contact',
       email: 'Email',
       phone: 'Phone',
