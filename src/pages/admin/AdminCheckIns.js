@@ -39,6 +39,7 @@ import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
 const adminChargeOverstayFn = httpsCallable(functions, 'adminChargeOverstay');
+const resendConfirmationFn = httpsCallable(functions, 'adminResendConfirmationEmail');
 
 const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
@@ -325,6 +326,8 @@ function rowHtml(b, { tab, locale, canCancel }) {
     } else {
       actions.push(`<span class="text-[11px] text-red-600 font-medium self-center mr-1">${t('checkins.collectFirst')}</span>`);
     }
+    // Re-send the confirmation email for a not-yet-arrived reservation.
+    actions.push(actionButton({ key: 'resend-email', label: t('checkins.resendEmail'), variant: 'neutral', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(code)}"` }));
   } else if (tab === 'checkout') {
     actions.push(actionButton({ key: 'checkout', label: t('checkins.actionCheckOut'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
   }
@@ -750,6 +753,10 @@ export default async function AdminCheckIns(container) {
         showToast(t('checkins.toastCancelled'), 'success');
       } else if (action === 'overstay') {
         await openOverstayDialog({ booking, perCredit: creditPerDay });
+      } else if (action === 'resend-email') {
+        const code = btn.dataset.code || bookingId.slice(0, 5);
+        const res = await resendConfirmationFn({ bookingId });
+        showToast(t('checkins.resendOk', { code, recipient: res?.data?.recipient || '' }), 'success');
       }
     } catch (err) {
       console.error(action, err);

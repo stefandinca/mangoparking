@@ -1428,6 +1428,8 @@ export default {
     amountDue: 'Amount due',
     collectPlate: 'Plate {plate}',
     collectFirst: 'Collect first',
+    resendEmail: 'Resend email',
+    resendOk: 'Confirmation email resent for {code} to {recipient}.',
     paidBy: 'Paid by',
     confirmPayment: 'Confirm payment',
     payCash: 'Cash',

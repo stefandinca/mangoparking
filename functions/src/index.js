@@ -37,7 +37,7 @@ import {
   crcError,
 } from './netopia.js';
 import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
-import { sendRepayPaidEmail, sendRefundIssuedEmail } from './emails.js';
+import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail } from './emails.js';
 import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 
@@ -1984,6 +1984,49 @@ export const adminResendRefundEmail = onCall(
     const result = await sendRefundIssuedEmail(bookingId);
     await db.collection('auditLog').add({
       action: 'refund_email_resent',
+      entityType: 'booking',
+      entityId: bookingId,
+      actorUid: uid,
+      payload: { ok: !!result?.ok, reason: result?.reason || null, recipient: result?.recipient || null },
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!result?.ok) {
+      throw new HttpsError('internal', `Email send failed: ${result?.reason || 'unknown'}`);
+    }
+    return { ok: true, recipient: result.recipient };
+  }
+);
+
+// ── adminResendConfirmationEmail (callable) ─────────────────────────────
+// Re-send the booking confirmation email for a reservation that hasn't been
+// checked in yet (status 'upcoming'). For staff who need to re-issue it when
+// the customer says they never got it, the address was wrong, or the auto
+// send failed. Reflects the booking's current paid/unpaid state.
+export const adminResendConfirmationEmail = onCall(
+  { region: 'europe-west1', cors: true, secrets: [BREVO_API_KEY] },
+  async (request) => {
+    const { uid } = await assertStaff(request);
+    const { bookingId } = request.data || {};
+    if (!bookingId) throw new HttpsError('invalid-argument', 'Missing bookingId');
+
+    const db = getFirestore();
+    const snap = await db.collection('bookings').doc(bookingId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const booking = snap.data();
+    if (booking.type !== 'longTerm') {
+      throw new HttpsError('failed-precondition', 'Only long-term reservations have a confirmation email');
+    }
+    if (booking.status !== 'upcoming') {
+      throw new HttpsError(
+        'failed-precondition',
+        `Can only resend before check-in — current status: ${booking.status}`,
+      );
+    }
+
+    const result = await sendBookingConfirmationEmail(bookingId);
+    await db.collection('auditLog').add({
+      action: 'confirmation_email_resent',
       entityType: 'booking',
       entityId: bookingId,
       actorUid: uid,

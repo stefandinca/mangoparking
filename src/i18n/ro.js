@@ -1439,6 +1439,8 @@ export default {
     amountDue: 'Sumă de încasat',
     collectPlate: 'Placa {plate}',
     collectFirst: 'Încasează întâi',
+    resendEmail: 'Retrimite emailul',
+    resendOk: 'Email de confirmare retrimis pentru {code} către {recipient}.',
     paidBy: 'Metodă plată',
     confirmPayment: 'Confirmă plata',
     payCash: 'Numerar',

@@ -212,47 +212,66 @@ export const onBookingCreated = onDocumentCreated(
       return;
     }
 
-    const recipient = await resolveRecipient({
-      customerId: booking.customerId,
-      licensePlate: booking.licensePlate,
-      contact: booking.contact,
-    });
-    if (!recipient) {
-      console.warn('onBookingCreated: no recipient resolvable', event.params.id);
-      return;
+    const result = await sendBookingConfirmationEmail(event.params.id);
+    if (result?.ok) {
+      console.log(`onBookingCreated: sent confirmation to=${result.recipient} bookingId=${event.params.id}`);
+    } else {
+      console.warn('onBookingCreated: confirmation skipped/failed', event.params.id, result?.reason);
     }
-    console.log(`onBookingCreated: sending to=${recipient.email} locale=${recipient.locale} bookingId=${event.params.id}`);
-
-    const paid = booking.paymentStatus !== 'unpaid';
-    const discountPct = paid ? 0 : await getOnlineDiscount();
-    // Pay-online recovery link — the orderId is in the URL; the /pay page
-    // re-enters Netopia for an existing pay-at-pickup order, applying the
-    // online discount.
-    const payOrderId = booking.paymentId || event.params.id;
-    const payOnlineLink = paid ? '' : `${SITE_URL}/pay?orderId=${payOrderId}`;
-
-    await sendBrevoEmail({
-      to: recipient.email,
-      name: recipient.name,
-      templateName: 'booking-longterm-confirm',
-      locale: recipient.locale,
-      // Admin copy is handled by adminNotifyBookingCreated (a dedicated ops
-      // alert), so no BCC here — avoids double-emailing rezervari@.
-      params: {
-        firstName: recipient.firstName,
-        code: booking.code || `LT-${event.params.id.slice(0, 5).toUpperCase()}`,
-        plate: booking.licensePlate,
-        days: booking.days,
-        dropoffAt: fmtDateTime(booking.dropoffAt || booking.startDate, recipient.locale),
-        pickupAt: fmtDateTime(booking.pickupAt || booking.endDate, recipient.locale),
-        totalAmount: booking.totalPrice,
-        paid,
-        payOnlineLink,
-        discountPct,
-      },
-    });
   }
 );
+
+// Reusable confirmation-email sender. Both the onBookingCreated trigger above
+// and the adminResendConfirmationEmail callable use it, so the template params
+// live in one place. Reflects the booking's CURRENT state: a paid booking gets
+// the "paid" branch; a pay-at-pickup (unpaid) one gets the pay-online nudge
+// with the live discount. Returns { ok, recipient } or { ok:false, reason }.
+export async function sendBookingConfirmationEmail(bookingId) {
+  const db = getFirestore();
+  const snap = await db.collection('bookings').doc(bookingId).get();
+  if (!snap.exists) return { ok: false, reason: 'booking-not-found' };
+  const booking = snap.data();
+  if (booking.type !== 'longTerm') return { ok: false, reason: 'wrong-type' };
+
+  const recipient = await resolveRecipient({
+    customerId: booking.customerId,
+    licensePlate: booking.licensePlate,
+    contact: booking.contact,
+  });
+  if (!recipient) return { ok: false, reason: 'no-recipient' };
+
+  const paid = booking.paymentStatus !== 'unpaid';
+  const discountPct = paid ? 0 : await getOnlineDiscount();
+  // Pay-online recovery link — the orderId is in the URL; the /pay page
+  // re-enters Netopia for an existing pay-at-pickup order, applying the
+  // online discount.
+  const payOrderId = booking.paymentId || bookingId;
+  const payOnlineLink = paid ? '' : `${SITE_URL}/pay?orderId=${payOrderId}`;
+
+  const result = await sendBrevoEmail({
+    to: recipient.email,
+    name: recipient.name,
+    templateName: 'booking-longterm-confirm',
+    locale: recipient.locale,
+    // Admin copy is handled by adminNotifyBookingCreated (a dedicated ops
+    // alert), so no BCC here — avoids double-emailing rezervari@.
+    params: {
+      firstName: recipient.firstName,
+      code: booking.code || `LT-${bookingId.slice(0, 5).toUpperCase()}`,
+      plate: booking.licensePlate,
+      days: booking.days,
+      dropoffAt: fmtDateTime(booking.dropoffAt || booking.startDate, recipient.locale),
+      pickupAt: fmtDateTime(booking.pickupAt || booking.endDate, recipient.locale),
+      totalAmount: booking.totalPrice,
+      paid,
+      payOnlineLink,
+      discountPct,
+    },
+  });
+  return result?.ok
+    ? { ok: true, recipient: recipient.email }
+    : { ok: false, reason: result?.reason || 'unknown' };
+}
 
 // Called from the IPN callback when a pay-at-pickup booking gets paid
 // online (repay flow). The onBookingCreated trigger already fired at
