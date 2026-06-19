@@ -33,6 +33,7 @@ import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { hasPermission, PERM } from '../../utils/permissions.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
+import { setTransferStatus, deleteTransfer } from '../../services/transferService.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
@@ -178,6 +179,17 @@ function matchesSearch(b, q) {
     b.contact?.name,
     b.contact?.email,
     b.id,
+  ];
+  return haystacks.some((h) => h && String(h).toLowerCase().includes(q));
+}
+
+// Transfers carry no plate/code — match on contact, phone, email, flights and
+// pickup address instead. Identity on empty query, like matchesSearch.
+function matchesTransferSearch(tr, q) {
+  if (!q) return true;
+  const haystacks = [
+    tr.contactName, tr.phone, tr.email,
+    tr.flightNumber, tr.returnFlightNumber, tr.pickupAddress, tr.id,
   ];
   return haystacks.some((h) => h && String(h).toLowerCase().includes(q));
 }
@@ -427,6 +439,96 @@ function overdueRowHtml(b, { locale, canCancel }) {
   `;
 }
 
+// ── Transfer (door-to-airport) builders ──────────────────────────────────
+
+function transferTypeChip(tr) {
+  const roundtrip = tr.transferType === 'roundtrip';
+  const base = 'inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded';
+  const carIcon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-8l-2.08-5.99zM6.5 16a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm11 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
+  const label = roundtrip ? t('transfers.typeRoundtrip') : t('transfers.typeOneway');
+  return `<span class="${base} bg-blueberry/10 text-blueberry">${carIcon}${label}</span>`;
+}
+
+function transferStatusBadge(tr) {
+  const status = tr.status || 'scheduled';
+  const map = {
+    scheduled: ['bg-mango/10 text-mango', t('transfers.statusScheduled')],
+    completed: ['bg-leaf/10 text-leaf', t('transfers.statusCompleted')],
+    cancelled: ['bg-gray-100 text-dim', t('transfers.statusCancelled')],
+  };
+  const [cls, label] = map[status] || map.scheduled;
+  return `<span class="inline-flex items-center text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls}">${label}</span>`;
+}
+
+// The "mini dashboard" card: collapsed header (contact · phone · type ·
+// pickup · status); expands to every rubric the client asked for + actions.
+function transferCardHtml(tr, { locale, canCancel }) {
+  const name = tr.contactName || '—';
+  const phone = tr.phone || '—';
+  const pickup = fmtDateTime(tr.pickupAt, locale);
+  const roundtrip = tr.transferType === 'roundtrip';
+  const isScheduled = (tr.status || 'scheduled') === 'scheduled';
+
+  const detail = (label, value) => `
+    <div class="flex justify-between gap-3 py-1 border-b border-frost-deep/60 last:border-0">
+      <span class="text-[12px] text-dim font-mono uppercase tracking-wider shrink-0">${label}</span>
+      <span class="text-[13px] text-charcoal text-right break-words">${value}</span>
+    </div>
+  `;
+
+  const pax = [
+    `${tr.adults || 1} ${t('transfers.adults')}`,
+    tr.children ? `${tr.children} ${t('transfers.children')}` : '',
+    tr.infantsInArms ? `${tr.infantsInArms} ${t('transfers.infantsInArms')}` : '',
+  ].filter(Boolean).join(' · ');
+  const bags = `${tr.holdLuggage || 0} ${t('transfers.holdLuggage')} · ${tr.cabinLuggage || 0} ${t('transfers.cabinLuggage')}`;
+  const returnLine = `${escapeHtml(tr.returnTo || tr.pickupAddress || '—')} · ${fmtDateTime(tr.returnAt, locale)}${tr.returnFlightNumber ? ` · ${escapeHtml(tr.returnFlightNumber)}` : ''}`;
+
+  const actions = [
+    actionButton({ key: 'transfer-edit', label: t('transfers.actionEdit'), variant: 'neutral', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }),
+  ];
+  if (isScheduled) {
+    actions.push(actionButton({ key: 'transfer-complete', label: t('transfers.actionComplete'), variant: 'primary', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }));
+    actions.push(actionButton({ key: 'transfer-cancel', label: t('transfers.actionCancel'), variant: 'warning', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }));
+  }
+  if (canCancel) {
+    actions.push(actionButton({ key: 'transfer-delete', label: t('transfers.actionDelete'), variant: 'danger', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }));
+  }
+
+  return `
+    <div class="card-solid rounded-2xl overflow-hidden mb-3" data-transfer-row data-transfer-id="${escapeHtml(tr.id)}">
+      <button type="button" data-transfer-toggle class="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-frost transition-colors text-left">
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+          <span class="font-semibold text-[14px] text-charcoal truncate">${escapeHtml(name)}</span>
+          <span class="font-mono text-[13px] text-dim hidden sm:inline">${escapeHtml(phone)}</span>
+          ${transferTypeChip(tr)}
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <span class="text-[12px] font-mono text-charcoal/70 hidden sm:inline">${pickup}</span>
+          ${transferStatusBadge(tr)}
+          <svg data-transfer-chevron class="w-4 h-4 text-dim transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+        </div>
+      </button>
+      <div class="hidden border-t border-frost-deep px-4 py-4 bg-frost/30" data-transfer-body>
+        <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1 mb-4">
+          ${detail(t('transfers.detailContact'), escapeHtml(name) + (tr.email ? ` · ${escapeHtml(tr.email)}` : ''))}
+          ${detail(t('checkins.detailPhone'), escapeHtml(phone))}
+          ${detail(t('transfers.detailPickup'), escapeHtml(tr.pickupAddress || '—'))}
+          ${detail(t('transfers.pickupAt'), pickup)}
+          ${detail(t('transfers.detailFlight'), escapeHtml(tr.flightNumber || '—'))}
+          ${detail(t('transfers.passengers'), escapeHtml(pax || '—'))}
+          ${detail(t('transfers.luggage'), bags)}
+          ${tr.price ? detail(t('transfers.detailPrice'), escapeHtml(tr.price)) : ''}
+          ${roundtrip ? detail(t('transfers.detailReturn'), returnLine) : ''}
+          ${tr.groupNotes ? detail(t('transfers.detailGroup'), escapeHtml(tr.groupNotes)) : ''}
+        </div>
+        <p class="text-[12px] text-dim mb-3">${t('transfers.airportNote')}</p>
+        <div class="flex flex-wrap gap-2 justify-end">${actions.join('')}</div>
+      </div>
+    </div>
+  `;
+}
+
 // ── Page entry ──────────────────────────────────────────────────────────
 
 export default async function AdminCheckIns(container) {
@@ -442,7 +544,7 @@ export default async function AdminCheckIns(container) {
   // 'YYYY-MM-DD..YYYY-MM-DD' range string.
   const params = new URLSearchParams(window.location.search);
   let activeTab = params.get('tab') || 'checkin';
-  if (!['checkin', 'checkout', 'overdue', 'noshow'].includes(activeTab)) activeTab = 'checkin';
+  if (!['checkin', 'checkout', 'overdue', 'noshow', 'transfers'].includes(activeTab)) activeTab = 'checkin';
   const rawWindow = params.get('window') || 'today';
   let activeWindow = parseWindowParam(rawWindow);
   let searchQuery = (params.get('q') || '').trim().toLowerCase();
@@ -456,6 +558,9 @@ export default async function AdminCheckIns(container) {
   // Live booking data — single subscription, filtered client-side per tab.
   let bookings = [];
   let unsub = null;
+  // Live door-to-airport transfers — own subscription, own tab.
+  let transfers = [];
+  let unsubTransfers = null;
 
   const page = AdminLayout('/admin/checkins', `
     <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -504,16 +609,18 @@ export default async function AdminCheckIns(container) {
     const checkout = bookings.filter((b) => b.status === 'active' && (b.type === 'credit' || isInWindow(checkoutDate(b), range)) && matchesSearch(b, q)).length;
     const overdue = bookings.filter((b) => isOverdue(b) && matchesSearch(b, q)).length;
     const noshow = bookings.filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
-    return { checkin, checkout, overdue, noshow };
+    const transfersCount = transfers.filter((tr) => isInWindow(tr.pickupAt, range) && matchesTransferSearch(tr, q)).length;
+    return { checkin, checkout, overdue, noshow, transfers: transfersCount };
   }
 
   function renderTabs() {
-    const { checkin, checkout, overdue, noshow } = counts();
+    const { checkin, checkout, overdue, noshow, transfers: transfersCount } = counts();
     tabsEl.innerHTML = [
       tabPill('checkin', activeTab, t('checkins.tabCheckIn'), checkin),
       tabPill('checkout', activeTab, t('checkins.tabCheckOut'), checkout),
       tabPill('overdue', activeTab, t('checkins.tabOverdue'), overdue),
       tabPill('noshow', activeTab, t('checkins.tabNoShow'), noshow),
+      tabPill('transfers', activeTab, t('checkins.tabTransfers'), transfersCount),
     ].join('');
   }
 
@@ -630,6 +737,19 @@ export default async function AdminCheckIns(container) {
       bodyEl.innerHTML = renderTable(rows);
       return;
     }
+    if (activeTab === 'transfers') {
+      const range = windowRange(activeWindow);
+      const rows = transfers
+        .filter((tr) => isInWindow(tr.pickupAt, range) && matchesTransferSearch(tr, q))
+        .sort((a, b) => String(a.pickupAt || '').localeCompare(String(b.pickupAt || '')))
+        .map((tr) => transferCardHtml(tr, { locale, canCancel }));
+      if (!rows.length) {
+        bodyEl.innerHTML = `<div class="card-solid rounded-2xl p-10 text-center text-dim">${t('transfers.tabEmpty')}</div>`;
+        return;
+      }
+      bodyEl.innerHTML = rows.join('');
+      return;
+    }
     // overdue
     const rows = bookings
       .filter((b) => isOverdue(b) && matchesSearch(b, q))
@@ -653,6 +773,12 @@ export default async function AdminCheckIns(container) {
   // collection is small at our scale (thousands of rows tops).
   unsub = subscribeCollection('bookings', (rows) => {
     bookings = rows;
+    rerender();
+  });
+
+  // Door-to-airport transfers — separate collection, drives the Transfers tab.
+  unsubTransfers = subscribeCollection('transfers', (rows) => {
+    transfers = rows;
     rerender();
   });
 
@@ -685,11 +811,64 @@ export default async function AdminCheckIns(container) {
     chev?.classList.toggle('rotate-180');
   });
 
-  // ── Walk-in CTA ──
+  // ── Transfer card accordion ──
+  delegate(page, 'click', '[data-transfer-toggle]', (_e, btn) => {
+    const wrap = btn.closest('[data-transfer-row]');
+    const body = wrap.querySelector('[data-transfer-body]');
+    const chev = btn.querySelector('[data-transfer-chevron]');
+    body.classList.toggle('hidden');
+    chev?.classList.toggle('rotate-180');
+  });
+
+  // ── Transfer actions (edit / complete / cancel / delete) ──
+  // Separate from the booking row actions: transfer buttons carry
+  // `data-transfer` (not `data-booking`), so the booking handler no-ops on them.
+  delegate(page, 'click', '[data-action^="transfer-"]', async (_e, btn) => {
+    const action = btn.dataset.action;
+    const id = btn.dataset.transfer;
+    if (!id) return;
+    const tr = transfers.find((x) => x.id === id);
+    if (!tr) return;
+    btn.disabled = true;
+    try {
+      if (action === 'transfer-edit') {
+        openCreateTransactionModal(users, (result) => {
+          if (result?.transfer) { activeTab = 'transfers'; setUrl(); }
+          rerender();
+        }, { editTransfer: tr });
+      } else if (action === 'transfer-complete') {
+        await setTransferStatus(id, 'completed');
+        showToast(t('transfers.statusToast'), 'success');
+      } else if (action === 'transfer-cancel') {
+        const ok = await confirmModal(t('transfers.cancelConfirm', { name: tr.contactName || '—' }), {
+          danger: true, confirmText: t('transfers.actionCancel'),
+        });
+        if (!ok) return;
+        await setTransferStatus(id, 'cancelled');
+        showToast(t('transfers.statusToast'), 'success');
+      } else if (action === 'transfer-delete') {
+        const ok = await confirmModal(t('transfers.deleteConfirm', { name: tr.contactName || '—' }), {
+          danger: true, confirmText: t('transfers.actionDelete'),
+        });
+        if (!ok) return;
+        await deleteTransfer(id);
+        showToast(t('transfers.deletedToast'), 'success');
+      }
+    } catch (err) {
+      console.error(action, err);
+      showToast(err?.message || t('common.error'), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── Reservations CTA (long-term / credit walk-in, or door-to-airport) ──
   delegate(page, 'click', '[data-walkin]', () => {
     openCreateTransactionModal(users, (result) => {
-      const checkedIn = !!result?.checkedIn;
-      if (checkedIn) {
+      if (result?.transfer) {
+        activeTab = 'transfers';
+        setUrl();
+      } else if (result?.checkedIn) {
         activeTab = 'checkout';
         setUrl();
       }
@@ -793,7 +972,7 @@ export default async function AdminCheckIns(container) {
   // Tear down the bookings listener when the router navigates away (it calls
   // the returned cleanup before rendering the next route). Replaces the old
   // popstate-only teardown, which leaked on pushState/SPA-link navigation.
-  return () => { if (unsub) unsub(); };
+  return () => { if (unsub) unsub(); if (unsubTransfers) unsubTransfers(); };
 }
 
 // ── Check-in / check-out confirmation ────────────────────────────────────

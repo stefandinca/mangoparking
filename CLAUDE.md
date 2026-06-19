@@ -46,7 +46,7 @@ src/pages/{public,auth,account,admin}/    — default export fn(container)
 src/services/                         — booking, token, capacity, longTerm, pricing, seasonalRates,
                                         discount, promoVoucher, voucher, cashbook, audit, review,
                                         promotions, legalPage, shuttle, contact, cui, netopia,
-                                        userMerge (+ hidden: subscription, loyalty)
+                                        transfer (door-to-airport), userMerge (+ hidden: subscription, loyalty)
 scripts/{prerender.mjs,seo-routes.mjs}    — build-time SEO prerender for public routes
 functions/src/                        — index.js (Netopia + admin/cash/booking callables),
                                         emails.js (customer Brevo emails), adminNotifications.js

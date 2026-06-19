@@ -9,6 +9,7 @@ import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateT
 import { getBalance, lookupByPlate, getTokenPacks } from '../../services/tokenService.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
 import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
+import { createTransfer, updateTransfer } from '../../services/transferService.js';
 
 // Billing rule mirror of BookingLongTerm: 1 day = 24h from drop-off with a
 // single 2h grace at the end. Kept in sync so a walk-in priced here matches
@@ -76,7 +77,7 @@ function toFlatpickrValue(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function openCreateTransactionModal(users, onDone, { allowWalkIn = true } = {}) {
+export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, editTransfer = null } = {}) {
   const locale = getLocale();
   // Sensible defaults so a walk-in agent doesn't have to fill dates from
   // scratch. Drop-off = now (the customer is at the gate); pick-up = +1
@@ -86,27 +87,44 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
   const inOneDay = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const defaultDropoff = toFlatpickrValue(now);
   const defaultPickup = toFlatpickrValue(inOneDay);
+
+  // Door-to-airport transfer is a third reservation type. When `editTransfer`
+  // is passed, the modal opens straight into transfer-edit mode (the type
+  // toggle is hidden and the form is prefilled). `ed` holds the values to
+  // prefill; an ISO timestamp is converted back to flatpickr's `Y-m-d H:i`.
+  const ed = editTransfer || {};
+  const isoToFlatpickr = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : toFlatpickrValue(d);
+  };
+  const edRoundtrip = ed.transferType === 'roundtrip';
   const body = html`
     <div class="space-y-4">
-      <h2 class="font-heading font-bold text-xl text-blueberry-deep">${t('transactions.createTitle')}</h2>
+      <h2 class="font-heading font-bold text-xl text-blueberry-deep">${editTransfer ? t('transfers.formTitleEdit') : t('transactions.createTitle')}</h2>
 
-      <!-- Type selector -->
-      <div>
+      <!-- Type selector (hidden in transfer-edit mode — you can't switch a
+           recorded airport transfer into a parking booking) -->
+      <div data-type-wrap class="${editTransfer ? 'hidden' : ''}">
         <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('transactions.createTypeLabel')}</label>
-        <div class="grid grid-cols-2 gap-2" data-type-toggle>
-          <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-mango bg-mango/5 cursor-pointer">
-            <input type="radio" name="tType" value="longterm" checked class="accent-mango w-4 h-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2" data-type-toggle>
+          <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 ${editTransfer ? 'border-frost-deep' : 'border-mango bg-mango/5'} cursor-pointer">
+            <input type="radio" name="tType" value="longterm" ${editTransfer ? '' : 'checked'} class="accent-mango w-4 h-4">
             <span class="text-[13px] font-medium">${t('transactions.createTypeLongterm')}</span>
           </label>
           <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-frost-deep cursor-pointer">
             <input type="radio" name="tType" value="credit" class="accent-mango w-4 h-4">
             <span class="text-[13px] font-medium">${t('transactions.createTypeCredit')}</span>
           </label>
+          <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 ${editTransfer ? 'border-mango bg-mango/5' : 'border-frost-deep'} cursor-pointer">
+            <input type="radio" name="tType" value="transfer" ${editTransfer ? 'checked' : ''} class="accent-mango w-4 h-4">
+            <span class="text-[13px] font-medium">${t('transactions.createTypeTransfer')}</span>
+          </label>
         </div>
       </div>
 
       <!-- User picker -->
-      <div>
+      <div data-user-picker>
         <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('transactions.createUserLabel')}</label>
         <div class="grid grid-cols-2 gap-2 mb-2" data-mode-toggle>
           <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-blueberry bg-blueberry/5 cursor-pointer">
@@ -140,7 +158,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
       </div>
 
       <!-- Plate -->
-      <div>
+      <div data-plate-wrap>
         <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createPlate')} *</label>
         <input type="text" name="plate" placeholder="B 123 ABC" required
           class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] uppercase font-mono focus:outline-none focus:border-mango/40">
@@ -208,6 +226,111 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
             <input type="number" name="creditsToUse" min="1" step="1" value="1"
               class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
           </div>
+        </div>
+      </div>
+
+      <!-- Door-to-airport transfer fields (shown only when type = transfer).
+           Self-contained: none of the parking machinery above applies, and
+           the submit handler branches early for this type. -->
+      <div data-transfer-fields class="hidden space-y-3">
+        <!-- Contact -->
+        <p class="text-[12px] uppercase tracking-wider text-dim font-mono">${t('transfers.sectionContact')}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input type="text" name="transferName" value="${escapeHtml(ed.contactName || '')}" placeholder="${escapeHtml(t('transfers.contactName'))} *"
+            class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          <input type="tel" name="transferPhone" value="${escapeHtml(ed.phone || '')}" placeholder="${escapeHtml(t('transfers.phone'))} *"
+            class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+        </div>
+        <input type="email" name="transferEmail" value="${escapeHtml(ed.email || '')}" placeholder="${escapeHtml(t('transfers.email'))}"
+          class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+
+        <!-- Trip -->
+        <p class="text-[12px] uppercase tracking-wider text-dim font-mono pt-1">${t('transfers.sectionTrip')}</p>
+        <input type="text" name="transferPickupAddress" value="${escapeHtml(ed.pickupAddress || '')}" placeholder="${escapeHtml(t('transfers.pickupAddress'))} *"
+          class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.pickupAt')} *</label>
+            ${dateTimeFieldHtml({ name: 'transferPickupAt', value: isoToFlatpickr(ed.pickupAt), classes: 'w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40' })}
+          </div>
+          <div>
+            <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.flightNumber')}</label>
+            <input type="text" name="transferFlight" value="${escapeHtml(ed.flightNumber || '')}" placeholder="RO 234"
+              class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] uppercase font-mono focus:outline-none focus:border-mango/40">
+          </div>
+        </div>
+
+        <!-- One-way vs round-trip -->
+        <div>
+          <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.transferTypeLabel')}</label>
+          <div class="grid grid-cols-2 gap-2" data-transfer-type-toggle>
+            <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 ${edRoundtrip ? 'border-frost-deep' : 'border-blueberry bg-blueberry/5'} cursor-pointer">
+              <input type="radio" name="transferType" value="oneway" ${edRoundtrip ? '' : 'checked'} class="accent-blueberry w-4 h-4">
+              <span class="text-[12px] font-medium">${t('transfers.typeOneway')}</span>
+            </label>
+            <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 ${edRoundtrip ? 'border-blueberry bg-blueberry/5' : 'border-frost-deep'} cursor-pointer">
+              <input type="radio" name="transferType" value="roundtrip" ${edRoundtrip ? 'checked' : ''} class="accent-blueberry w-4 h-4">
+              <span class="text-[12px] font-medium">${t('transfers.typeRoundtrip')}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Group & luggage -->
+        <p class="text-[12px] uppercase tracking-wider text-dim font-mono pt-1">${t('transfers.sectionGroup')}</p>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <label class="block">
+            <span class="block text-[11px] text-charcoal/60 mb-1">${t('transfers.adults')}</span>
+            <input type="number" name="transferAdults" min="1" step="1" value="${ed.adults || 1}" class="w-full px-3 py-2 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
+          </label>
+          <label class="block">
+            <span class="block text-[11px] text-charcoal/60 mb-1">${t('transfers.children')}</span>
+            <input type="number" name="transferChildren" min="0" step="1" value="${ed.children || 0}" class="w-full px-3 py-2 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
+          </label>
+          <label class="block">
+            <span class="block text-[11px] text-charcoal/60 mb-1">${t('transfers.infantsInArms')}</span>
+            <input type="number" name="transferInfants" min="0" step="1" value="${ed.infantsInArms || 0}" class="w-full px-3 py-2 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
+          </label>
+          <label class="block">
+            <span class="block text-[11px] text-charcoal/60 mb-1">${t('transfers.holdLuggage')}</span>
+            <input type="number" name="transferHold" min="0" step="1" value="${ed.holdLuggage || 0}" class="w-full px-3 py-2 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
+          </label>
+          <label class="block">
+            <span class="block text-[11px] text-charcoal/60 mb-1">${t('transfers.cabinLuggage')}</span>
+            <input type="number" name="transferCabin" min="0" step="1" value="${ed.cabinLuggage || 0}" class="w-full px-3 py-2 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
+          </label>
+        </div>
+
+        <!-- Return leg (round-trip only) -->
+        <div data-transfer-return class="${edRoundtrip ? '' : 'hidden'} space-y-2 rounded-xl bg-frost border border-frost-deep p-3">
+          <p class="text-[12px] uppercase tracking-wider text-dim font-mono">${t('transfers.sectionReturn')}</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.returnAt')}</label>
+              ${dateTimeFieldHtml({ name: 'transferReturnAt', value: isoToFlatpickr(ed.returnAt), classes: 'w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40' })}
+            </div>
+            <div>
+              <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.returnFlightNumber')}</label>
+              <input type="text" name="transferReturnFlight" value="${escapeHtml(ed.returnFlightNumber || '')}" placeholder="RO 235"
+                class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] uppercase font-mono focus:outline-none focus:border-mango/40">
+            </div>
+          </div>
+          <div>
+            <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.returnTo')}</label>
+            <input type="text" name="transferReturnTo" value="${escapeHtml(ed.returnTo || '')}" placeholder="${escapeHtml(t('transfers.returnToHint'))}"
+              class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          </div>
+        </div>
+
+        <!-- Price (free-text note) -->
+        <div>
+          <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.price')}</label>
+          <input type="text" name="transferPrice" value="${escapeHtml(ed.price || '')}" placeholder="${escapeHtml(t('transfers.pricePlaceholder'))}"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+        </div>
+        <!-- Group notes -->
+        <div>
+          <label class="block text-[12px] font-medium text-charcoal/70 mb-1.5">${t('transfers.groupNotes')}</label>
+          <textarea name="transferNotes" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">${escapeHtml(ed.groupNotes || '')}</textarea>
         </div>
       </div>
 
@@ -358,6 +481,11 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
   const autoCheckInInput = qs('input[name="autoCheckIn"]', contentEl);
   const submitBtn = qs('[data-submit]', contentEl);
   const balanceDisplay = qs('[data-balance-display]', contentEl);
+  const transferFields = qs('[data-transfer-fields]', contentEl);
+  const transferReturn = qs('[data-transfer-return]', contentEl);
+  const transferTypeToggle = qs('[data-transfer-type-toggle]', contentEl);
+  const userPickerWrap = qs('[data-user-picker]', contentEl);
+  const plateWrap = qs('[data-plate-wrap]', contentEl);
 
   // State readers — the DOM is the single source of truth.
   const getType = () => qs('input[name="tType"]:checked', contentEl).value;
@@ -371,15 +499,25 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
   const isCreditUse = () => getType() === 'credit' && getCreditMode() === 'use';
 
   function applyVisibility() {
-    const isLT = getType() === 'longterm';
+    const type = getType();
+    const isLT = type === 'longterm';
+    const isCredit = type === 'credit';
+    const isTransfer = type === 'transfer';
+
     ltFields.classList.toggle('hidden', !isLT);
-    crFields.classList.toggle('hidden', isLT);
+    crFields.classList.toggle('hidden', !isCredit);
+    transferFields?.classList.toggle('hidden', !isTransfer);
+
+    // A transfer has no payer/plate — hide the parking-only blocks entirely.
+    userPickerWrap?.classList.toggle('hidden', isTransfer);
+    plateWrap?.classList.toggle('hidden', isTransfer);
 
     const useExisting = isCreditUse();
-    if (crSell) crSell.classList.toggle('hidden', useExisting || isLT);
+    if (crSell) crSell.classList.toggle('hidden', useExisting || !isCredit);
     if (crUse) crUse.classList.toggle('hidden', !useExisting);
-    // Money + walk-in affordances are irrelevant when spending existing credits.
-    paidbyWrap?.classList.toggle('hidden', useExisting);
+    // Money + walk-in affordances are irrelevant when spending existing
+    // credits or when recording a transfer (no money moves here).
+    paidbyWrap?.classList.toggle('hidden', useExisting || isTransfer);
     // Broker/prepaid and pay-later are long-term-only payment routes. Hide
     // both options on the credit funnel (grantCreditsForCash only takes
     // cash/card) and snap the selector back to cash if it was left on either.
@@ -390,11 +528,13 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     // Pay-later is an unpaid reservation — you can't auto-check-in an unpaid
     // car (payment-first), so hide the walk-in checkbox and clear it.
     const isPayLater = isLT && paidBySelect?.value === 'later';
-    autoCheckInWrap?.classList.toggle('hidden', useExisting || isPayLater);
+    autoCheckInWrap?.classList.toggle('hidden', useExisting || isPayLater || isTransfer);
     if (isPayLater && autoCheckInInput) autoCheckInInput.checked = false;
-    submitBtn.textContent = useExisting
-      ? t('transactions.createCheckInSubmit')
-      : t('transactions.createSubmit');
+    submitBtn.textContent = isTransfer
+      ? (editTransfer ? t('transfers.submitEdit') : t('transfers.submitCreate'))
+      : useExisting
+        ? t('transactions.createCheckInSubmit')
+        : t('transactions.createSubmit');
   }
 
   // Re-apply visibility as the payment method changes — handles the broker
@@ -426,6 +566,21 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     applyVisibility();
     if (isCreditUse()) refreshBalance();
     refreshCreditPrice();
+  });
+
+  // ── Transfer one-way / round-trip toggle ──
+  // Reveals the return-leg block and keeps the segmented-control styling in
+  // sync, mirroring the other toggles in this modal.
+  transferTypeToggle?.addEventListener('change', (e) => {
+    if (!e.target.matches('input[name="transferType"]')) return;
+    transferTypeToggle.querySelectorAll('label').forEach((lbl) => {
+      const inp = lbl.querySelector('input');
+      lbl.classList.toggle('border-blueberry', inp.checked);
+      lbl.classList.toggle('bg-blueberry/5', inp.checked);
+      lbl.classList.toggle('border-frost-deep', !inp.checked);
+    });
+    const roundtrip = qs('input[name="transferType"]:checked', contentEl)?.value === 'roundtrip';
+    transferReturn?.classList.toggle('hidden', !roundtrip);
   });
 
   // ── Live balance lookup (use-existing mode) ──
@@ -509,6 +664,68 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true }
     errEl.classList.add('hidden');
 
     const type = qs('input[name="tType"]:checked', contentEl).value;
+
+    // ── Door-to-airport transfer ──
+    // A passenger transfer reservation — no plate, no parking, no money. Branch
+    // out before any of the booking machinery and write straight to `transfers`.
+    if (type === 'transfer') {
+      const showErr = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+      const val = (name) => String(qs(`[name="${name}"]`, contentEl)?.value || '').trim();
+      const contactName = val('transferName');
+      const phone = val('transferPhone');
+      const pickupAddress = val('transferPickupAddress');
+      const pickupRaw = qs('[name="transferPickupAt"]', contentEl)?.value || '';
+      const transferType = qs('input[name="transferType"]:checked', contentEl)?.value === 'roundtrip' ? 'roundtrip' : 'oneway';
+      const returnRaw = qs('[name="transferReturnAt"]', contentEl)?.value || '';
+
+      if (!contactName) return showErr(t('transfers.errorMissingContact'));
+      if (!phone) return showErr(t('transfers.errorMissingPhone'));
+      if (!pickupAddress) return showErr(t('transfers.errorMissingPickupAddress'));
+      if (!pickupRaw) return showErr(t('transfers.errorMissingPickupAt'));
+      if (transferType === 'roundtrip' && !returnRaw) return showErr(t('transfers.errorMissingReturn'));
+
+      // flatpickr stores `YYYY-MM-DD HH:MM` (local); swap space→T so Date()
+      // parses as local, then store ISO — same convention as the long-term path.
+      const toIso = (raw) => (raw ? new Date(String(raw).replace(' ', 'T')).toISOString() : '');
+      const payload = {
+        contactName, phone,
+        email: val('transferEmail'),
+        pickupAddress,
+        pickupAt: toIso(pickupRaw),
+        transferType,
+        flightNumber: val('transferFlight'),
+        adults: val('transferAdults'),
+        children: val('transferChildren'),
+        infantsInArms: val('transferInfants'),
+        holdLuggage: val('transferHold'),
+        cabinLuggage: val('transferCabin'),
+        returnAt: toIso(returnRaw),
+        returnFlightNumber: val('transferReturnFlight'),
+        returnTo: val('transferReturnTo'),
+        price: val('transferPrice'),
+        groupNotes: val('transferNotes'),
+      };
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        if (editTransfer) {
+          await updateTransfer(editTransfer.id, payload);
+          showToast(t('transfers.updatedToast'), 'success');
+        } else {
+          await createTransfer(payload);
+          showToast(t('transfers.createdToast'), 'success');
+        }
+        close();
+        onDone?.({ transfer: true });
+      } catch (err) {
+        console.error('saveTransfer', err);
+        showErr(err?.message || t('common.error'));
+        btn.disabled = false;
+        btn.textContent = editTransfer ? t('transfers.submitEdit') : t('transfers.submitCreate');
+      }
+      return;
+    }
+
     const mode = qs('input[name="userMode"]:checked', contentEl).value;
     const plate = String(qs('[name="plate"]', contentEl).value || '').toUpperCase().trim();
     const paidBy = qs('[name="paidBy"]', contentEl).value;

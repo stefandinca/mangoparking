@@ -162,6 +162,7 @@ the last admin); admins can also create/delete users and send magic-link invites
 | `bookings` | auto | Long-term + credit check-ins; full lifecycle, payment + refund + overstay fields |
 | `pendingOrders` | `ord_{ts}_{rand}` | Order staging before payment; IPN/admin fulfils |
 | `activeCheckIns` | normalized plate | Real-time "cars in the lot" tracker |
+| `transfers` | auto | Door-to-airport private transfers — staff-recorded passenger pickups (contact, address, group, luggage, flight, one-way/round-trip); no money fields |
 | `spots` | auto | Capacity / occupancy |
 | `tokenPacks`, `pricingTiers`, `seasonalPricing`, `addOns` | auto | Credit packs + long-term pricing config |
 | `promoVouchers`, `voucherRedemptions`, `voucherDayBalances`, `vouchers` | code / auto / uid | Promo codes (fixed/percent/days) + legacy signup voucher |

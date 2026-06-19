@@ -215,6 +215,16 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // Door-to-airport transfers — private airport transfer reservations
+    // recorded by staff. No money fields (the optional `price` is a free-text
+    // note), so these are client-written like reviews/contact messages. Any
+    // backoffice user reads/creates/updates; delete is limited to admin/agent
+    // so a driver can't remove records.
+    match /transfers/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAgent();
+    }
+
     // Pending invites - admin SDK only (adminSendInvite / finishInviteSignup)
     match /pendingInvites/{email} {
       allow read, write: if false;
