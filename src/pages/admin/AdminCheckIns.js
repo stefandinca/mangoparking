@@ -903,16 +903,22 @@ export default async function AdminCheckIns(container) {
         // 20:00 cutoff, valued per-credit). If one is owed, open the charge
         // dialog first; if the agent dismisses it, require an explicit
         // "check out anyway" override. No overstay → the usual confirmation.
+        //
+        // If a fee was already charged for this booking (adminChargeOverstay
+        // stamped `overstayChargedAt`), the debt is settled — don't re-prompt
+        // or warn. Skip straight to the normal confirmation, which shows a
+        // note that the overstay was already collected.
+        const alreadyCharged = !!booking.overstayChargedAt;
         const over = overstayInfo(booking, creditPerDay);
         let proceed;
-        if (over && over.amount > 0) {
+        if (over && over.amount > 0 && !alreadyCharged) {
           const charged = await openOverstayDialog({ booking, perCredit: creditPerDay });
           proceed = charged || await confirmModal(
             t('checkins.checkoutWithoutOverstay', { amount: over.amount }),
             { danger: true, confirmText: t('checkins.checkoutAnyway') },
           );
         } else {
-          proceed = await openCheckActionConfirm({ booking, action: 'checkout', locale, over: null });
+          proceed = await openCheckActionConfirm({ booking, action: 'checkout', locale, over: null, overstayCharged: alreadyCharged });
         }
         if (!proceed) return;
         await checkOutBooking(bookingId);
@@ -980,7 +986,7 @@ export default async function AdminCheckIns(container) {
 // staff can sanity-check plate / dates / payment. For check-out it folds in
 // the late-checkout (overstay) warning when one applies. Resolves true on
 // confirm, false on cancel / dismiss.
-function openCheckActionConfirm({ booking, action, locale, over = null }) {
+function openCheckActionConfirm({ booking, action, locale, over = null, overstayCharged = false }) {
   return new Promise((resolve) => {
     let done = false;
     const finish = (v) => { if (!done) { done = true; resolve(v); } };
@@ -1004,6 +1010,14 @@ function openCheckActionConfirm({ booking, action, locale, over = null }) {
         ${t('checkins.lateCheckoutWarn', { days: over.daysLate, amount: over.amount })}
       </div>` : '';
 
+    // Positive confirmation when the overstay fee was already collected — so
+    // the agent knows it wasn't skipped and isn't owed again.
+    const settledNote = overstayCharged ? `
+      <div class="rounded-xl bg-leaf/10 border border-leaf/30 px-4 py-3 text-[13px] text-charcoal flex items-center gap-2">
+        <svg class="w-4 h-4 text-leaf shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+        ${t('checkins.overstayAlreadyCharged')}
+      </div>` : '';
+
     const form = html`<div class="space-y-4">
       <h3 class="font-heading font-bold text-xl text-blueberry-deep">${title}</h3>
       <div class="rounded-2xl bg-frost border border-frost-deep p-4">
@@ -1018,7 +1032,7 @@ function openCheckActionConfirm({ booking, action, locale, over = null }) {
         ${row(t('checkins.colPayment'), paymentStatusBadge(booking))}
         ${booking.spotId ? row(t('checkins.detailSpot'), escapeHtml(booking.spotId)) : ''}
       </div>
-      ${warn}
+      ${warn}${settledNote}
       <div class="flex gap-3 justify-end pt-1">
         <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors">${t('common.cancel')}</button>
         <button type="button" data-confirm class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${confirmLabel}</button>

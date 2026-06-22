@@ -1457,6 +1457,7 @@ export default {
     overstayAmountLabel: 'Amount to collect (lei)',
     overstayConfirm: 'Charge overstay',
     overstayNoAmount: 'Enter a valid amount.',
+    overstayAlreadyCharged: 'Overstay already collected — you can check out.',
     // Collection confirmation (cash/card) + overstay-before-checkout gate
     collectConfirm: 'Confirm collecting {amount} lei ({method})?',
     checkoutWithoutOverstay: 'This car has an uncollected overstay of {amount} lei. Check out without collecting it?',
