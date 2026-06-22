@@ -14,6 +14,8 @@ import { previewVoucher, normalizeCode } from '../../services/promoVoucherServic
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
+import { isProfileComplete } from '../../utils/profileComplete.js';
+import { openProfileCompletionModal, profileGateCard } from '../../components/account/ProfileCompletionModal.js';
 
 // Billing rule: 1 day = 24h from drop-off, with a single 2h grace at the end
 // of the entire booking. Booked 24h+ ≤ 26h → 1 day; >26h ≤ 50h → 2 days; etc.
@@ -59,6 +61,23 @@ export default function BookingLongTerm(container) {
   const user = getCurrentUser();
   const profile = getUserProfile();
   const profileVehicles = profile?.vehicles || [];
+
+  // Logged-in customers must have a complete profile (name, phone, plate,
+  // billing) before making a reservation. Guests (no account) are unaffected.
+  if (user && (profile?.role || 'customer') === 'customer' && !isProfileComplete(profile)) {
+    const gate = html`<div>
+      <div data-navbar></div>
+      <section class="pt-32 pb-20 min-h-screen"><div class="max-w-5xl mx-auto px-6" data-gate-slot></div></section>
+      <div data-footer></div>
+    </div>`;
+    gate.querySelector('[data-navbar]').replaceWith(Navbar());
+    gate.querySelector('[data-footer]').replaceWith(Footer());
+    gate.querySelector('[data-gate-slot]').appendChild(
+      profileGateCard(() => openProfileCompletionModal({ onComplete: () => window.location.reload() })),
+    );
+    container.appendChild(gate);
+    return;
+  }
 
   // Default suggestion: drop-off tomorrow 10:00, pick-up the day after at 10:00.
   // Stored as local-time-formatted strings for the datetime-local input.

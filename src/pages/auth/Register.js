@@ -6,6 +6,7 @@ import { mergeGuestDataForCurrentUser } from '../../services/userMergeService.js
 import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { html } from '../../utils/dom.js';
+import { isValidPhone } from '../../utils/validators.js';
 
 const FIREBASE_ERROR_MAP = {
   'auth/invalid-email': 'auth.errors.invalidEmail',
@@ -68,6 +69,10 @@ export default function Register(container) {
               <input type="email" name="email" required placeholder="name@example.com" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
             </div>
             <div>
+              <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('auth.phone')} *</label>
+              <input type="tel" name="phone" required placeholder="${t('auth.phonePlaceholder')}" autocomplete="tel" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
+            </div>
+            <div>
               <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('auth.password')} *</label>
               <input type="password" name="password" required placeholder="••••••••" minlength="6" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
             </div>
@@ -121,10 +126,15 @@ export default function Register(container) {
 
     const displayName = form.displayName.value.trim();
     const email = form.email.value.trim();
+    const phone = form.phone.value.trim();
     const password = form.password.value;
     const confirmPassword = form.confirmPassword.value;
 
     // Client-side validation
+    if (!isValidPhone(phone)) {
+      showError(t('auth.errors.invalidPhone'));
+      return;
+    }
     if (password !== confirmPassword) {
       showError(t('auth.errors.passwordMismatch'));
       return;
@@ -134,7 +144,7 @@ export default function Register(container) {
     btn.disabled = true;
     btn.textContent = '...';
     try {
-      await registerWithEmail(email, password, displayName);
+      await registerWithEmail(email, password, displayName, phone);
       // Reconcile any prior guest purchases tied to this email — the
       // sign-up CTA on the thank-you page is the main entry point so
       // this is where the payoff happens.

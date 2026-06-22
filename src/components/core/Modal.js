@@ -1,7 +1,11 @@
 import { html, qs } from '../../utils/dom.js';
 import { t } from '../../i18n/index.js';
 
-export function openModal(content, { onClose } = {}) {
+// `dismissible` (default true) controls whether the backdrop click and the
+// Escape key close the modal. Pass `dismissible: false` for a blocking modal
+// the user MUST act on (e.g. the complete-your-profile gate) — it can only be
+// closed programmatically via the returned `close()`.
+export function openModal(content, { onClose, dismissible = true } = {}) {
   const overlay = html`
     <div class="fixed inset-0 z-[90] flex items-center justify-center p-4" data-modal-overlay>
       <div class="absolute inset-0 bg-charcoal/60" data-modal-bg></div>
@@ -21,15 +25,17 @@ export function openModal(content, { onClose } = {}) {
     onClose?.();
   };
 
-  qs('[data-modal-bg]', overlay).addEventListener('click', close);
+  if (dismissible) {
+    qs('[data-modal-bg]', overlay).addEventListener('click', close);
 
-  const handleKey = (e) => {
-    if (e.key === 'Escape') {
-      close();
-      document.removeEventListener('keydown', handleKey);
-    }
-  };
-  document.addEventListener('keydown', handleKey);
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        close();
+        document.removeEventListener('keydown', handleKey);
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+  }
 
   document.body.appendChild(overlay);
 

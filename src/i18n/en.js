@@ -416,6 +416,8 @@ export default {
     password: 'Password',
     confirmPassword: 'Confirm password',
     displayName: 'Full name',
+    phone: 'Phone',
+    phonePlaceholder: '07xx xxx xxx',
     loginBtn: 'Sign In',
     registerBtn: 'Create Account',
     googleBtn: 'Continue with Google',
@@ -431,7 +433,28 @@ export default {
       emailInUse: 'Email already in use',
       weakPassword: 'Password must be at least 6 characters',
       passwordMismatch: 'Passwords don\'t match',
+      invalidPhone: 'Invalid phone number',
     },
+  },
+
+  // Complete-your-profile gate (blocking modal + booking gate card)
+  profileComplete: {
+    title: 'Complete your profile',
+    intro: 'We need these details so we can contact and invoice you. Fill them in to continue.',
+    emailLabel: 'Email',
+    name: 'Full name',
+    phone: 'Phone',
+    plate: 'License plate',
+    make: 'Make (optional)',
+    model: 'Model (optional)',
+    save: 'Save & continue',
+    errorName: 'Enter your full name.',
+    errorPhone: 'Enter a valid phone number.',
+    errorPlate: 'Enter a valid license plate.',
+    savedToast: 'Profile completed. Thank you!',
+    gateTitle: 'Complete your profile',
+    gateMessage: 'To make a reservation or buy credits, please complete your profile first (name, phone, license plate and billing details).',
+    gateCta: 'Complete profile',
   },
 
   // Account

@@ -82,11 +82,12 @@ export async function loginWithEmail(email, password) {
   return signInWithEmailAndPassword(auth, email, password);
 }
 
-export async function registerWithEmail(email, password, displayName) {
+export async function registerWithEmail(email, password, displayName, phone = '') {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
   await setDoc(doc(db, 'users', cred.user.uid), {
     email,
     displayName,
+    phone,
     role: 'customer',
     loyaltyPoints: 0,
     loyaltyTier: 'bronze',
@@ -94,6 +95,20 @@ export async function registerWithEmail(email, password, displayName) {
     createdAt: new Date().toISOString(),
   });
   return cred;
+}
+
+// Re-read users/{uid} into the module cache and notify listeners. The cache is
+// otherwise only populated by onAuthStateChanged, so callers that mutate the
+// profile (e.g. the complete-your-profile modal) use this to refresh it without
+// a full reload — keeping getUserProfile() and the auth listeners in sync.
+export async function refreshUserProfile() {
+  if (!currentUser) return null;
+  const snap = await getDoc(doc(db, 'users', currentUser.uid));
+  if (snap.exists()) {
+    userProfile = { id: currentUser.uid, ...snap.data() };
+    authListeners.forEach((fn) => fn(currentUser, userProfile));
+  }
+  return userProfile;
 }
 
 export async function loginWithGoogle() {

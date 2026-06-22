@@ -417,6 +417,8 @@ export default {
     password: 'Parolă',
     confirmPassword: 'Confirmă parola',
     displayName: 'Nume complet',
+    phone: 'Telefon',
+    phonePlaceholder: '07xx xxx xxx',
     loginBtn: 'Autentifică-te',
     registerBtn: 'Creează cont',
     googleBtn: 'Continuă cu Google',
@@ -432,7 +434,28 @@ export default {
       emailInUse: 'Email deja folosit',
       weakPassword: 'Parola trebuie să aibă minim 6 caractere',
       passwordMismatch: 'Parolele nu coincid',
+      invalidPhone: 'Număr de telefon invalid',
     },
+  },
+
+  // Complete-your-profile gate (blocking modal + booking gate card)
+  profileComplete: {
+    title: 'Completează-ți profilul',
+    intro: 'Avem nevoie de aceste date ca să te putem contacta și factura. Completează-le pentru a continua.',
+    emailLabel: 'Email',
+    name: 'Nume complet',
+    phone: 'Telefon',
+    plate: 'Număr înmatriculare',
+    make: 'Marcă (opțional)',
+    model: 'Model (opțional)',
+    save: 'Salvează și continuă',
+    errorName: 'Completează numele complet.',
+    errorPhone: 'Introdu un număr de telefon valid.',
+    errorPlate: 'Introdu un număr de înmatriculare valid.',
+    savedToast: 'Profil completat. Mulțumim!',
+    gateTitle: 'Completează-ți profilul',
+    gateMessage: 'Pentru a face o rezervare sau a cumpăra credite, completează-ți mai întâi profilul (nume, telefon, număr de înmatriculare și date de facturare).',
+    gateCta: 'Completează profilul',
   },
 
   // Account

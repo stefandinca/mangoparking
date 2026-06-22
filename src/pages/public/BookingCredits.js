@@ -13,6 +13,8 @@ import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { getDocument, updateDocument } from '../../firebase/db.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
+import { isProfileComplete } from '../../utils/profileComplete.js';
+import { openProfileCompletionModal, profileGateCard } from '../../components/account/ProfileCompletionModal.js';
 
 export default async function Booking(container) {
   const locale = getLocale();
@@ -30,6 +32,23 @@ export default async function Booking(container) {
   const voucher = user ? await getMyVoucher().catch(() => null) : null;
   const profile = user ? await getDocument('users', user.uid).catch(() => getUserProfile()) : null;
   const profileVehicles = profile?.vehicles || [];
+
+  // Logged-in customers must have a complete profile (name, phone, plate,
+  // billing) before buying credits. Guests (no account) are unaffected.
+  if (user && (profile?.role || 'customer') === 'customer' && !isProfileComplete(profile)) {
+    const gate = html`<div>
+      <div data-navbar></div>
+      <section class="pt-32 pb-20 min-h-screen"><div class="max-w-5xl mx-auto px-6" data-gate-slot></div></section>
+      <div data-footer></div>
+    </div>`;
+    gate.querySelector('[data-navbar]').replaceWith(Navbar());
+    gate.querySelector('[data-footer]').replaceWith(Footer());
+    gate.querySelector('[data-gate-slot]').appendChild(
+      profileGateCard(() => openProfileCompletionModal({ onComplete: () => window.location.reload() })),
+    );
+    container.appendChild(gate);
+    return;
+  }
 
   let selectedPack = null;
   let customQty = 0;

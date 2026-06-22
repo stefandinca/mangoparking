@@ -2,6 +2,8 @@ import './style.css';
 import { initRouter } from './router/index.js';
 import { detectLocale, setLocale } from './i18n/index.js';
 import { mountWhatsAppFab } from './components/core/WhatsAppFab.js';
+import { onAuthChange } from './firebase/auth.js';
+import { maybePromptProfileCompletion } from './components/account/ProfileCompletionModal.js';
 
 // NOTE: the one-time database seeding tool (src/seed.js, gitignored) has been
 // de-wired from the app. The site runs on live data, so an in-app `?seed=true`
@@ -18,3 +20,9 @@ initRouter();
 
 // Site-wide WhatsApp floating button (hidden on /admin/*).
 mountWhatsAppFab();
+
+// On login / session-restore, prompt incomplete customers to complete their
+// profile (name, phone, plate, billing) with a blocking modal before they can
+// book. Fires on every auth change; the guard no-ops for staff, guests, and
+// already-complete profiles.
+onAuthChange((user, profile) => maybePromptProfileCompletion(user, profile));
