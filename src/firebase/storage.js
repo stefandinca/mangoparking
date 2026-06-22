@@ -1,5 +1,6 @@
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage } from './config.js';
+import { compressImage } from '../utils/imageCompress.js';
 
 /**
  * Upload a photo for a booking
@@ -24,9 +25,12 @@ export async function deleteBookingPhoto(path) {
  * storage path (kept on the Firestore doc so the image can be deleted later).
  */
 export async function uploadGalleryImage(file) {
-  const path = `gallery/${Date.now()}-${file.name}`;
+  // Downscale + recompress in the browser before upload (smaller storage and,
+  // more importantly, smaller homepage download for every visitor).
+  const optimized = await compressImage(file);
+  const path = `gallery/${Date.now()}-${optimized.name}`;
   const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
+  await uploadBytes(storageRef, optimized);
   const url = await getDownloadURL(storageRef);
   return { url, path };
 }
