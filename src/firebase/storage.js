@@ -18,3 +18,22 @@ export async function deleteBookingPhoto(path) {
   const storageRef = ref(storage, path);
   return deleteObject(storageRef);
 }
+
+/**
+ * Upload a facility-gallery image. Returns both the public download URL and the
+ * storage path (kept on the Firestore doc so the image can be deleted later).
+ */
+export async function uploadGalleryImage(file) {
+  const path = `gallery/${Date.now()}-${file.name}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  const url = await getDownloadURL(storageRef);
+  return { url, path };
+}
+
+/**
+ * Delete any storage object by its path (e.g. a gallery image).
+ */
+export async function deleteStorageObject(path) {
+  return deleteObject(ref(storage, path));
+}

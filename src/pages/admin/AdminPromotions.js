@@ -32,13 +32,20 @@ const QUILL_TOOLBAR = [
 ];
 
 export default async function AdminPromotions(container) {
-  const locale = getLocale();
   updateMeta({
     title: `${t('admin.promotions')} — Admin — ManGO Parking`,
     description: t('admin.promotionsSubtitle'),
-    lang: locale,
+    lang: getLocale(),
   });
+  const shell = AdminLayout('/admin/promotions', '<div data-section-root></div>');
+  initAdminNav(shell);
+  container.appendChild(shell);
+  await mountPromotions(shell.querySelector('[data-section-root]'));
+}
 
+// Mountable promotions editor — reused standalone (above) and as a tab in the
+// Public website admin page (AdminWebsite.js). `page` is the host container.
+export async function mountPromotions(page) {
   const initial = (await getPromotionsPage()) || {};
   const working = {
     heroImage: initial.heroImage || '',
@@ -112,9 +119,7 @@ export default async function AdminPromotions(container) {
     </div>
   `;
 
-  const page = AdminLayout('/admin/promotions', content);
-  initAdminNav(page);
-  container.appendChild(page);
+  page.innerHTML = content;
 
   const localeContent = page.querySelector('[data-locale-content]');
   const heroInput = page.querySelector('[data-hero-image]');

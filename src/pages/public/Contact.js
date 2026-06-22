@@ -10,6 +10,19 @@ import {
   CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_MAPS_EMBED,
   COMPANY_LEGAL_NAME, CUI, REG_COM, COMPANY_ADDRESS,
 } from '../../utils/constants.js';
+import { getOpeningHours, DEFAULT_HOURS, OPENING_DAYS } from '../../services/openingHoursService.js';
+
+// Per-day office-hours rows for the contact info card.
+function hoursRowsHtml(hours) {
+  return OPENING_DAYS.map((k) => {
+    const d = hours[k];
+    const val = d.closed ? t('openingHours.closed') : `${d.open}–${d.close}`;
+    return `<tr class="border-b border-frost-deep/60 last:border-0">
+      <td class="py-1.5 pr-4 text-dim">${t('openingHours.' + k)}</td>
+      <td class="py-1.5 text-right font-medium ${d.closed ? 'text-dim' : ''}">${val}</td>
+    </tr>`;
+  }).join('');
+}
 
 export default function Contact(container) {
   const locale = getLocale();
@@ -76,9 +89,10 @@ export default function Contact(container) {
                   <p class="text-[16px] font-medium">${CONTACT_ADDRESS}</p>
                 </div>
                 <div>
-                  <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('contact.hoursLabel')}</p>
-                  <p class="text-[15px]">${t('footer.parking247')}</p>
-                  <p class="text-[15px]">${t('footer.office')}</p>
+                  <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1.5">${t('contact.hoursLabel')}</p>
+                  <p class="text-[15px] mb-3">${t('footer.parking247')}</p>
+                  <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('openingHours.office')}</p>
+                  <table class="w-full text-[14px]"><tbody data-hours-tbody>${hoursRowsHtml(DEFAULT_HOURS)}</tbody></table>
                 </div>
               </div>
             </div>
@@ -158,4 +172,10 @@ export default function Contact(container) {
   });
 
   container.appendChild(page);
+
+  // Patch in the real opening hours once loaded (cached service).
+  getOpeningHours().then((hours) => {
+    const tb = page.querySelector('[data-hours-tbody]');
+    if (tb) tb.innerHTML = hoursRowsHtml(hours);
+  }).catch(() => {});
 }

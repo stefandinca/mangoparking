@@ -207,12 +207,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Reviews - public read, staff/admin write. (Route guard already lets
-    // staff reach /admin/reviews, so requiring admin here was a mismatch
-    // that surfaced as "Missing or insufficient permissions" on create.)
+    // Reviews - public read, admin write. Managed from the admin-only Public
+    // website section (consolidated out of the old /admin/reviews; agents no
+    // longer moderate reviews).
     match /reviews/{id} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // Facility gallery images — public read (homepage "Our facility"), admin
+    // write (managed from the Public website admin section). The image files
+    // live in Storage under gallery/ (see storage.rules).
+    match /galleryImages/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // Door-to-airport transfers — private airport transfer reservations

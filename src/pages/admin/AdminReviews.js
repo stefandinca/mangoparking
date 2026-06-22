@@ -7,7 +7,15 @@ import { showToast } from '../../components/core/Toast.js';
 
 export default async function AdminReviews(container) {
   updateMeta({ title: `${t('admin.reviews')} — Admin`, lang: getLocale() });
+  const shell = AdminLayout('/admin/reviews', '<div data-section-root></div>');
+  container.appendChild(shell);
+  initAdminNav(shell);
+  await mountReviews(shell.querySelector('[data-section-root]'));
+}
 
+// Mountable reviews editor — reused standalone (above) and as a tab in the
+// Public website admin page (AdminWebsite.js). `page` is the host container.
+export async function mountReviews(page) {
   let reviews = await getAllReviews().catch(() => []);
 
   function reviewRow(r) {
@@ -48,9 +56,7 @@ export default async function AdminReviews(container) {
     <div class="space-y-3" data-review-list></div>
   `;
 
-  const page = AdminLayout('/admin/reviews', body);
-  container.appendChild(page);
-  initAdminNav(page);
+  page.innerHTML = body;
   renderList();
 
   page.querySelector('[data-add-review]').addEventListener('click', async () => {

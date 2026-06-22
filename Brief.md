@@ -126,8 +126,11 @@ functions/src/     — index.js (Netopia + admin/cash/booking callables), emails
 
 ### Admin (auth + admin + per-section permission)
 `/admin` (dashboard), `/admin/checkins`, `/transactions`, `/cashbook`, `/refunds`,
-`/vouchers`, `/promotions`, `/legal`, `/capacity`, `/pricing`, `/shuttle`, `/reviews`,
-`/users`.
+`/vouchers`, `/capacity`, `/pricing`, `/shuttle`, `/users`, `/help`, and
+`/admin/website` ("Public website", admin-only) — the front-end-content hub with
+tabs for the facility **gallery** and **opening hours** (new) plus the
+**promotions / reviews / legal** editors (consolidated; those routes still exist
+for deep links but are no longer separate sidebar entries).
 
 ### Hidden (code preserved, routes commented out)
 `/commuter`, `/account/subscription`, `/account/loyalty`, `/admin/reports`, `/admin/audit`.
@@ -169,9 +172,10 @@ the last admin); admins can also create/delete users and send magic-link invites
 | `cashEntries`, `cashbookReports`, `cashHandovers` | auto | Cash drawer ledger, closures, handovers |
 | `auditLog` | auto | Immutable admin action log |
 | `reviews`, `contactMessages` | auto | Customer reviews + contact submissions |
+| `galleryImages` | auto | Homepage "Our facility" photos (admin-managed; files in Storage `gallery/`) |
 | `siteContent`, `legalPages` | slug | CMS bodies for promotions + legal pages |
 | `shuttleSchedule`, `trainSchedule` | auto | Departure schedules |
-| `settings/global` | global | Global config (e.g. online-discount %) |
+| `settings/global` | global | Global config (online-discount %, per-day `openingHours`) |
 | `pendingInvites`, `lookupCache` | email / `cui_*` | Invite staging + ANAF CUI cache |
 
 **Security model (firestore.rules):** public read / admin write for config + content

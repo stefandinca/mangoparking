@@ -7,5 +7,16 @@ service firebase.storage {
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
+
+    // Facility gallery images — public read (shown on the homepage). Authed
+    // upload (admin, gated again at the Firestore level) capped at 5 MB and
+    // image/* only; `request.resource == null` is a delete, which we allow.
+    match /gallery/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && (request.resource == null
+            || (request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*')));
+    }
   }
 }

@@ -611,6 +611,8 @@ export default {
     reviews: 'Reviews',
     users: 'Users',
     legal: 'Legal pages',
+    website: 'Public website',
+    websiteSubtitle: 'Manage front-end content: gallery, opening hours, promotions, reviews, legal pages.',
     help: 'Guide',
     legalSubtitle: 'Edit Terms, Privacy, GDPR, Delivery, and Cancellation copy.',
     legalTitle: 'Page title',
@@ -1554,6 +1556,39 @@ export default {
     detailReturn: 'Return',
     detailGroup: 'Group details',
     detailPrice: 'Price',
+  },
+
+  // Public website admin section (gallery + opening hours)
+  website: {
+    tabGallery: 'Gallery',
+    tabHours: 'Opening hours',
+    tabPromotions: 'Promotions',
+    tabReviews: 'Reviews',
+    tabLegal: 'Legal pages',
+    gallerySubtitle: 'Photos shown in the homepage "Our facility" section.',
+    galleryAdd: '+ Add photos',
+    galleryCaption: 'Caption (optional)',
+    gallerySort: 'Order',
+    galleryEmpty: 'No photos yet — the built-in images are shown. Add photos to replace them.',
+    galleryUploading: 'Uploading…',
+    gallerySaved: 'Gallery updated.',
+    galleryDeleted: 'Photo deleted.',
+    galleryDeleteConfirm: 'Delete this gallery photo?',
+    hoursSubtitle: 'Per-day office hours (the lot is 24/7). Shown on the contact page and footer.',
+    hoursSaved: 'Hours saved.',
+  },
+
+  // Opening hours (day names + display labels)
+  openingHours: {
+    office: 'Office hours',
+    closed: 'Closed',
+    mon: 'Monday',
+    tue: 'Tuesday',
+    wed: 'Wednesday',
+    thu: 'Thursday',
+    fri: 'Friday',
+    sat: 'Saturday',
+    sun: 'Sunday',
   },
 
   // Cashbook (admin)

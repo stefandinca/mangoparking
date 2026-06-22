@@ -46,7 +46,8 @@ src/pages/{public,auth,account,admin}/    — default export fn(container)
 src/services/                         — booking, token, capacity, longTerm, pricing, seasonalRates,
                                         discount, promoVoucher, voucher, cashbook, audit, review,
                                         promotions, legalPage, shuttle, contact, cui, netopia,
-                                        transfer (door-to-airport), userMerge (+ hidden: subscription, loyalty)
+                                        transfer (door-to-airport), gallery (facility photos),
+                                        openingHours, userMerge (+ hidden: subscription, loyalty)
 scripts/{prerender.mjs,seo-routes.mjs}    — build-time SEO prerender for public routes
 functions/src/                        — index.js (Netopia + admin/cash/booking callables),
                                         emails.js (customer Brevo emails), adminNotifications.js
@@ -59,13 +60,13 @@ firebase.json / vercel.json / vite.config.js / .firebaserc (project: mango-parki
 - **Public**: `/`, `/booking`, `/booking/{credits,long-term,return}`, `/pay`, `/pricing`, `/shuttle`, `/about`, `/contact`, `/promotions`, legal (`/terms`, `/privacy`, `/gdpr`, `/delivery`, `/cancellation`)
 - **Auth**: `/login`, `/register`, `/auth/finish-signup`
 - **Account** (`['auth']`): `/account`, `/account/bookings`, `/account/vouchers`, `/account/vehicles`
-- **Admin** (`['auth','admin','perm:<section>']`): `/admin`, `/admin/{checkins,transactions,cashbook,refunds,vouchers,promotions,legal,capacity,pricing,shuttle,reviews,users}`
+- **Admin** (`['auth','admin','perm:<section>']`): `/admin`, `/admin/{checkins,transactions,cashbook,refunds,vouchers,website,capacity,pricing,shuttle,users,help}`. **`/admin/website`** ("Public website", admin-only) is the front-end-content hub: tabs for facility **gallery** + **opening hours** (new) and the **promotions / reviews / legal** editors (consolidated — their routes still exist for deep links but are no longer in the sidebar).
 - **Hidden** (code preserved, routes commented out): `/commuter`, `/account/{subscription,loyalty}`, `/admin/{reports,audit}`
 
 ## Roles & Permissions (src/utils/permissions.js)
 Single `PERM` map drives route guards, the admin sidebar, and Firestore-rule logic — kept mutually consistent.
-- **admin** — all 13 sections incl. config surfaces (pricing, users, legal, vouchers, promotions)
-- **agent** (legacy `staff` alias) — ops only: dashboard, checkins, transactions, cashbook, capacity, shuttle, reviews, refunds
+- **admin** — all sections incl. config surfaces (pricing, users, vouchers, website [gallery/hours/promotions/reviews/legal])
+- **agent** (legacy `staff` alias) — ops only: dashboard, checkins, transactions, cashbook, capacity, shuttle, refunds (no reviews — moved under admin-only Public website)
 - **driver** — dashboard, checkins, capacity, shuttle
 - **customer** — no admin access
 

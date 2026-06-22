@@ -28,9 +28,16 @@ function freshSection() {
 }
 
 export default async function AdminLegal(container) {
-  const locale = getLocale();
-  updateMeta({ title: `${t('admin.legal')} — Admin`, lang: locale });
+  updateMeta({ title: `${t('admin.legal')} — Admin`, lang: getLocale() });
+  const shell = AdminLayout('/admin/legal', '<div data-section-root></div>');
+  initAdminNav(shell);
+  container.appendChild(shell);
+  await mountLegal(shell.querySelector('[data-section-root]'));
+}
 
+// Mountable legal-pages editor — reused standalone (above) and as a tab in the
+// Public website admin page (AdminWebsite.js). `page` is the host container.
+export async function mountLegal(page) {
   // Cache of {slug: rawDoc} loaded from Firestore. Edits live in
   // `working[slug][locale]` until saved.
   const docs = {};
@@ -144,9 +151,7 @@ export default async function AdminLegal(container) {
   // Wrap content in a sentinel <div data-legal-root> so re-renders can
   // swap innerHTML cleanly without touching the AdminLayout's <main>
   // wrapper (which holds the page padding + scrolling).
-  const page = AdminLayout('/admin/legal', `<div data-legal-root>${content()}</div>`);
-  initAdminNav(page);
-  container.appendChild(page);
+  page.innerHTML = `<div data-legal-root>${content()}</div>`;
 
   function rerender() {
     const root = page.querySelector('[data-legal-root]');

@@ -612,6 +612,8 @@ export default {
     reviews: 'Recenzii',
     users: 'Utilizatori',
     legal: 'Pagini legale',
+    website: 'Site public',
+    websiteSubtitle: 'Gestionează conținutul site-ului: galerie, program, promoții, recenzii, pagini legale.',
     help: 'Ghid',
     legalSubtitle: 'Editează termenii, politica de confidențialitate, GDPR, livrare și anulare.',
     legalTitle: 'Titlu pagină',
@@ -1570,6 +1572,39 @@ export default {
     detailReturn: 'Retur',
     detailGroup: 'Detalii grup',
     detailPrice: 'Preț',
+  },
+
+  // Public website admin section (gallery + opening hours)
+  website: {
+    tabGallery: 'Galerie',
+    tabHours: 'Program',
+    tabPromotions: 'Promoții',
+    tabReviews: 'Recenzii',
+    tabLegal: 'Pagini legale',
+    gallerySubtitle: 'Fotografiile din secțiunea „Spațiul nostru” de pe pagina principală.',
+    galleryAdd: '+ Adaugă poze',
+    galleryCaption: 'Descriere (opțional)',
+    gallerySort: 'Ordine',
+    galleryEmpty: 'Nicio poză încă — se afișează imaginile implicite. Adaugă poze pentru a le înlocui.',
+    galleryUploading: 'Se încarcă…',
+    gallerySaved: 'Galerie actualizată.',
+    galleryDeleted: 'Poză ștearsă.',
+    galleryDeleteConfirm: 'Ștergi această poză din galerie?',
+    hoursSubtitle: 'Program birou pe zile (parcarea este non-stop). Apare pe pagina de contact și în subsol.',
+    hoursSaved: 'Program salvat.',
+  },
+
+  // Opening hours (day names + display labels)
+  openingHours: {
+    office: 'Program birou',
+    closed: 'Închis',
+    mon: 'Luni',
+    tue: 'Marți',
+    wed: 'Miercuri',
+    thu: 'Joi',
+    fri: 'Vineri',
+    sat: 'Sâmbătă',
+    sun: 'Duminică',
   },
 
   // Cashbook (admin)

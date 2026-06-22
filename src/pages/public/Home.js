@@ -1,8 +1,9 @@
 import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
-import { html, delegate } from '../../utils/dom.js';
+import { html, delegate, escapeHtml } from '../../utils/dom.js';
 import { checkIcon, starIcon, planeIcon, peopleIcon, shuttleIcon } from '../../components/widgets/icons.js';
+import { getGalleryImages } from '../../services/galleryService.js';
 import { initCarousel } from '../../components/widgets/Carousel.js';
 import { updateMeta, setStructuredData } from '../../utils/seo.js';
 import { TOTAL_CAPACITY, SITE_URL, CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS, GOOGLE_REVIEWS_URL, GOOGLE_MAPS_EMBED } from '../../utils/constants.js';
@@ -21,6 +22,42 @@ const FALLBACK_REVIEWS = [
   { name: 'Maria I.', type: 'traveler', rating: 5, comment: null },
   { name: 'Dan V.', type: 'traveler', rating: 4, comment: null },
 ];
+
+// Built-in "Our facility" photos, shown until the admin adds gallery images
+// (managed under /admin/website). Captions are alt text only.
+const FALLBACK_GALLERY = [
+  { url: '/images/entrance.jpg', caption: 'ManGO Parking' },
+  { url: '/images/bus-2.jpg', caption: 'ManGO shuttle' },
+  { url: '/images/parking-1.jpg', caption: 'Parking lot' },
+  { url: '/images/bus-3.jpg', caption: 'Airport shuttle' },
+];
+
+function galleryImageCards(images) {
+  return images.map((img) => `
+    <button type="button" data-gallery-item data-full="${escapeHtml(img.url)}" data-caption="${escapeHtml(img.caption || '')}"
+      class="snap-start shrink-0 w-[78%] sm:w-[46%] md:w-[31%] lg:w-[23.5%] rounded-2xl overflow-hidden h-64 md:h-80 cursor-pointer group bg-frost-deep block">
+      <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.caption || 'ManGO Parking')}" class="img-cover group-hover:scale-105 transition-transform duration-700" loading="lazy">
+    </button>
+  `).join('');
+}
+
+// Minimal fullscreen lightbox — click anywhere or press Esc to close.
+function openGalleryLightbox(url, caption) {
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4 sm:p-8 bg-charcoal/90 cursor-zoom-out';
+  overlay.innerHTML = `
+    <img src="${escapeHtml(url)}" alt="${escapeHtml(caption || '')}" class="max-w-full max-h-[88vh] rounded-2xl shadow-2xl">
+    ${caption ? `<p class="absolute bottom-5 left-0 right-0 text-center text-white/90 text-[14px] px-6">${escapeHtml(caption)}</p>` : ''}
+    <button type="button" class="absolute top-5 right-5 text-white/80 hover:text-white" aria-label="Close">
+      <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  `;
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  overlay.addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+}
 
 function initialsOf(name) {
   return String(name || '?')
@@ -340,19 +377,8 @@ export default function Home(container) {
         <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3 text-center">${t('gallery.label')}</p>
         <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep text-center">${t('gallery.title')}</h2>
       </div>
-      <div class="flex gap-4 px-6 max-w-7xl mx-auto">
-        <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80">
-          <img src="/images/entrance.jpg" alt="ManGO Parking entrance" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
-        </div>
-        <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden sm:block">
-          <img src="/images/bus-2.jpg" alt="Free ManGO shuttle" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
-        </div>
-        <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden md:block">
-          <img src="/images/parking-1.jpg" alt="Organized parking lot" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
-        </div>
-        <div class="flex-1 rounded-2xl overflow-hidden h-64 md:h-80 hidden lg:block">
-          <img src="/images/bus-3.jpg" alt="Shuttle to the airport" class="img-cover hover:scale-105 transition-transform duration-700" loading="lazy">
-        </div>
+      <div data-gallery class="flex gap-4 px-6 max-w-7xl mx-auto overflow-x-auto snap-x snap-mandatory pb-2">
+        ${galleryImageCards(FALLBACK_GALLERY)}
       </div>
     </section>
 
@@ -533,6 +559,16 @@ export default function Home(container) {
   getPublishedReviews(3).then(real => {
     if (real?.length) renderReviews(real);
   }).catch(() => {});
+
+  // Facility gallery — load admin-managed images from Firestore; keep the
+  // built-in photos until the collection has entries. Click opens a lightbox.
+  const galleryEl = page.querySelector('[data-gallery]');
+  getGalleryImages().then((imgs) => {
+    if (imgs?.length && galleryEl) galleryEl.innerHTML = galleryImageCards(imgs);
+  }).catch(() => {});
+  delegate(page, 'click', '[data-gallery-item]', (_e, btn) => {
+    openGalleryLightbox(btn.dataset.full, btn.dataset.caption);
+  });
 
   // Real-time capacity subscription
   const unsubCapacity = subscribeCapacity((cap) => {

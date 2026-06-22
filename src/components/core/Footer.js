@@ -5,6 +5,7 @@ import {
   COMPANY_LEGAL_NAME, CUI, REG_COM, COMPANY_ADDRESS,
   ANPC_SAL_URL, ANPC_SOL_URL,
 } from '../../utils/constants.js';
+import { getOpeningHours, bucharestTodayKey } from '../../services/openingHoursService.js';
 
 // Strip everything except digits — for tel:/wa.me URLs.
 const PHONE_DIGITS = CONTACT_PHONE.replace(/[^\d]/g, '');
@@ -12,7 +13,7 @@ const PHONE_DIGITS = CONTACT_PHONE.replace(/[^\d]/g, '');
 export function Footer() {
   const year = new Date().getFullYear();
 
-  return html`
+  const footer = html`
     <footer class="pt-16 pb-8">
       <div class="max-w-7xl mx-auto px-6">
         <!-- Columns -->
@@ -61,6 +62,7 @@ export function Footer() {
               <p><a class="hover:text-blueberry transition-colors" href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></p>
               <p>${CONTACT_ADDRESS}</p>
               <p class="pt-2">${t('footer.parking247')}</p>
+              <p data-footer-hours>${t('footer.office')}</p>
               <p>${t('footer.shuttleEvery15')}</p>
             </div>
           </div>
@@ -128,4 +130,15 @@ export function Footer() {
       </div>
     </div>
   `;
+
+  // Patch the office line with today's hours once loaded (cached service).
+  const hoursEl = footer.querySelector('[data-footer-hours]');
+  if (hoursEl) {
+    getOpeningHours().then((hours) => {
+      const d = hours[bucharestTodayKey()];
+      hoursEl.textContent = `${t('openingHours.office')}: ${d.closed ? t('openingHours.closed') : `${d.open}–${d.close}`}`;
+    }).catch(() => {});
+  }
+
+  return footer;
 }

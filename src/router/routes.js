@@ -208,6 +208,11 @@ export const routes = [
     guards: ['auth', 'admin', 'perm:users'],
   },
   {
+    path: '/admin/website',
+    component: () => import('../pages/admin/AdminWebsite.js'),
+    guards: ['auth', 'admin', 'perm:website'],
+  },
+  {
     path: '/admin/help',
     component: () => import('../pages/admin/AdminHelp.js'),
     guards: ['auth', 'admin', 'perm:help'],
