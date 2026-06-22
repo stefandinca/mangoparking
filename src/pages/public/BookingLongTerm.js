@@ -123,6 +123,7 @@ export default function BookingLongTerm(container) {
                     ${t('longTerm.dropoffAt')} *
                   </label>
                   ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true, stepToNext: 'pickupAt' })}
+                  <p class="text-[12px] text-charcoal/70 mt-1.5 leading-snug">${t('longTerm.dropoffHint')}</p>
                 </div>
                 <div>
                   <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
@@ -130,6 +131,7 @@ export default function BookingLongTerm(container) {
                     ${t('longTerm.pickupAt')} *
                   </label>
                   ${dateTimeFieldHtml({ name: 'pickupAt', value: toLocalDatetimeValue(dayAfter10), min: toLocalDatetimeValue(tomorrow10), required: true })}
+                  <p class="text-[12px] text-charcoal/70 mt-1.5 leading-snug">${t('longTerm.pickupHint')}</p>
                 </div>
               </div>
               <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>

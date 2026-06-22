@@ -7,8 +7,7 @@ import { getUserProfile, getCurrentUser } from '../../firebase/auth.js';
 import { updateDocument, getDocument, getCollection, where, orderBy } from '../../firebase/db.js';
 import { getBalance, getTransactions } from '../../services/tokenService.js';
 import { showToast } from '../../components/core/Toast.js';
-import { getShuttleSchedule, getUpcomingDepartures, getRouteKey } from '../../services/shuttleService.js';
-import { accountLayout, initAccountNav, NAV_ICONS } from '../../components/account/AccountLayout.js';
+import { accountLayout, initAccountNav } from '../../components/account/AccountLayout.js';
 import { formatDate } from '../../utils/date.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
 import { getMyVoucher } from '../../services/voucherService.js';
@@ -26,10 +25,9 @@ export default async function Dashboard(container) {
   const profile = uid ? await getDocument('users', uid).catch(() => getUserProfile()) : getUserProfile();
   const displayName = profile?.displayName || 'User';
 
-  const [balanceDoc, transactions, shuttleSchedule, voucher, upcomingBookings, myPromos, myRedemptions] = await Promise.all([
+  const [balanceDoc, transactions, voucher, upcomingBookings, myPromos, myRedemptions] = await Promise.all([
     uid ? getBalance(uid).catch(() => null) : Promise.resolve(null),
     uid ? getTransactions(uid, 5).catch(() => []) : Promise.resolve([]),
-    getShuttleSchedule().catch(() => []),
     uid ? getMyVoucher().catch(() => null) : Promise.resolve(null),
     uid
       ? getCollection('bookings',
@@ -63,17 +61,6 @@ export default async function Dashboard(container) {
 
   const balance = balanceDoc?.balance ?? 0;
   const totalPurchased = balanceDoc?.totalPurchased ?? 0;
-  const upcoming = getUpcomingDepartures(shuttleSchedule, 1);
-  const nextShuttle = upcoming[0] || null;
-
-  let minutesAway = 0;
-  if (nextShuttle) {
-    const now = new Date();
-    const [h, m] = nextShuttle.departureTime.split(':').map(Number);
-    const depTime = new Date(now);
-    depTime.setHours(h, m, 0, 0);
-    minutesAway = Math.max(0, Math.round((depTime - now) / 60000));
-  }
 
   updateMeta({
     title: `${t('account.dashboard')} — ManGO Parking`,
@@ -206,8 +193,8 @@ export default async function Dashboard(container) {
       ` : `<p class="text-dim text-center py-4">${t('account.upcomingNone')}</p>`}
     </div>
 
-    <!-- Reserve CTAs + Next shuttle -->
-    <div class="grid md:grid-cols-3 gap-6 mb-6">
+    <!-- Reserve CTAs -->
+    <div class="grid md:grid-cols-2 gap-6 mb-6">
       <!-- Buy credits -->
       <div class="card-solid rounded-2xl p-6">
         <h3 class="font-heading font-bold text-lg mb-3">${t('account.reserveCredits')}</h3>
@@ -220,21 +207,6 @@ export default async function Dashboard(container) {
         <h3 class="font-heading font-bold text-lg mb-3">${t('account.reserveLongterm')}</h3>
         <p class="text-dim text-[14px] mb-4">${t('longTerm.pageSubtitle')}</p>
         <a href="${localePath('/booking/long-term')}" class="inline-block bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[15px] px-5 py-3 rounded-xl transition-all duration-200 shadow-sm">${t('account.reserveNow')}</a>
-      </div>
-
-      <!-- Next shuttle -->
-      <div class="card-solid rounded-2xl p-6">
-        <h3 class="font-heading font-bold text-lg mb-4">${t('account.nextShuttle')}</h3>
-        <div class="flex items-center gap-4">
-          <div class="w-14 h-14 rounded-2xl bg-mango/10 flex items-center justify-center">
-            ${NAV_ICONS.vehicles}
-          </div>
-          <div>
-            <p class="font-heading font-bold text-2xl tracking-tight font-mono">${nextShuttle ? nextShuttle.departureTime : '--:--'}</p>
-            <p class="text-dim text-[14px]">→ ${nextShuttle ? t('shuttle.' + getRouteKey(nextShuttle.route)) : '—'}</p>
-            <p class="text-mango text-[13px] font-semibold mt-0.5">${nextShuttle ? t('account.inMinutes', { min: minutesAway }) : ''}</p>
-          </div>
-        </div>
       </div>
     </div>
 

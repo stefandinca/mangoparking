@@ -1198,6 +1198,8 @@ export default {
     endDate: 'Pick-up date',
     dropoffAt: 'Drop-off (date & time)',
     pickupAt: 'Pick-up (date & time)',
+    dropoffHint: 'Note: set your parking arrival time 15 minutes before the time you want to reach the airport.',
+    pickupHint: 'Set the return time to about 30 min after your landing time.',
     days: 'days',
     oneDay: '1 day',
     perDay: 'lei / day',

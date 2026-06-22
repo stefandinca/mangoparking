@@ -1199,6 +1199,8 @@ export default {
     endDate: 'Data plecare',
     dropoffAt: 'Sosire (data și ora)',
     pickupAt: 'Plecare (data și ora)',
+    dropoffHint: 'Atenție: setează ora de sosire la parcare cu 15 minute înainte de ora la care vrei să ajungi în aeroport.',
+    pickupHint: 'Setează ora de întoarcere la aprox. 30 min după ora de aterizare.',
     days: 'zile',
     oneDay: '1 zi',
     perDay: 'lei / zi',
