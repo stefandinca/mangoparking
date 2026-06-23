@@ -600,6 +600,7 @@ export default {
     backToSite: 'Back to site',
     // Sidebar
     dashboard: 'Dashboard',
+    activity: 'Activity',
     checkins: 'Check-in / Check-out',
     bookings: 'Credits',
     transactions: 'Transactions',
@@ -1618,6 +1619,18 @@ export default {
     fri: 'Friday',
     sat: 'Saturday',
     sun: 'Sunday',
+  },
+
+  // Admin activity feed (next 48h)
+  activity: {
+    subtitle: 'Next 48 hours — scheduled check-ins, check-outs and transfers.',
+    empty: 'No scheduled activity in the next 48 hours.',
+    today: 'Today',
+    tomorrow: 'Tomorrow',
+    kindCheckin: 'Check-in',
+    kindCheckout: 'Check-out',
+    kindTransferOut: 'Transfer out',
+    kindTransferReturn: 'Transfer return',
   },
 
   // Cashbook (admin)

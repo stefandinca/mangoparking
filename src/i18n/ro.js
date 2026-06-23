@@ -601,6 +601,7 @@ export default {
     backToSite: 'Înapoi la site',
     // Sidebar
     dashboard: 'Panou Admin',
+    activity: 'Activitate',
     checkins: 'Check-in / Check-out',
     bookings: 'Credite',
     transactions: 'Tranzacții',
@@ -1634,6 +1635,18 @@ export default {
     fri: 'Vineri',
     sat: 'Sâmbătă',
     sun: 'Duminică',
+  },
+
+  // Admin activity feed (next 48h)
+  activity: {
+    subtitle: 'Următoarele 48 de ore — check-in, check-out și transferuri programate.',
+    empty: 'Nicio activitate programată în următoarele 48 de ore.',
+    today: 'Astăzi',
+    tomorrow: 'Mâine',
+    kindCheckin: 'Check-in',
+    kindCheckout: 'Check-out',
+    kindTransferOut: 'Transfer dus',
+    kindTransferReturn: 'Transfer retur',
   },
 
   // Cashbook (admin)

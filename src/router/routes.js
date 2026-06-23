@@ -148,6 +148,11 @@ export const routes = [
     guards: ['auth', 'admin', 'perm:dashboard'],
   },
   {
+    path: '/admin/activity',
+    component: () => import('../pages/admin/AdminActivity.js'),
+    guards: ['auth', 'admin', 'perm:activity'],
+  },
+  {
     path: '/admin/checkins',
     component: () => import('../pages/admin/AdminCheckIns.js'),
     guards: ['auth', 'admin', 'perm:checkins'],

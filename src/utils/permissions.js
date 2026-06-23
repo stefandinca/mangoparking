@@ -27,6 +27,7 @@ export const ALL_ROLES = [ROLE_ADMIN, ROLE_AGENT, ROLE_DRIVER, ROLE_CUSTOMER];
 // Permission identifiers — match the corresponding admin section.
 export const PERM = Object.freeze({
   DASHBOARD:    'dashboard',
+  ACTIVITY:     'activity',
   CHECKINS:     'checkins',
   TRANSACTIONS: 'transactions',
   CASHBOOK:     'cashbook',
@@ -46,7 +47,7 @@ export const PERM = Object.freeze({
 const ROLE_PERMISSIONS = {
   [ROLE_ADMIN]:    Object.values(PERM),
   [ROLE_AGENT]:    [
-    PERM.DASHBOARD, PERM.CHECKINS, PERM.TRANSACTIONS, PERM.CASHBOOK,
+    PERM.DASHBOARD, PERM.ACTIVITY, PERM.CHECKINS, PERM.TRANSACTIONS, PERM.CASHBOOK,
     PERM.CAPACITY, PERM.SHUTTLE, PERM.REFUNDS, PERM.HELP,
     // Intentionally excluded: PRICING, USERS, LEGAL, VOUCHERS, PROMOTIONS,
     // REVIEWS, WEBSITE — agents see ops, not configuration / public-site
@@ -54,7 +55,7 @@ const ROLE_PERMISSIONS = {
     // Firestore rules also gate writes to settings docs to isAdmin() so even
     // direct API access fails.
   ],
-  [ROLE_DRIVER]:   [PERM.DASHBOARD, PERM.CHECKINS, PERM.CAPACITY, PERM.SHUTTLE, PERM.HELP],
+  [ROLE_DRIVER]:   [PERM.DASHBOARD, PERM.ACTIVITY, PERM.CHECKINS, PERM.CAPACITY, PERM.SHUTTLE, PERM.HELP],
   [ROLE_CUSTOMER]: [],
 };
 
