@@ -4,7 +4,7 @@ import { openModal } from '../../components/core/Modal.js';
 import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
-import { isValidEmail, isValidLicensePlate } from '../../utils/validators.js';
+import { isValidEmail, isValidLicensePlate, isValidPhone } from '../../utils/validators.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getBalance, lookupByPlate, getTokenPacks } from '../../services/tokenService.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
@@ -149,10 +149,12 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           </datalist>
         </div>
 
-        <div data-new-block class="hidden grid grid-cols-2 gap-2">
+        <div data-new-block class="hidden grid grid-cols-1 sm:grid-cols-3 gap-2">
           <input type="text" name="newName" placeholder="${t('transactions.createNewName')}"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <input type="email" name="newEmail" placeholder="${t('transactions.createNewEmail')}"
+            class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          <input type="tel" name="newPhone" placeholder="${t('transactions.createNewPhone')}"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
         </div>
       </div>
@@ -769,6 +771,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
 
     let payerEmail = '';
     let payerName = '';
+    let payerPhone = '';
     let customerId = null;
 
     if (mode === 'existing') {
@@ -785,6 +788,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       if (matched) {
         payerEmail = matched.email || '';
         payerName = matched.displayName || '';
+        payerPhone = matched.phone || '';
         customerId = matched.id;
       } else if (isValidEmail(search)) {
         payerEmail = search;
@@ -796,13 +800,21 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     } else {
       const newName = String(qs('[name="newName"]', contentEl).value || '').trim();
       const newEmail = String(qs('[name="newEmail"]', contentEl).value || '').trim();
+      const newPhone = String(qs('[name="newPhone"]', contentEl).value || '').trim();
       if (!isValidEmail(newEmail)) {
         errEl.textContent = t('admin.usersError');
         errEl.classList.remove('hidden');
         return;
       }
+      // Phone is mandatory so staff can reach the customer.
+      if (!isValidPhone(newPhone)) {
+        errEl.textContent = t('transactions.errorMissingPhone');
+        errEl.classList.remove('hidden');
+        return;
+      }
       payerEmail = newEmail;
       payerName = newName;
+      payerPhone = newPhone;
     }
 
     btn.disabled = true;
@@ -833,7 +845,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           : '';
         result = await adminCreateLongtermBookingFn({
           plate, dropoffAt, pickupAt, days, totalPrice,
-          payerEmail, payerName, customerId,
+          payerEmail, payerName, payerPhone, customerId,
           paidBy, brokerName, autoCheckIn,
         });
       } else {
@@ -849,7 +861,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         }
         result = await grantCreditsForCashFn({
           plate, quantity, amount,
-          payerEmail, payerName, customerId,
+          payerEmail, payerName, payerPhone, customerId,
           paidBy, autoCheckIn,
         });
       }

@@ -26,8 +26,10 @@ import { updateMeta } from '../../utils/seo.js';
 import { subscribeCollection, getCollection, getDocument, where } from '../../firebase/db.js';
 import { showToast } from '../../components/core/Toast.js';
 import { openModal, confirmModal } from '../../components/core/Modal.js';
-import { checkInBooking, checkOutBooking } from '../../services/bookingService.js';
+import { checkInBooking, checkOutBooking, updateBookingDetails } from '../../services/bookingService.js';
 import { getTokenPacks } from '../../services/tokenService.js';
+import { isValidEmail, isValidPhone, isValidLicensePlate } from '../../utils/validators.js';
+import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
@@ -348,6 +350,10 @@ function rowHtml(b, { tab, locale, canCancel }) {
   if (unpaid && tab !== 'noshow') {
     actions.push(actionButton({ key: 'collect', label: t('checkins.actionCollect'), variant: 'warning', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-order="${escapeHtml(b.paymentId || '')}"` }));
   }
+  // Edit contact / logistics — agents/admins, on the active workflow tabs.
+  if (canCancel && (tab === 'checkin' || tab === 'checkout')) {
+    actions.push(actionButton({ key: 'edit', label: t('checkins.actionEdit'), variant: 'neutral', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
+  }
   // Cancel belongs on the check-in (not-yet-arrived) tab. On the check-out
   // tab the car is parked — you check it out, you don't cancel the booking.
   if (canCancel && cancellable && tab !== 'checkout') {
@@ -396,6 +402,9 @@ function overdueRowHtml(b, { locale, canCancel }) {
     actionButton({ key: 'checkout', label: t('checkins.actionCheckOut'), variant: 'primary', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }),
     actionButton({ key: 'overstay', label: t('checkins.actionChargeOverstay'), variant: 'warning', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }),
   ];
+  if (canCancel) {
+    actions.push(actionButton({ key: 'edit', label: t('checkins.actionEdit'), variant: 'neutral', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
+  }
   if (canCancel && cancellable) {
     actions.push(actionButton({ key: 'cancel', label: t('checkins.actionCancelReservation'), variant: 'danger', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(code)}"` }));
   }
@@ -944,6 +953,8 @@ export default async function AdminCheckIns(container) {
         const code = btn.dataset.code || bookingId.slice(0, 5);
         const res = await resendConfirmationFn({ bookingId });
         showToast(t('checkins.resendOk', { code, recipient: res?.data?.recipient || '' }), 'success');
+      } else if (action === 'edit') {
+        await openEditBookingDialog({ booking, locale });
       }
     } catch (err) {
       console.error(action, err);
@@ -979,6 +990,121 @@ export default async function AdminCheckIns(container) {
   // the returned cleanup before rendering the next route). Replaces the old
   // popstate-only teardown, which leaked on pushState/SPA-link navigation.
   return () => { if (unsub) unsub(); if (unsubTransfers) unsubTransfers(); };
+}
+
+// ── Edit reservation (contact + logistics) ───────────────────────────────
+// Agents/admins edit a booking's contact (name/email/phone) any time, plus
+// plate + dates while it's still `upcoming` (editing those after check-in would
+// desync activeCheckIns / the assigned spot). No money/payment/status here.
+function isoToFlatpickr(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function openEditBookingDialog({ booking }) {
+  return new Promise((resolve) => {
+    const c = booking.contact || {};
+    const showLogistics = booking.status === 'upcoming';     // before check-in only
+    const showDates = showLogistics && booking.type !== 'credit';
+    const inputCls = 'w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry';
+    const labelCls = 'block text-[13px] font-medium text-charcoal/70 mb-1.5';
+
+    const form = html`<form class="space-y-4" data-edit-form>
+      <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.editTitle')}</h3>
+      <div class="rounded-xl bg-frost border border-frost-deep px-3 py-2 flex items-center gap-2">
+        <span class="font-mono text-[13px] font-bold text-blueberry-deep">${escapeHtml(booking.code || '')}</span>
+        ${typeBadge(booking)}
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="${labelCls}">${t('checkins.colCustomer')} *</label>
+          <input name="name" value="${escapeHtml(c.name || '')}" class="${inputCls}">
+        </div>
+        <div>
+          <label class="${labelCls}">${t('checkins.detailPhone')} *</label>
+          <input name="phone" type="tel" value="${escapeHtml(c.phone || '')}" class="${inputCls}">
+        </div>
+      </div>
+      <div>
+        <label class="${labelCls}">${t('checkins.detailEmail')} *</label>
+        <input name="email" type="email" value="${escapeHtml(c.email || '')}" class="${inputCls}">
+      </div>
+      ${showLogistics ? `
+      <div>
+        <label class="${labelCls}">${t('checkins.colPlate')} *</label>
+        <input name="plate" value="${escapeHtml(booking.licensePlate || '')}" class="${inputCls} uppercase font-mono">
+      </div>` : ''}
+      ${showDates ? `
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="${labelCls}">${t('checkins.detailDropoff')} *</label>
+          ${dateTimeFieldHtml({ name: 'dropoffAt', value: isoToFlatpickr(booking.dropoffAt || booking.startDate), classes: inputCls })}
+        </div>
+        <div>
+          <label class="${labelCls}">${t('checkins.detailPickup')} *</label>
+          ${dateTimeFieldHtml({ name: 'pickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
+        </div>
+      </div>` : ''}
+      ${!showLogistics ? `<p class="text-[12px] text-dim">${t('checkins.editActiveNote')}</p>` : ''}
+      <div data-edit-err class="hidden text-danger text-[13px]"></div>
+      <div class="flex gap-3 justify-end pt-1">
+        <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors">${t('common.cancel')}</button>
+        <button type="submit" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('common.save')}</button>
+      </div>
+    </form>`;
+
+    const modal = openModal(form, { onClose: () => resolve() });
+    if (showDates) wireDateTime(form);
+    const errEl = qs('[data-edit-err]', form);
+    const showErr = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+    qs('[data-cancel]', form).addEventListener('click', () => modal.close());
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.classList.add('hidden');
+      const name = qs('[name="name"]', form).value.trim();
+      const email = qs('[name="email"]', form).value.trim();
+      const phone = qs('[name="phone"]', form).value.trim();
+      if (!name) return showErr(t('checkins.editErrorName'));
+      if (!isValidEmail(email)) return showErr(t('checkins.editErrorEmail'));
+      if (!isValidPhone(phone)) return showErr(t('checkins.editErrorPhone'));
+
+      const patch = { contact: { name, email, phone } };
+      if (showLogistics) {
+        const plate = qs('[name="plate"]', form).value.trim().toUpperCase();
+        if (!isValidLicensePlate(plate)) return showErr(t('checkins.errorInvalidPlate'));
+        patch.licensePlate = plate;
+        if (showDates) {
+          const dRaw = qs('[name="dropoffAt"]', form).value;
+          const pRaw = qs('[name="pickupAt"]', form).value;
+          if (!dRaw || !pRaw) return showErr(t('checkins.editErrorDates'));
+          const dIso = new Date(String(dRaw).replace(' ', 'T')).toISOString();
+          const pIso = new Date(String(pRaw).replace(' ', 'T')).toISOString();
+          if (Date.parse(pIso) <= Date.parse(dIso)) return showErr(t('checkins.editErrorDates'));
+          patch.dropoffAt = dIso;
+          patch.pickupAt = pIso;
+        }
+      }
+
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = t('common.loading');
+      try {
+        await updateBookingDetails(booking.id, patch);
+        showToast(t('checkins.editSaved'), 'success');
+        modal.close();
+        resolve();
+      } catch (err) {
+        console.error('updateBookingDetails', err);
+        showErr(err?.message || t('common.error'));
+        submitBtn.disabled = false;
+        submitBtn.textContent = t('common.save');
+      }
+    });
+  });
 }
 
 // ── Check-in / check-out confirmation ────────────────────────────────────

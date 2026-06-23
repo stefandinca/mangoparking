@@ -136,6 +136,42 @@ export async function checkOutBooking(bookingId) {
 }
 
 /**
+ * Edit a reservation's contact + logistics details (admin/agent). Writes only
+ * whitelisted fields — contact name/email/phone, plate, and (long-term)
+ * drop-off / pick-up dates with the legacy date-only fields + recomputed days.
+ * No money / payment / status changes (those go through collect / overstay /
+ * cancel-refund). Client-side, like check-in/out — `bookings` rules allow staff
+ * updates. `patch` keys are all optional; omit plate/dates for contact-only edits.
+ */
+export async function updateBookingDetails(bookingId, patch = {}) {
+  const old = await getDocument('bookings', bookingId);
+  if (!old) throw new Error(`Booking ${bookingId} not found`);
+
+  const update = {};
+  if (patch.contact) {
+    update.contact = {
+      ...(old.contact || {}),
+      name: String(patch.contact.name ?? old.contact?.name ?? '').trim(),
+      email: String(patch.contact.email ?? old.contact?.email ?? '').trim(),
+      phone: String(patch.contact.phone ?? old.contact?.phone ?? '').trim(),
+    };
+  }
+  if (patch.licensePlate !== undefined) {
+    update.licensePlate = String(patch.licensePlate || '').toUpperCase().replace(/[\s-]/g, '');
+  }
+  if (patch.dropoffAt && patch.pickupAt) {
+    update.dropoffAt = patch.dropoffAt;
+    update.pickupAt = patch.pickupAt;
+    update.startDate = patch.dropoffAt.slice(0, 10);
+    update.endDate = patch.pickupAt.slice(0, 10);
+    update.days = Math.max(1, Math.ceil((Date.parse(patch.pickupAt) - Date.parse(patch.dropoffAt)) / 86_400_000));
+  }
+  await updateDocument('bookings', bookingId, update);
+  await auditLog('booking_edited', 'booking', bookingId, null, update);
+  return update;
+}
+
+/**
  * Cancel a booking
  */
 export async function cancelBooking(bookingId) {

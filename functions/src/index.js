@@ -2842,6 +2842,60 @@ export const adminChangeUserRole = onCall(
   }
 );
 
+// ── adminUpdateUserProfile (callable) ───────────────────────────────────
+// Agents/admins edit a customer's profile — displayName, phone, billing,
+// vehicles. Never touches role or email (auth-linked). Agents can't write
+// another user's doc directly (Firestore rules gate that to admin/self), so
+// this server path is required.
+export const adminUpdateUserProfile = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid: actorUid } = await assertAgent(request);
+    const { uid, displayName, phone, billing, vehicles } = request.data || {};
+    if (!uid) throw new HttpsError('invalid-argument', 'Missing uid');
+
+    const db = getFirestore();
+    const targetRef = db.collection('users').doc(uid);
+    const targetSnap = await targetRef.get();
+    if (!targetSnap.exists) throw new HttpsError('not-found', 'User not found');
+
+    const cleanVehicles = Array.isArray(vehicles)
+      ? vehicles
+          .map((v) => ({
+            plate: String(v?.plate || '').toUpperCase().replace(/[\s-]/g, ''),
+            make: String(v?.make || '').trim(),
+            model: String(v?.model || '').trim(),
+          }))
+          .filter((v) => v.plate)
+      : [];
+
+    const patch = {
+      displayName: String(displayName || '').trim(),
+      phone: String(phone || '').trim(),
+      billing: (billing && typeof billing === 'object') ? billing : {},
+      vehicles: cleanVehicles,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await targetRef.update(patch);
+    await db.collection('auditLog').add({
+      action: 'admin_profile_updated',
+      entityType: 'user',
+      entityId: uid,
+      actorUid,
+      payload: {
+        displayName: patch.displayName,
+        phone: patch.phone,
+        billingType: patch.billing?.type || null,
+        vehicles: cleanVehicles.length,
+      },
+      timestamp: new Date().toISOString(),
+    });
+
+    return { ok: true };
+  }
+);
+
 // ── adminSendInvite (callable) ──────────────────────────────────────────
 // Admin sends a magic-link signup invite. The recipient clicks the link
 // in their inbox, lands on /auth/finish-signup, sets a password, and is

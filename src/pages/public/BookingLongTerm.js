@@ -12,7 +12,7 @@ import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateT
 import { getMyVoucher } from '../../services/voucherService.js';
 import { previewVoucher, normalizeCode } from '../../services/promoVoucherService.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
-import { isValidEmail, isValidLicensePlate, required } from '../../utils/validators.js';
+import { isValidEmail, isValidLicensePlate, isValidPhone, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
 import { isProfileComplete } from '../../utils/profileComplete.js';
 import { openProfileCompletionModal, profileGateCard } from '../../components/account/ProfileCompletionModal.js';
@@ -201,8 +201,8 @@ export default function BookingLongTerm(container) {
                     <input type="email" name="email" required value="${escapeHtml(profile?.email || user?.email || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
                   </div>
                   <div>
-                    <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')}</label>
-                    <input type="tel" name="phone" value="${escapeHtml(profile?.phone || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                    <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')} *</label>
+                    <input type="tel" name="phone" required value="${escapeHtml(profile?.phone || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
                   </div>
                 </div>
               </div>
@@ -936,6 +936,9 @@ export default function BookingLongTerm(container) {
       [isPlateInputActive() ? plateInput : null, isValidLicensePlate(licensePlate)],
       [form.name, required(name)],
       [form.email, isValidEmail(email)],
+      // Phone is mandatory for every reservation so staff can reach the
+      // customer (logged-in users have it prefilled from their profile).
+      [form.phone, isValidPhone(phone)],
     ];
     let hasError = false;
     for (const [input, ok] of checks) {

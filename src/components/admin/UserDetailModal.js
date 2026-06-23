@@ -19,6 +19,13 @@ import { t, getLocale } from '../../i18n/index.js';
 import { getCollection, getDocument, where, orderBy, limit } from '../../firebase/db.js';
 import { getBalance, getTransactions } from '../../services/tokenService.js';
 import { showToast } from '../core/Toast.js';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../firebase/config.js';
+import { getUserProfile } from '../../firebase/auth.js';
+import { billingFieldsHtml, wireBillingToggle, readBilling } from '../widgets/BillingFields.js';
+import { isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
+
+const adminUpdateUserProfileFn = httpsCallable(functions, 'adminUpdateUserProfile');
 
 function fmtDateTime(iso) {
   if (!iso) return '—';
@@ -254,6 +261,9 @@ function transactionsHtml(txns) {
 export function openUserDetailModal(user) {
   const d = t('admin.usersDetail');
   const headerName = escapeHtml(user.displayName || user.email || user.id || '—');
+  // Edit is for staff who manage clients (admin/agent) on a real account; a
+  // guest reference (no uid) and drivers don't get the button.
+  const canEdit = ['admin', 'agent'].includes(getUserProfile()?.role) && !!user.id;
 
   const overlay = html`
     <div class="fixed inset-0 z-[90] flex items-start sm:items-center justify-center p-4 overflow-y-auto" data-detail-overlay>
@@ -261,12 +271,15 @@ export function openUserDetailModal(user) {
       <div class="relative bg-frost rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto my-4">
         <div class="sticky top-0 z-10 bg-white/95 backdrop-blur-0 border-b border-frost-deep px-6 py-4 flex items-start justify-between gap-4 rounded-t-3xl">
           <div class="min-w-0">
-            <h2 class="font-heading text-xl font-bold text-blueberry-deep truncate">${headerName}</h2>
+            <h2 data-detail-name class="font-heading text-xl font-bold text-blueberry-deep truncate">${headerName}</h2>
             <p class="text-[13px] text-dim truncate">${escapeHtml(user.email || '')}</p>
           </div>
-          <button data-detail-close class="shrink-0 w-9 h-9 rounded-xl bg-frost hover:bg-frost-deep text-charcoal/70 flex items-center justify-center transition-colors" aria-label="${escapeHtml(d.close)}">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
+          <div class="flex items-center gap-2 shrink-0">
+            ${canEdit ? `<button data-detail-edit class="px-3 h-9 rounded-xl bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[13px] transition-colors">${escapeHtml(d.editProfile)}</button>` : ''}
+            <button data-detail-close class="w-9 h-9 rounded-xl bg-frost hover:bg-frost-deep text-charcoal/70 flex items-center justify-center transition-colors" aria-label="${escapeHtml(d.close)}">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
         </div>
         <div data-detail-body class="p-6 space-y-4">
           <div class="text-center py-10 text-dim text-[14px]">${escapeHtml(d.loading)}</div>
@@ -285,8 +298,116 @@ export function openUserDetailModal(user) {
   document.addEventListener('keydown', handleKey);
   document.body.appendChild(overlay);
 
-  loadAndRender(user, qs('[data-detail-body]', overlay));
+  const body = qs('[data-detail-body]', overlay);
+  if (canEdit) {
+    const refreshHeader = (u) => {
+      const h = qs('[data-detail-name]', overlay);
+      if (h) h.textContent = u.displayName || u.email || u.id || '—';
+    };
+    qs('[data-detail-edit]', overlay).addEventListener('click', () => enterEditMode(user, body, refreshHeader));
+  }
+  loadAndRender(user, body);
   return { close };
+}
+
+// Replace the read-only profile/vehicles/billing view with an edit form
+// (name, phone, vehicles, billing). Saves via the adminUpdateUserProfile
+// callable (agents can't client-write another user's doc).
+function enterEditMode(user, body, refreshHeader) {
+  const d = t('admin.usersDetail');
+  const veh = (Array.isArray(user.vehicles) ? user.vehicles : []).map((v) => (typeof v === 'string' ? { plate: v } : (v || {})));
+  const inputCls = 'w-full px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry';
+  const labelCls = 'block text-[13px] font-medium text-charcoal/70 mb-1';
+  const vehRow = (v = {}) => `
+    <div class="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center" data-veh-row>
+      <input data-veh="plate" value="${escapeHtml(v.plate || '')}" placeholder="${escapeHtml(d.editPlate)}" class="${inputCls} uppercase font-mono">
+      <input data-veh="make" value="${escapeHtml(v.make || '')}" placeholder="${escapeHtml(d.editMake)}" class="${inputCls}">
+      <input data-veh="model" value="${escapeHtml(v.model || '')}" placeholder="${escapeHtml(d.editModel)}" class="${inputCls}">
+      <button type="button" data-veh-remove class="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors" aria-label="${escapeHtml(d.editRemoveVehicle)}">✕</button>
+    </div>`;
+
+  body.innerHTML = `
+    <form data-edit-profile-form class="space-y-4">
+      <section class="bg-white rounded-2xl border border-frost-deep p-4">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="${labelCls}">${escapeHtml(d.editName)}</label><input name="displayName" value="${escapeHtml(user.displayName || '')}" class="${inputCls}"></div>
+          <div><label class="${labelCls}">${escapeHtml(d.editPhone)} *</label><input name="phone" type="tel" value="${escapeHtml(user.phone || '')}" class="${inputCls}"></div>
+        </div>
+      </section>
+      <section class="bg-white rounded-2xl border border-frost-deep p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-heading text-[14px] font-bold text-blueberry-deep uppercase tracking-wider">${escapeHtml(d.vehicles)}</h3>
+          <button type="button" data-veh-add class="text-[13px] text-blueberry hover:underline font-semibold">${escapeHtml(d.editAddVehicle)}</button>
+        </div>
+        <div class="space-y-2" data-veh-list>${veh.map(vehRow).join('')}</div>
+      </section>
+      ${billingFieldsHtml(user.billing)}
+      <div data-edit-err class="hidden text-[13px] text-red-500"></div>
+      <div class="flex gap-3 justify-end">
+        <button type="button" data-edit-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors">${escapeHtml(d.editCancel)}</button>
+        <button type="submit" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${escapeHtml(d.editSave)}</button>
+      </div>
+    </form>
+  `;
+  wireBillingToggle(body);
+
+  const errEl = qs('[data-edit-err]', body);
+  const showErr = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+  const vehList = qs('[data-veh-list]', body);
+  qs('[data-veh-add]', body).addEventListener('click', () => vehList.insertAdjacentHTML('beforeend', vehRow()));
+  vehList.addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-veh-remove]');
+    if (rm) rm.closest('[data-veh-row]').remove();
+  });
+  qs('[data-edit-cancel]', body).addEventListener('click', () => loadAndRender(user, body));
+
+  qs('[data-edit-profile-form]', body).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.classList.add('hidden');
+    const displayName = qs('[name="displayName"]', body).value.trim();
+    const phone = qs('[name="phone"]', body).value.trim();
+    if (!required(displayName)) return showErr(d.editErrorName);
+    if (!isValidPhone(phone)) return showErr(d.editErrorPhone);
+
+    const vehicles = [...body.querySelectorAll('[data-veh-row]')].map((r) => ({
+      plate: r.querySelector('[data-veh="plate"]').value.trim().toUpperCase(),
+      make: r.querySelector('[data-veh="make"]').value.trim(),
+      model: r.querySelector('[data-veh="model"]').value.trim(),
+    })).filter((v) => v.plate);
+    if (vehicles.some((v) => !isValidLicensePlate(v.plate))) return showErr(d.editErrorPlate);
+
+    // Billing is optional here — only validate if the admin actually entered
+    // something; otherwise keep the existing billing unchanged.
+    const billing = readBilling(body);
+    let billingToSave;
+    if (billing.error) {
+      const touched = ['billingName', 'billingCompanyName', 'billingCui', 'billingLocality', 'billingPersonalAddress', 'billingCompanyAddress']
+        .some((n) => (qs(`[name="${n}"]`, body)?.value || '').trim());
+      if (touched) return showErr(billing.error);
+      billingToSave = user.billing || {};
+    } else {
+      billingToSave = billing;
+    }
+
+    const submitBtn = qs('[data-edit-profile-form] button[type="submit"]', body);
+    submitBtn.disabled = true;
+    submitBtn.textContent = t('common.loading');
+    try {
+      await adminUpdateUserProfileFn({ uid: user.id, displayName, phone, billing: billingToSave, vehicles });
+      user.displayName = displayName;
+      user.phone = phone;
+      user.billing = billingToSave;
+      user.vehicles = vehicles;
+      refreshHeader(user);
+      showToast(d.editSaved, 'success');
+      loadAndRender(user, body);
+    } catch (err) {
+      console.error('adminUpdateUserProfile', err);
+      showErr(err?.message || t('common.error'));
+      submitBtn.disabled = false;
+      submitBtn.textContent = d.editSave;
+    }
+  });
 }
 
 async function loadAndRender(user, body) {
