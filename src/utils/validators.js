@@ -7,8 +7,14 @@ export function isValidPhone(phone) {
 }
 
 export function isValidLicensePlate(plate) {
-  // Romanian license plates: B 123 ABC or XX 12 ABC
-  return /^[A-Z]{1,2}\s?\d{2,3}\s?[A-Z]{3}$/.test(String(plate ?? '').toUpperCase().trim());
+  // Accept European plates broadly, not just Romanian (B 123 ABC). Formats
+  // vary too much across countries to validate precisely (DE "B-AB 1234",
+  // FR "AB-123-CD", NL "99-XXX-9", IT "AB 123 CD", UK "AB12 CDE", …), and
+  // rejecting a real foreign plate is worse than accepting an odd one — so
+  // once spaces/hyphens are stripped (matching how plates are normalized
+  // elsewhere) just require 4–10 Latin alphanumerics.
+  const compact = String(plate ?? '').toUpperCase().replace(/[\s-]/g, '');
+  return /^[A-Z0-9]{4,10}$/.test(compact);
 }
 
 export function required(value) {
