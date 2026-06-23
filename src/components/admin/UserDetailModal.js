@@ -261,9 +261,10 @@ function transactionsHtml(txns) {
 export function openUserDetailModal(user) {
   const d = t('admin.usersDetail');
   const headerName = escapeHtml(user.displayName || user.email || user.id || '—');
-  // Edit is for staff who manage clients (admin/agent) on a real account; a
-  // guest reference (no uid) and drivers don't get the button.
-  const canEdit = ['admin', 'agent'].includes(getUserProfile()?.role) && !!user.id;
+  // Edit is for the back-office roles that manage clients — admin/agent (incl.
+  // the legacy 'staff' alias), matching the adminUpdateUserProfile guard. It
+  // needs a real account (uid); a pure-guest booking reference has none.
+  const canEdit = ['admin', 'agent', 'staff'].includes(getUserProfile()?.role) && !!user.id;
 
   const overlay = html`
     <div class="fixed inset-0 z-[90] flex items-start sm:items-center justify-center p-4 overflow-y-auto" data-detail-overlay>
