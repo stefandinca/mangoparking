@@ -1479,6 +1479,8 @@ export default {
     editErrorPhone: 'Număr de telefon invalid.',
     editErrorDates: 'Verifică data de sosire și de plecare.',
     editSaved: 'Rezervare actualizată.',
+    editNotes: 'Note / comentarii',
+    editNotesPlaceholder: 'Comentarii interne despre această rezervare…',
     // Overdue detail labels
     detailDropoff: 'Sosire',
     detailPickup: 'Plecare',

@@ -1471,6 +1471,8 @@ export default {
     editErrorPhone: 'Invalid phone number.',
     editErrorDates: 'Check the drop-off and pick-up dates.',
     editSaved: 'Reservation updated.',
+    editNotes: 'Notes / comments',
+    editNotesPlaceholder: 'Internal notes about this booking…',
     detailDropoff: 'Drop-off',
     detailPickup: 'Pick-up',
     detailDays: 'Days',

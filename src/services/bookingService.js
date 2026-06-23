@@ -166,6 +166,8 @@ export async function updateBookingDetails(bookingId, patch = {}) {
     update.endDate = patch.pickupAt.slice(0, 10);
     update.days = Math.max(1, Math.ceil((Date.parse(patch.pickupAt) - Date.parse(patch.dropoffAt)) / 86_400_000));
   }
+  // Free-text staff comment about this booking.
+  if (patch.notes !== undefined) update.notes = String(patch.notes || '').trim();
   await updateDocument('bookings', bookingId, update);
   await auditLog('booking_edited', 'booking', bookingId, null, update);
   return update;

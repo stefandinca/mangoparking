@@ -350,8 +350,8 @@ function rowHtml(b, { tab, locale, canCancel }) {
   if (unpaid && tab !== 'noshow') {
     actions.push(actionButton({ key: 'collect', label: t('checkins.actionCollect'), variant: 'warning', dataAttrs: `data-booking="${escapeHtml(b.id)}" data-order="${escapeHtml(b.paymentId || '')}"` }));
   }
-  // Edit contact / logistics — agents/admins, on the active workflow tabs.
-  if (canCancel && (tab === 'checkin' || tab === 'checkout')) {
+  // Edit contact / logistics / notes — agents/admins, on every booking row.
+  if (canCancel) {
     actions.push(actionButton({ key: 'edit', label: t('checkins.actionEdit'), variant: 'neutral', dataAttrs: `data-booking="${escapeHtml(b.id)}"` }));
   }
   // Cancel belongs on the check-in (not-yet-arrived) tab. On the check-out
@@ -376,6 +376,7 @@ function rowHtml(b, { tab, locale, canCancel }) {
         <div class="mb-1">${typeBadge(b)}</div>
         <div class="font-medium">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name })}</div>
         <div class="text-[11px] text-dim truncate" title="${escapeHtml(b.contact?.email || '')}">${escapeHtml(b.contact?.email || '')}</div>
+        ${b.notes ? `<div class="text-[11px] text-blueberry mt-0.5 flex items-start gap-1 max-w-[16rem]" title="${escapeHtml(b.notes)}"><svg class="w-3 h-3 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg><span class="truncate">${escapeHtml(b.notes)}</span></div>` : ''}
       </td>
       <td class="px-4 py-3 align-top text-[13px] font-mono">${escapeHtml(plate)}</td>
       <td class="px-4 py-3 align-top">${paymentStatusBadge(b)}</td>
@@ -442,6 +443,7 @@ function overdueRowHtml(b, { locale, canCancel }) {
           ${detail(t('checkins.detailSpot'), escapeHtml(b.spotId || '—'))}
           ${detail(t('checkins.detailPaidBy'), escapeHtml(b.paidBy || '—'))}
         </div>
+        ${b.notes ? `<div class="rounded-xl bg-blueberry/5 border border-blueberry/15 px-3 py-2 mb-4 text-[13px] text-charcoal"><span class="text-[11px] uppercase tracking-wider text-dim font-mono">${t('checkins.editNotes')}</span><br>${escapeHtml(b.notes)}</div>` : ''}
         <div class="flex flex-wrap gap-2 justify-end">${actions.join('')}</div>
       </div>
     </div>
@@ -1049,6 +1051,10 @@ function openEditBookingDialog({ booking }) {
         </div>
       </div>` : ''}
       ${!showLogistics ? `<p class="text-[12px] text-dim">${t('checkins.editActiveNote')}</p>` : ''}
+      <div>
+        <label class="${labelCls}">${t('checkins.editNotes')}</label>
+        <textarea name="notes" rows="3" placeholder="${escapeHtml(t('checkins.editNotesPlaceholder'))}" class="${inputCls}">${escapeHtml(booking.notes || '')}</textarea>
+      </div>
       <div data-edit-err class="hidden text-danger text-[13px]"></div>
       <div class="flex gap-3 justify-end pt-1">
         <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors">${t('common.cancel')}</button>
@@ -1072,7 +1078,7 @@ function openEditBookingDialog({ booking }) {
       if (!isValidEmail(email)) return showErr(t('checkins.editErrorEmail'));
       if (!isValidPhone(phone)) return showErr(t('checkins.editErrorPhone'));
 
-      const patch = { contact: { name, email, phone } };
+      const patch = { contact: { name, email, phone }, notes: qs('[name="notes"]', form).value.trim() };
       if (showLogistics) {
         const plate = qs('[name="plate"]', form).value.trim().toUpperCase();
         if (!isValidLicensePlate(plate)) return showErr(t('checkins.errorInvalidPlate'));
@@ -1157,6 +1163,7 @@ function openCheckActionConfirm({ booking, action, locale, over = null, overstay
         ${row(t('checkins.detailPickup'), escapeHtml(fmtDateTime(pickup, locale)))}
         ${row(t('checkins.colPayment'), paymentStatusBadge(booking))}
         ${booking.spotId ? row(t('checkins.detailSpot'), escapeHtml(booking.spotId)) : ''}
+        ${booking.notes ? row(t('checkins.editNotes'), escapeHtml(booking.notes)) : ''}
       </div>
       ${warn}${settledNote}
       <div class="flex gap-3 justify-end pt-1">
