@@ -180,6 +180,9 @@ export default {
   gallery: {
     label: 'Our Facility',
     title: 'See where you park.',
+    prev: 'Previous',
+    next: 'Next',
+    close: 'Close',
   },
 
   // CTA

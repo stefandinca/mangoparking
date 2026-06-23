@@ -32,30 +32,75 @@ const FALLBACK_GALLERY = [
   { url: '/images/bus-3.jpg', caption: 'Airport shuttle' },
 ];
 
-function galleryImageCards(images) {
-  return images.map((img) => `
-    <button type="button" data-gallery-item data-full="${escapeHtml(img.url)}" data-caption="${escapeHtml(img.caption || '')}"
-      class="snap-start shrink-0 w-[78%] sm:w-[46%] md:w-[31%] lg:w-[23.5%] rounded-2xl overflow-hidden h-64 md:h-80 cursor-pointer group bg-frost-deep block">
+// One page of gallery cards. `startIndex` makes each card's data-index its
+// absolute position in the full list, so the lightbox can navigate across pages.
+function galleryImageCards(images, startIndex = 0) {
+  return images.map((img, i) => `
+    <button type="button" data-gallery-item data-index="${startIndex + i}"
+      class="rounded-2xl overflow-hidden h-44 sm:h-56 md:h-64 cursor-pointer group bg-frost-deep block">
       <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.caption || 'ManGO Parking')}" class="img-cover group-hover:scale-105 transition-transform duration-700" loading="lazy">
     </button>
   `).join('');
 }
 
-// Minimal fullscreen lightbox — click anywhere or press Esc to close.
-function openGalleryLightbox(url, caption) {
+// Page prev/next controls (rendered only when there's more than one page).
+function galleryPagerHtml(current, pages) {
+  const arrow = (key, d, disabled) => `
+    <button type="button" data-gallery-${key} ${disabled ? 'disabled' : ''} aria-label="${escapeHtml(t('gallery.' + key))}"
+      class="w-10 h-10 rounded-full bg-frost hover:bg-frost-deep text-charcoal flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${d}"/></svg>
+    </button>`;
+  return `
+    ${arrow('prev', 'M15.75 19.5L8.25 12l7.5-7.5', current === 0)}
+    <span class="text-[14px] text-dim font-mono">${current + 1} / ${pages}</span>
+    ${arrow('next', 'M8.25 4.5l7.5 7.5-7.5 7.5', current === pages - 1)}
+  `;
+}
+
+// Fullscreen lightbox over the full image list with ‹ › navigation (and
+// ArrowLeft/Right + Esc). Click the dark backdrop or the × to close.
+function openGalleryLightbox(images, startIndex) {
+  if (!images?.length) return;
+  let idx = Math.max(0, Math.min(startIndex || 0, images.length - 1));
+  const single = images.length <= 1;
   const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4 sm:p-8 bg-charcoal/90 cursor-zoom-out';
+  overlay.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4 sm:p-12 bg-charcoal/90';
+  const navBtn = (key, d) => `
+    <button type="button" data-lb-${key} aria-label="${escapeHtml(t('gallery.' + key))}"
+      class="${single ? 'hidden ' : ''}absolute ${key === 'prev' ? 'left-3 sm:left-6' : 'right-3 sm:right-6'} top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors z-10">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${d}"/></svg>
+    </button>`;
   overlay.innerHTML = `
-    <img src="${escapeHtml(url)}" alt="${escapeHtml(caption || '')}" class="max-w-full max-h-[88vh] rounded-2xl shadow-2xl">
-    ${caption ? `<p class="absolute bottom-5 left-0 right-0 text-center text-white/90 text-[14px] px-6">${escapeHtml(caption)}</p>` : ''}
-    <button type="button" class="absolute top-5 right-5 text-white/80 hover:text-white" aria-label="Close">
+    <button type="button" data-lb-close aria-label="${escapeHtml(t('gallery.close'))}" class="absolute top-5 right-5 text-white/80 hover:text-white z-10">
       <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
+    ${navBtn('prev', 'M15.75 19.5L8.25 12l7.5-7.5')}
+    <img data-lb-img src="" alt="" class="max-w-full max-h-[85vh] rounded-2xl shadow-2xl select-none">
+    ${navBtn('next', 'M8.25 4.5l7.5 7.5-7.5 7.5')}
+    <p data-lb-caption class="absolute bottom-5 left-0 right-0 text-center text-white/90 text-[14px] px-6"></p>
   `;
+  const imgEl = overlay.querySelector('[data-lb-img]');
+  const capEl = overlay.querySelector('[data-lb-caption]');
+  function show() {
+    const im = images[idx];
+    imgEl.src = im.url;
+    imgEl.alt = im.caption || '';
+    capEl.textContent = im.caption || '';
+    capEl.classList.toggle('hidden', !im.caption);
+  }
+  function go(delta) { idx = (idx + delta + images.length) % images.length; show(); }
   const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  overlay.addEventListener('click', close);
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') go(-1);
+    else if (e.key === 'ArrowRight') go(1);
+  };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector('[data-lb-close]').addEventListener('click', close);
+  overlay.querySelector('[data-lb-prev]')?.addEventListener('click', (e) => { e.stopPropagation(); go(-1); });
+  overlay.querySelector('[data-lb-next]')?.addEventListener('click', (e) => { e.stopPropagation(); go(1); });
   document.addEventListener('keydown', onKey);
+  show();
   document.body.appendChild(overlay);
 }
 
@@ -377,8 +422,9 @@ export default function Home(container) {
         <p class="text-[12px] font-mono uppercase text-mango-deep tracking-[0.2em] mb-3 text-center">${t('gallery.label')}</p>
         <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-[-0.02em] text-blueberry-deep text-center">${t('gallery.title')}</h2>
       </div>
-      <div data-gallery class="flex gap-4 px-6 max-w-7xl mx-auto overflow-x-auto snap-x snap-mandatory pb-2">
-        ${galleryImageCards(FALLBACK_GALLERY)}
+      <div class="max-w-7xl mx-auto px-6">
+        <div data-gallery class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
+        <div data-gallery-pagination class="flex items-center justify-center gap-4 mt-8"></div>
       </div>
     </section>
 
@@ -560,14 +606,31 @@ export default function Home(container) {
     if (real?.length) renderReviews(real);
   }).catch(() => {});
 
-  // Facility gallery — load admin-managed images from Firestore; keep the
-  // built-in photos until the collection has entries. Click opens a lightbox.
+  // Facility gallery — admin-managed images (built-in photos until the
+  // collection has entries), paginated 6 per page. Clicking opens a lightbox
+  // that navigates the full set with ‹ › / arrow keys.
+  const GALLERY_PAGE_SIZE = 6;
   const galleryEl = page.querySelector('[data-gallery]');
+  const galleryPager = page.querySelector('[data-gallery-pagination]');
+  let galleryAll = FALLBACK_GALLERY;
+  let galleryPage = 0;
+
+  function renderGalleryPage() {
+    const pages = Math.max(1, Math.ceil(galleryAll.length / GALLERY_PAGE_SIZE));
+    if (galleryPage > pages - 1) galleryPage = pages - 1;
+    const start = galleryPage * GALLERY_PAGE_SIZE;
+    galleryEl.innerHTML = galleryImageCards(galleryAll.slice(start, start + GALLERY_PAGE_SIZE), start);
+    galleryPager.innerHTML = pages > 1 ? galleryPagerHtml(galleryPage, pages) : '';
+  }
+  renderGalleryPage();
   getGalleryImages().then((imgs) => {
-    if (imgs?.length && galleryEl) galleryEl.innerHTML = galleryImageCards(imgs);
+    if (imgs?.length) { galleryAll = imgs; galleryPage = 0; renderGalleryPage(); }
   }).catch(() => {});
+
+  delegate(page, 'click', '[data-gallery-prev]', () => { if (galleryPage > 0) { galleryPage--; renderGalleryPage(); } });
+  delegate(page, 'click', '[data-gallery-next]', () => { galleryPage++; renderGalleryPage(); });
   delegate(page, 'click', '[data-gallery-item]', (_e, btn) => {
-    openGalleryLightbox(btn.dataset.full, btn.dataset.caption);
+    openGalleryLightbox(galleryAll, Number(btn.dataset.index) || 0);
   });
 
   // Real-time capacity subscription

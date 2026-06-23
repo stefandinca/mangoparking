@@ -180,6 +180,9 @@ export default {
   gallery: {
     label: 'Facilitatea Noastră',
     title: 'Vezi unde parchezi.',
+    prev: 'Anterior',
+    next: 'Următor',
+    close: 'Închide',
   },
 
   // CTA
