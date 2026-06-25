@@ -33,6 +33,7 @@ function valueLabel(v) {
   if (v.type === 'fixed') return `-${v.value} ${t('common.lei')}`;
   if (v.type === 'percent') return `-${v.value}%`;
   if (v.type === 'days') return t('voucher.valueDays', { value: v.value });
+  if (v.type === 'credits') return `+${v.value} ${t('credit.plural')}`;
   return '—';
 }
 
@@ -223,6 +224,7 @@ export default async function AdminVouchers(container) {
             <option value="percent" ${init.type === 'percent' ? 'selected' : ''}>${t('vouchers.typePercent')}</option>
             <option value="fixed" ${init.type === 'fixed' ? 'selected' : ''}>${t('vouchers.typeFixed')}</option>
             <option value="days" ${init.type === 'days' ? 'selected' : ''}>${t('vouchers.typeDays')}</option>
+            <option value="credits" ${init.type === 'credits' ? 'selected' : ''}>${t('vouchers.typeCredits')}</option>
           </select>
         </div>
         <div>
@@ -232,6 +234,7 @@ export default async function AdminVouchers(container) {
       </div>
 
       <p data-days-hint class="text-[12px] text-dim -mt-2 ${init.type === 'days' ? '' : 'hidden'}">${t('vouchers.daysHint')}</p>
+      <p data-credits-hint class="text-[12px] text-dim -mt-2 ${init.type === 'credits' ? '' : 'hidden'}">${t('vouchers.creditsHint')}</p>
 
       <div class="grid sm:grid-cols-2 gap-3">
         <div>
@@ -295,9 +298,11 @@ export default async function AdminVouchers(container) {
       });
     });
 
-    // Days-type explainer (long-term only, splittable across bookings).
+    // Per-type explainers: days (long-term only, splittable) and credits
+    // (gift card — free credits granted on redemption).
     form.type.addEventListener('change', () => {
       form.querySelector('[data-days-hint]').classList.toggle('hidden', form.type.value !== 'days');
+      form.querySelector('[data-credits-hint]').classList.toggle('hidden', form.type.value !== 'credits');
     });
 
     // Live filter over the uid checkbox list.
@@ -332,6 +337,7 @@ export default async function AdminVouchers(container) {
       if (!Number.isFinite(value) || value <= 0) { showToast(t('vouchers.errorValue'), 'error'); return; }
       if (type === 'percent' && value > 100) { showToast(t('vouchers.errorPercent'), 'error'); return; }
       if (type === 'days' && !Number.isInteger(value)) { showToast(t('vouchers.errorDays'), 'error'); return; }
+      if (type === 'credits' && !Number.isInteger(value)) { showToast(t('vouchers.errorCredits'), 'error'); return; }
       const startDate = form.startDate.value;
       const endDate = form.endDate.value;
       if (!startDate || !endDate) { showToast(t('vouchers.errorDates'), 'error'); return; }

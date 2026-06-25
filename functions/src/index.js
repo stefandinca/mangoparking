@@ -129,7 +129,10 @@ async function creditTokens({ packId, quantity, amount = 0, customerData, source
     const snap = await tx.get(ref);
     if (snap.exists) {
       const data = snap.data();
-      const plates = data.plates?.includes(plate) ? data.plates : [...(data.plates || []), plate];
+      // Skip empty plates — an account-only grant (e.g. a gift to a uid with
+      // no saved vehicle) has none, and we don't want '' in the array.
+      const existingPlates = data.plates || [];
+      const plates = (plate && !existingPlates.includes(plate)) ? [...existingPlates, plate] : existingPlates;
       // Patch contact details on the existing doc if they were missing —
       // a guest plate doc may have been created without an email, and
       // later signed up: we want resolveRecipient to find them.
@@ -146,7 +149,7 @@ async function creditTokens({ packId, quantity, amount = 0, customerData, source
       tx.set(ref, {
         balance: quantity,
         totalPurchased: quantity,
-        plates: [plate],
+        plates: plate ? [plate] : [],
         email: customerData.email || '',
         displayName: customerData.name || '',
         phone: customerData.phone || '',
@@ -1955,6 +1958,176 @@ export const validateVoucherCode = onCall(
   }
 );
 
+// ── redeemCreditVoucher (callable) ──────────────────────────────────────
+// Standalone redemption of a `credits`-type promo voucher (a "gift card").
+// Unlike fixed/percent/days vouchers — which discount a purchase at
+// createPayment time — a credits voucher grants N free parking credits
+// straight to the holder's balance, with no purchase involved. One
+// redemption per identity (uid for logged-in customers, normalized plate
+// for guests), enforced with a deterministic voucherRedemptions doc read +
+// written inside the grant transaction so concurrent calls can't double-spend.
+// Open to guests (public vouchers); private vouchers require the assigned uid.
+// Returns { ok: true, credits, balance, balanceDocId } or { ok: false, error }.
+export const redeemCreditVoucher = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const authedUid = request.auth?.uid || null;
+    const normCode = String(request.data?.code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!normCode) return { ok: false, error: 'invalid-code' };
+
+    const db = getFirestore();
+    const voucherRef = db.collection('promoVouchers').doc(normCode);
+    const snap = await voucherRef.get();
+    if (!snap.exists) return { ok: false, error: 'not-found' };
+    const v = snap.data();
+    if (!v.active) return { ok: false, error: 'inactive' };
+    if (v.type !== 'credits') return { ok: false, error: 'not-credits-type' };
+
+    // Validity window — compare on Bucharest-local date-only strings.
+    const today = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    const startDay = v.startDate ? String(v.startDate).slice(0, 10) : null;
+    const endDay = v.endDate ? String(v.endDate).slice(0, 10) : null;
+    if (startDay && today < startDay) return { ok: false, error: 'not-yet-active' };
+    if (endDay && today > endDay) return { ok: false, error: 'expired' };
+
+    if (v.visibility === 'private') {
+      if (!authedUid) return { ok: false, error: 'must-be-logged-in' };
+      if (!Array.isArray(v.assignedUserIds) || !v.assignedUserIds.includes(authedUid)) {
+        return { ok: false, error: 'not-assigned' };
+      }
+    }
+
+    const credits = Number(v.value);
+    if (!Number.isInteger(credits) || credits <= 0) return { ok: false, error: 'bad-value' };
+
+    // Identity + balance target. Logged-in: credits land on the uid-keyed
+    // balance; the plate (from the request, or the user's first saved vehicle)
+    // is only tracked on the balance + transaction. Guest: keyed by the plate,
+    // which is therefore required.
+    let normPlate = String(request.data?.plate || '').toUpperCase().replace(/[\s-]/g, '');
+    let customerId = null;
+    let identityKey = null;
+    let contact = { email: '', name: '', phone: '' };
+    if (authedUid) {
+      customerId = authedUid;
+      identityKey = `uid:${authedUid}`;
+      const uSnap = await db.collection('users').doc(authedUid).get();
+      if (uSnap.exists) {
+        const u = uSnap.data();
+        contact = { email: u.email || '', name: u.displayName || '', phone: u.phone || '' };
+        if (!normPlate && Array.isArray(u.vehicles) && u.vehicles[0]?.plate) {
+          normPlate = String(u.vehicles[0].plate).toUpperCase().replace(/[\s-]/g, '');
+        }
+      }
+    } else {
+      if (!normPlate) return { ok: false, error: 'no-plate' };
+      identityKey = `plate:${normPlate}`;
+    }
+
+    const balanceDocId = customerId || `plate_${normPlate}`;
+    const balanceRef = db.collection('tokenBalances').doc(balanceDocId);
+    const redemptionRef = db.collection('voucherRedemptions').doc(`${normCode}_${identityKey}`);
+
+    let newBalance = credits;
+    try {
+      await db.runTransaction(async (tx) => {
+        // Reads first (Firestore requires all reads before writes).
+        const vSnap = await tx.get(voucherRef);
+        if (!vSnap.exists) throw new HttpsError('not-found', 'voucher disappeared');
+        const vData = vSnap.data();
+        const redSnap = await tx.get(redemptionRef);
+        if (redSnap.exists) throw new HttpsError('already-exists', 'already-used');
+        const cap = Number(vData.maxRedemptionsTotal);
+        if (Number.isFinite(cap) && cap > 0 && Number(vData.redeemedCount || 0) >= cap) {
+          throw new HttpsError('already-exists', 'sold-out');
+        }
+        const balSnap = await tx.get(balanceRef);
+
+        // Writes — grant credits, stamp the one-shot redemption, bump the count.
+        if (balSnap.exists) {
+          const data = balSnap.data();
+          const existingPlates = data.plates || [];
+          const plates = (normPlate && !existingPlates.includes(normPlate))
+            ? [...existingPlates, normPlate] : existingPlates;
+          const patch = {
+            balance: FieldValue.increment(credits),
+            totalPurchased: FieldValue.increment(credits),
+            plates,
+          };
+          if (!data.email && contact.email) patch.email = contact.email;
+          if (!data.displayName && contact.name) patch.displayName = contact.name;
+          if (!data.phone && contact.phone) patch.phone = contact.phone;
+          tx.update(balanceRef, patch);
+          newBalance = Number(data.balance || 0) + credits;
+        } else {
+          tx.set(balanceRef, {
+            balance: credits,
+            totalPurchased: credits,
+            plates: normPlate ? [normPlate] : [],
+            email: contact.email,
+            displayName: contact.name,
+            phone: contact.phone,
+          });
+          newBalance = credits;
+        }
+
+        tx.set(redemptionRef, {
+          voucherCode: normCode,
+          identityKey,
+          userId: customerId,
+          plate: normPlate || null,
+          orderId: null,
+          bookingId: null,
+          amount: 0,
+          type: 'credits',
+          value: credits,
+          creditsGranted: credits,
+          daysUsed: null,
+          redeemedAt: new Date().toISOString(),
+        });
+        tx.update(voucherRef, { redeemedCount: (Number(vData.redeemedCount) || 0) + 1 });
+
+        // Append-only ledger row — also fires the credit confirmation email
+        // (E3) and the admin notification via the tokenTransactions trigger.
+        const txnRef = db.collection('tokenTransactions').doc();
+        tx.set(txnRef, {
+          customerId,
+          licensePlate: normPlate,
+          type: 'purchase',
+          quantity: credits,
+          amount: 0,
+          packId: null,
+          timestamp: new Date().toISOString(),
+          source: 'gift-voucher',
+          paidBy: 'voucher',
+          grantedBy: null,
+          voucherCode: normCode,
+          billing: { type: 'PF' },
+        });
+      });
+    } catch (err) {
+      const msg = String(err?.message || '');
+      if (msg.includes('already-used')) return { ok: false, error: 'already-used' };
+      if (msg.includes('sold-out')) return { ok: false, error: 'sold-out' };
+      console.error('redeemCreditVoucher failed:', err?.message);
+      return { ok: false, error: 'redeem-failed' };
+    }
+
+    await db.collection('auditLog').add({
+      action: 'credit_voucher_redeemed',
+      entityType: 'tokenBalance',
+      entityId: balanceDocId,
+      actorUid: authedUid,
+      payload: { code: normCode, credits, plate: normPlate || null, identityKey },
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
+
+    return { ok: true, credits, balance: newBalance, balanceDocId };
+  }
+);
+
 // ── adminResendRefundEmail (callable) ───────────────────────────────────
 // Manual re-trigger of the customer-facing refund email. Used when the
 // automatic send from adminMarkRefunded failed (Brevo outage, template
@@ -2371,6 +2544,59 @@ export const grantCreditsForCash = onCall(
     }
 
     return { ok: true, balanceDocId: docId, checkedIn };
+  }
+);
+
+// ── adminGrantCredits (callable) ────────────────────────────────────────
+// Admin/agent grants free parking credits straight to a registered user's
+// balance — no voucher, no cash, no payment. Distinct from grantCreditsForCash
+// (which records a cash/card sale + a cashbook entry). Used from the user-detail
+// modal to gift / compensate a commuter. The plate is derived from the user's
+// first saved vehicle (best-effort, purely informational on the balance).
+export const adminGrantCredits = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertAgent(request);
+    const { customerId, quantity, note } = request.data || {};
+    if (!customerId) throw new HttpsError('invalid-argument', 'Missing customerId');
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw new HttpsError('invalid-argument', 'quantity must be a positive integer');
+    }
+
+    const db = getFirestore();
+    const uSnap = await db.collection('users').doc(customerId).get();
+    if (!uSnap.exists) throw new HttpsError('not-found', 'User not found');
+    const u = uSnap.data();
+    const firstPlate = Array.isArray(u.vehicles) && u.vehicles[0]?.plate ? u.vehicles[0].plate : '';
+
+    const docId = await creditTokens({
+      packId: null,
+      quantity: qty,
+      amount: 0,
+      customerData: {
+        customerId,
+        licensePlate: firstPlate,
+        email: u.email || '',
+        name: u.displayName || '',
+        phone: u.phone || '',
+      },
+      source: 'admin-gift',
+      paidBy: 'gift',
+      grantedBy: uid,
+    });
+
+    await db.collection('auditLog').add({
+      action: 'admin_credits_gifted',
+      entityType: 'tokenBalance',
+      entityId: docId,
+      actorUid: uid,
+      payload: { customerId, quantity: qty, note: note ? String(note).slice(0, 200) : null },
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
+
+    const balSnap = await db.collection('tokenBalances').doc(docId).get();
+    return { ok: true, balanceDocId: docId, balance: balSnap.exists ? Number(balSnap.data().balance || 0) : qty };
   }
 );
 

@@ -26,6 +26,7 @@ function valueHeadline(v) {
   if (v.type === 'fixed') return t('voucher.valueFixed', { value: v.value });
   if (v.type === 'percent') return t('voucher.valuePercent', { value: v.value });
   if (v.type === 'days') return t('voucher.valueDays', { value: v.value });
+  if (v.type === 'credits') return t('voucher.valueCredits', { value: v.value });
   return '—';
 }
 

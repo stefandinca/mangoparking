@@ -158,6 +158,11 @@ export async function resolveVoucher({ code, plate, baseAmount, authedUid, order
 
   if (!v.active) return { ok: false, error: 'inactive' };
 
+  // Credits gift vouchers aren't a purchase discount — they grant free
+  // parking credits via the standalone redeemCreditVoucher flow. Refuse them
+  // here so the checkout discount box points the customer at the redeem box.
+  if (v.type === 'credits') return { ok: false, error: 'gift-only' };
+
   const today = bucharestDay(new Date().toISOString());
   // Compare on date-only strings — tolerate any accidental time component on
   // the stored value so a "2026-06-11T00:00:00" can't read as after today.

@@ -26,6 +26,7 @@ import { billingFieldsHtml, wireBillingToggle, readBilling } from '../widgets/Bi
 import { isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
 
 const adminUpdateUserProfileFn = httpsCallable(functions, 'adminUpdateUserProfile');
+const adminGrantCreditsFn = httpsCallable(functions, 'adminGrantCredits');
 
 function fmtDateTime(iso) {
   if (!iso) return '—';
@@ -150,9 +151,12 @@ function billingHtml(u) {
   return sectionCard(d.billing, null, lines.join('') || emptyLine());
 }
 
-function balanceHtml(balance) {
+function balanceHtml(balance, canGrant = false) {
   const d = t('admin.usersDetail');
-  if (!balance) return sectionCard(d.balance, null, emptyLine());
+  const grantBtn = canGrant
+    ? `<button type="button" data-grant-credits class="mt-3 w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[13px] py-2 rounded-lg transition-colors">${escapeHtml(d.grantCredits)}</button>`
+    : '';
+  if (!balance) return sectionCard(d.balance, null, `${emptyLine()}${grantBtn}`);
   const plates = Array.isArray(balance.plates) && balance.plates.length
     ? balance.plates.map((p) => `<span class="font-mono">${escapeHtml(p)}</span>`).join(', ')
     : '—';
@@ -160,7 +164,74 @@ function balanceHtml(balance) {
     ${row(d.balanceLabel, `<span class="font-bold text-blueberry-deep">${Number(balance.balance || 0)}</span>`)}
     ${row(d.totalPurchased, escapeHtml(String(balance.totalPurchased ?? 0)))}
     ${row(d.plates, plates)}
+    ${grantBtn}
   `);
+}
+
+// Wire the "Grant credits" action inside the balance card. Delegated on the
+// (persistent) balance slot so it survives the card ↔ form swaps. Grants free
+// credits to the account via the adminGrantCredits callable — no cash/voucher.
+function wireGrantCredits(body, user, initialBalance) {
+  const slot = qs('[data-balance-slot]', body);
+  if (!slot) return;
+  const d = t('admin.usersDetail');
+  let balance = initialBalance;
+
+  slot.addEventListener('click', (e) => {
+    if (e.target.closest('[data-grant-credits]')) openForm();
+    else if (e.target.closest('[data-grant-cancel]')) slot.innerHTML = balanceHtml(balance, true);
+  });
+
+  function openForm() {
+    slot.innerHTML = sectionCard(d.balance, null, `
+      <form data-grant-form class="space-y-3">
+        <div>
+          <label class="block text-[13px] text-dim mb-1">${escapeHtml(d.grantQuantity)}</label>
+          <input name="qty" type="number" min="1" step="1" value="1" class="w-full px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-leaf">
+        </div>
+        <div>
+          <label class="block text-[13px] text-dim mb-1">${escapeHtml(d.grantNote)}</label>
+          <input name="note" type="text" placeholder="${escapeHtml(d.grantNotePlaceholder)}" class="w-full px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-leaf">
+        </div>
+        <p data-grant-err class="hidden text-[13px] text-red-500"></p>
+        <div class="flex gap-2 justify-end">
+          <button type="button" data-grant-cancel class="px-3 py-2 rounded-lg bg-frost text-charcoal/70 font-semibold text-[13px] hover:bg-frost-deep transition-colors">${escapeHtml(d.grantCancel)}</button>
+          <button type="submit" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[13px] px-4 py-2 rounded-lg transition-colors">${escapeHtml(d.grantConfirm)}</button>
+        </div>
+      </form>
+    `);
+    const form = qs('[data-grant-form]', slot);
+    const errEl = qs('[data-grant-err]', slot);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.classList.add('hidden');
+      const qty = Number(qs('[name="qty"]', slot).value);
+      const note = qs('[name="note"]', slot).value.trim();
+      if (!Number.isInteger(qty) || qty <= 0) {
+        errEl.textContent = d.grantErrorQty; errEl.classList.remove('hidden'); return;
+      }
+      const submitBtn = qs('[data-grant-form] button[type="submit"]', slot);
+      submitBtn.disabled = true;
+      submitBtn.textContent = t('common.loading');
+      try {
+        const res = await adminGrantCreditsFn({ customerId: user.id, quantity: qty, note });
+        const newBal = res?.data?.balance;
+        balance = {
+          ...(balance || { plates: [], totalPurchased: 0 }),
+          balance: newBal != null ? newBal : (Number(balance?.balance || 0) + qty),
+          totalPurchased: Number(balance?.totalPurchased || 0) + qty,
+        };
+        slot.innerHTML = balanceHtml(balance, true);
+        showToast(t('admin.usersDetail.grantSuccess', { n: qty }), 'success');
+      } catch (err) {
+        console.error('adminGrantCredits', err);
+        errEl.textContent = err?.message || t('common.error');
+        errEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = d.grantConfirm;
+      }
+    });
+  }
 }
 
 function vouchersHtml(promos, redemptionsByCode, legacy) {
@@ -168,7 +239,10 @@ function vouchersHtml(promos, redemptionsByCode, legacy) {
   const cards = [];
   for (const v of promos) {
     const used = redemptionsByCode.has(v.code);
-    const val = v.type === 'percent' ? `${v.value}%` : v.type === 'days' ? `${v.value} ${d.daysUnit}` : fmtMoney(v.value);
+    const val = v.type === 'percent' ? `${v.value}%`
+      : v.type === 'days' ? `${v.value} ${d.daysUnit}`
+      : v.type === 'credits' ? `+${v.value} ${d.creditsUnit}`
+      : fmtMoney(v.value);
     cards.push(`
       <li class="flex items-center justify-between gap-3 py-1.5 border-b border-frost-deep/60 last:border-0">
         <span class="min-w-0">
@@ -472,7 +546,10 @@ async function loadAndRender(user, body) {
   const redemptionsByCode = new Map();
   for (const r of redemptions) if (r.voucherCode) redemptionsByCode.set(r.voucherCode, r);
 
-  qs('[data-balance-slot]', body).innerHTML = balanceHtml(balance);
+  // Granting free credits is an agent/admin action and needs a real account.
+  const canGrant = ['admin', 'agent', 'staff'].includes(getUserProfile()?.role) && !!uid;
+  qs('[data-balance-slot]', body).innerHTML = balanceHtml(balance, canGrant);
+  if (canGrant) wireGrantCredits(body, user, balance);
   qs('[data-vouchers-slot]', body).innerHTML = vouchersHtml(promos, redemptionsByCode, legacy);
   qs('[data-bookings-slot]', body).innerHTML = bookingsHtml(bookings);
   qs('[data-transactions-slot]', body).innerHTML = transactionsHtml(txns);

@@ -52,6 +52,7 @@ const COLLECTION = 'promoVouchers';
 const CODE_PATTERN = /^[A-Z0-9]{3,24}$/;
 
 const validateVoucherCodeFn = httpsCallable(functions, 'validateVoucherCode');
+const redeemCreditVoucherFn = httpsCallable(functions, 'redeemCreditVoucher');
 
 export function normalizeCode(raw) {
   return String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -123,5 +124,15 @@ export async function previewVoucher({ code, plate, baseAmount, orderType, days,
     days,
     perDay,
   });
+  return res?.data || { ok: false, error: 'no-response' };
+}
+
+// Standalone redemption of a `credits`-type gift voucher. Grants the
+// voucher's free credits straight to the holder's balance (uid for
+// logged-in customers, normalized plate for guests — server-resolved).
+// Returns { ok, credits, balance, balanceDocId } or { ok: false, error }.
+export async function redeemCreditVoucher({ code, plate }) {
+  if (!code) return { ok: false, error: 'invalid-code' };
+  const res = await redeemCreditVoucherFn({ code: normalizeCode(code), plate: plate || null });
   return res?.data || { ok: false, error: 'no-response' };
 }

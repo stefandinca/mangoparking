@@ -7,6 +7,7 @@ import { getCurrentUser } from '../../firebase/auth.js';
 import { getCollection, getDocument, where } from '../../firebase/db.js';
 import { accountLayout, initAccountNav } from '../../components/account/AccountLayout.js';
 import { showToast } from '../../components/core/Toast.js';
+import { giftCodeRedeemCard } from '../../components/widgets/GiftCodeRedeem.js';
 
 // /account/vouchers — customer-facing view of vouchers attached to this
 // account. Two sources:
@@ -36,6 +37,7 @@ function valueHeadline(v) {
   if (v.type === 'fixed') return t('voucher.valueFixed', { value: v.value });
   if (v.type === 'percent') return t('voucher.valuePercent', { value: v.value });
   if (v.type === 'days') return t('voucher.valueDays', { value: v.value });
+  if (v.type === 'credits') return t('voucher.valueCredits', { value: v.value });
   return '—';
 }
 
@@ -181,6 +183,8 @@ export default async function AccountVouchers(container) {
       <p class="text-dim text-[15px] mt-1">${t('accountVouchers.subtitle')}</p>
     </div>
 
+    <div data-gift-redeem-slot class="mb-6"></div>
+
     ${promosHtml}
     ${legacyHtml}
     ${emptyHtml}
@@ -199,6 +203,13 @@ export default async function AccountVouchers(container) {
   page.querySelector('[data-navbar]').replaceWith(Navbar());
   page.querySelector('[data-footer]').replaceWith(Footer());
   initAccountNav(page);
+
+  // Gift-code redeem box — logged-in, so the server credits the uid balance
+  // and derives the plate from the profile (no plate input). Reload after a
+  // successful redeem so any assigned gift voucher card flips to "used".
+  page.querySelector('[data-gift-redeem-slot]')?.appendChild(
+    giftCodeRedeemCard({ showPlate: false, onRedeemed: () => window.location.reload() }),
+  );
 
   // Copy-code handler.
   page.addEventListener('click', async (e) => {

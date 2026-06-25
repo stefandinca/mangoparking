@@ -9,6 +9,7 @@ import { getOnlineDiscountPercent, onlineFromStandard } from '../../services/dis
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../components/widgets/BillingFields.js';
 import { getMyVoucher } from '../../services/voucherService.js';
 import { previewVoucher, normalizeCode } from '../../services/promoVoucherService.js';
+import { giftCodeRedeemCard } from '../../components/widgets/GiftCodeRedeem.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { getDocument, updateDocument } from '../../firebase/db.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
@@ -120,6 +121,7 @@ export default async function Booking(container) {
               </div>
             </div>
           `}
+          ${confirmed ? '' : `<div data-gift-redeem-slot class="mb-8"></div>`}
           ${confirmed ? renderConfirmation() : renderForm()}
         </div>
       </section>
@@ -437,6 +439,18 @@ export default async function Booking(container) {
         plate = profileVehicles[idx]?.plate || plate;
       }
       return String(plate || '').trim();
+    }
+
+    // Gift-code redeem box — adds free credits to the balance independently of
+    // the purchase below. Guests need a plate (it keys their balance); logged-in
+    // customers fall back to the plate they've selected/typed, else the server
+    // derives it from their profile.
+    const giftSlot = pageEl.querySelector('[data-gift-redeem-slot]');
+    if (giftSlot) {
+      giftSlot.appendChild(giftCodeRedeemCard({
+        showPlate: !user,
+        getPlate: () => resolveCreditPlate(),
+      }));
     }
 
     // Promo voucher apply / remove — see BookingLongTerm.js for the same
