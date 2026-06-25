@@ -642,18 +642,27 @@ export default async function AdminCheckIns(container) {
     }
     // Preset highlight is "off" whenever activeWindow is a custom range —
     // calendar value carries the active state in that case.
-    const presetActive = Array.isArray(activeWindow) ? null : activeWindow;
-    const rangeValue = Array.isArray(activeWindow)
+    const rangeActive = Array.isArray(activeWindow);
+    const presetActive = rangeActive ? null : activeWindow;
+    const rangeValue = rangeActive
       ? `${activeWindow[0]} to ${activeWindow[1]}`
       : '';
+    // The custom-range control is a flatpickr input styled to read as a
+    // button alongside the preset pills (it used to look like a bare text
+    // field). Active range = mango like a selected pill; idle = white with
+    // a calendar affordance. Shared by the input and flatpickr's altInput.
+    const rangeBtnCls = `pl-9 pr-3 py-1.5 rounded-lg text-[13px] font-semibold cursor-pointer transition-colors min-w-[200px] focus:outline-none ${rangeActive ? 'bg-mango text-charcoal' : 'bg-white text-charcoal/70 hover:bg-frost'}`;
     windowBarEl.innerHTML = `
       <span class="text-[12px] uppercase tracking-wider text-dim font-mono mr-1">${t('checkins.windowLabel')}</span>
       ${windowPill('today', presetActive, t('checkins.windowToday'))}
       ${windowPill('week', presetActive, t('checkins.windowWeek'))}
       ${windowPill('month', presetActive, t('checkins.windowMonth'))}
       <span class="text-[12px] text-dim mx-1">${t('checkins.windowOr')}</span>
-      <input type="text" data-range-picker value="${escapeHtml(rangeValue)}" placeholder="${t('checkins.windowCustom')}"
-        class="px-3 py-1.5 rounded-lg border border-frost-deep bg-white text-[13px] font-mono cursor-pointer hover:bg-frost transition-colors min-w-[180px] focus:outline-none focus:border-blueberry">
+      <span class="relative inline-flex items-center">
+        <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${rangeActive ? 'text-charcoal/70' : 'text-charcoal/40'}" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3.75 9h16.5M5.25 5.25h13.5A1.5 1.5 0 0 1 20.25 6.75v12A1.5 1.5 0 0 1 18.75 20.25H5.25A1.5 1.5 0 0 1 3.75 18.75v-12A1.5 1.5 0 0 1 5.25 5.25z"/></svg>
+        <input type="text" data-range-picker value="${escapeHtml(rangeValue)}" placeholder="${t('checkins.windowCustom')}"
+          class="${rangeBtnCls}">
+      </span>
     `;
     // (Re-)mount flatpickr range picker.
     const rangeInput = windowBarEl.querySelector('[data-range-picker]');
@@ -664,7 +673,7 @@ export default async function AdminCheckIns(container) {
         dateFormat: 'Y-m-d',
         altInput: true,
         altFormat: locale === 'en' ? 'M j, Y' : 'j M Y',
-        altInputClass: 'flatpickr-alt-input px-3 py-1.5 rounded-lg border border-frost-deep bg-white text-[13px] font-mono cursor-pointer hover:bg-frost transition-colors min-w-[180px] focus:outline-none focus:border-blueberry',
+        altInputClass: `flatpickr-alt-input ${rangeBtnCls}`,
         locale: locale === 'ro' ? Romanian : 'default',
         clickOpens: true,
         allowInput: false,
