@@ -1366,6 +1366,7 @@ export default {
     createUserSearch: 'Caută client după nume sau email...',
     createUserNew: 'Client nou (trimite invitație)',
     createUserExisting: 'Client existent',
+    createUserPlatesLabel: 'Numere salvate (apasă pentru a completa)',
     createNewName: 'Nume',
     createNewEmail: 'Email',
     createNewPhone: 'Telefon',

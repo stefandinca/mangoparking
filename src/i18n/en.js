@@ -1365,6 +1365,7 @@ export default {
     createUserSearch: 'Search customer by name or email...',
     createUserNew: 'New customer (send invite)',
     createUserExisting: 'Existing customer',
+    createUserPlatesLabel: 'Saved plates (tap to fill)',
     createNewName: 'Name',
     createNewEmail: 'Email',
     createNewPhone: 'Phone',

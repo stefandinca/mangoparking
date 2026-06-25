@@ -147,6 +147,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
               .map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.displayName || '')}</option>`)
               .join('')}
           </datalist>
+          <!-- Saved plates of the matched customer (click to fill the plate
+               field). Rendered/hidden by refreshUserPlates() once a user is
+               picked from the datalist. -->
+          <div data-user-plates class="mt-2 hidden"></div>
         </div>
 
         <div data-new-block class="hidden grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -488,6 +492,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
   const transferTypeToggle = qs('[data-transfer-type-toggle]', contentEl);
   const userPickerWrap = qs('[data-user-picker]', contentEl);
   const plateWrap = qs('[data-plate-wrap]', contentEl);
+  const userPlatesEl = qs('[data-user-plates]', contentEl);
 
   // State readers — the DOM is the single source of truth.
   const getType = () => qs('input[name="tType"]:checked', contentEl).value;
@@ -585,18 +590,73 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     transferReturn?.classList.toggle('hidden', !roundtrip);
   });
 
+  // ── Matched-customer resolution (existing-user mode) ──
+  // The datalist input is free text; we treat a customer as "selected" only
+  // when the value exactly equals one of their email/name. Returns the full
+  // user record (with vehicles) so callers can read its plates / id.
+  function resolveMatchedUser() {
+    const search = String(qs('[data-user-search]', contentEl).value || '').trim().toLowerCase();
+    if (!search) return null;
+    return users.find(u =>
+      (u.email || '').toLowerCase() === search
+      || (u.displayName || '').toLowerCase() === search
+    ) || null;
+  }
   // ── Live balance lookup (use-existing mode) ──
   // Resolve by matched customer first, then by plate. Shown so the agent
   // sees "(if they have any)" before attempting the check-in.
   function resolveMatchedCustomerId() {
-    const search = String(qs('[data-user-search]', contentEl).value || '').trim().toLowerCase();
-    if (!search) return null;
-    const matched = users.find(u =>
-      (u.email || '').toLowerCase() === search
-      || (u.displayName || '').toLowerCase() === search
-    );
+    const matched = resolveMatchedUser();
     return matched ? matched.id : null;
   }
+
+  // ── Saved-plate chips (existing-user mode) ──
+  // When a customer is matched, list their saved vehicles (users/{uid}.vehicles)
+  // as clickable chips so the agent fills the plate in one tap instead of
+  // re-typing it. Hidden for new-user mode or when the customer has no vehicles.
+  function refreshUserPlates() {
+    if (!userPlatesEl) return;
+    const matched = getMode() === 'existing' ? resolveMatchedUser() : null;
+    const seen = new Set();
+    const plates = [];
+    for (const v of (matched?.vehicles || [])) {
+      const plate = String(v?.plate || '').toUpperCase().trim();
+      if (!plate || seen.has(plate)) continue;
+      seen.add(plate);
+      const label = [v?.make, v?.model].map((s) => String(s || '').trim()).filter(Boolean).join(' ');
+      plates.push({ plate, label });
+    }
+    if (!plates.length) {
+      userPlatesEl.classList.add('hidden');
+      userPlatesEl.innerHTML = '';
+      return;
+    }
+    const current = String(qs('[name="plate"]', contentEl)?.value || '').toUpperCase().trim();
+    userPlatesEl.innerHTML = `
+      <p class="text-[12px] text-dim mb-1.5">${escapeHtml(t('transactions.createUserPlatesLabel'))}</p>
+      <div class="flex flex-wrap gap-1.5">
+        ${plates.map((p) => {
+          const on = p.plate === current;
+          return `<button type="button" data-plate-chip="${escapeHtml(p.plate)}" class="inline-flex items-center px-3 py-1.5 rounded-lg border ${on ? 'border-mango bg-mango/5' : 'border-frost-deep bg-white'} hover:border-mango/60 hover:bg-mango/5 transition-colors">
+            <span class="text-[13px] font-mono uppercase">${escapeHtml(p.plate)}</span>
+            ${p.label ? `<span class="text-dim text-[11px] ml-1.5">${escapeHtml(p.label)}</span>` : ''}
+          </button>`;
+        }).join('')}
+      </div>`;
+    userPlatesEl.classList.remove('hidden');
+  }
+
+  // Clicking a chip fills the plate field and re-runs the downstream side
+  // effects (balance lookup listens on the plate input), then re-highlights.
+  userPlatesEl?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-plate-chip]');
+    if (!chip || !userPlatesEl.contains(chip)) return;
+    const plateInput = qs('[name="plate"]', contentEl);
+    if (!plateInput) return;
+    plateInput.value = chip.dataset.plateChip;
+    plateInput.dispatchEvent(new Event('input', { bubbles: true }));
+    refreshUserPlates();
+  });
 
   let balanceToken = 0;
   async function refreshBalance() {
@@ -638,8 +698,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
   };
   qs('[name="plate"]', contentEl).addEventListener('input', scheduleBalance);
   qs('[data-user-search]', contentEl).addEventListener('input', scheduleBalance);
+  qs('[data-user-search]', contentEl).addEventListener('input', refreshUserPlates);
 
   applyVisibility();
+  refreshUserPlates();
 
   const modeToggle = qs('[data-mode-toggle]', contentEl);
   const existingBlock = qs('[data-existing-block]', contentEl);
@@ -656,6 +718,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       lbl.classList.toggle('bg-blueberry/5', inp.checked);
       lbl.classList.toggle('border-frost-deep', !inp.checked);
     });
+    refreshUserPlates();
   });
 
   qs('[data-cancel]', contentEl).addEventListener('click', close);
