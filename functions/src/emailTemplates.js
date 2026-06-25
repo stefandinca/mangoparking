@@ -45,8 +45,8 @@ const TEMPLATES = {
   // into Brevo and drop the numeric IDs here. Until set, the credit-voucher
   // assignment email falls back to the generic 'voucher-assigned' template
   // (see emails.js onPromoVoucherAssigned).
-  'credit-voucher-assigned-ro':     null,
-  'credit-voucher-assigned-en':     null,
+  'credit-voucher-assigned-ro':     26,
+  'credit-voucher-assigned-en':     25,
 
   // Reminders (scheduled)
   'reminder-checkin-24h-ro':        15,
