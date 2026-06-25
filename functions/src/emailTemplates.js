@@ -41,6 +41,12 @@ const TEMPLATES = {
   // drop the numeric IDs here. Until set, the send skips gracefully.
   'voucher-assigned-ro':            23,
   'voucher-assigned-en':            24,
+  // Credit gift vouchers — paste email-templates/credit-voucher-assigned-*.html
+  // into Brevo and drop the numeric IDs here. Until set, the credit-voucher
+  // assignment email falls back to the generic 'voucher-assigned' template
+  // (see emails.js onPromoVoucherAssigned).
+  'credit-voucher-assigned-ro':     null,
+  'credit-voucher-assigned-en':     null,
 
   // Reminders (scheduled)
   'reminder-checkin-24h-ro':        15,

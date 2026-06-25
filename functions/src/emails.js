@@ -16,6 +16,7 @@
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
+import { templateId } from './emailTemplates.js';
 
 const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
 
@@ -596,6 +597,13 @@ function voucherValueText(type, value, locale) {
       ? `${v} ${v === 1 ? 'day' : 'days'}`
       : `${v} ${v === 1 ? 'zi' : 'zile'}`;
   }
+  if (type === 'credits') {
+    // A gift of free credits — not a discount. Self-contained phrase so the
+    // dedicated template's badge needs no extra word ("reducere"/"off").
+    return locale === 'en'
+      ? `${v} free ${v === 1 ? 'credit' : 'credits'}`
+      : `${v} ${v === 1 ? 'credit gratuit' : 'credite gratuite'}`;
+  }
   return `${v} lei`; // fixed
 }
 
@@ -643,17 +651,29 @@ export const onPromoVoucherAssigned = onDocumentWritten(
       const u = userSnap.data();
       if (!u.email) continue;
       const locale = u.locale === 'en' ? 'en' : 'ro';
-      console.log(`onPromoVoucherAssigned: emailing ${u.email} voucher=${event.params.code}`);
+
+      // A credits gift voucher is a gift of free parking credits, not a
+      // discount — use the dedicated template. Until its Brevo ID is set,
+      // fall back to the generic voucher-assigned template (which still
+      // shows the corrected "N credite gratuite" value text).
+      const isCredit = after.type === 'credits';
+      const templateName = (isCredit && templateId('credit-voucher-assigned', locale) != null)
+        ? 'credit-voucher-assigned'
+        : 'voucher-assigned';
+      console.log(`onPromoVoucherAssigned: emailing ${u.email} voucher=${event.params.code} template=${templateName}`);
       await sendBrevoEmail({
         to: u.email,
         name: u.displayName || '',
-        templateName: 'voucher-assigned',
+        templateName,
         locale,
         params: {
           firstName: firstNameFrom(u.displayName, u.email),
           voucherName: after.name || event.params.code,
           code: event.params.code,
           valueText: voucherValueText(after.type, after.value, locale),
+          // Credit-gift extras (ignored by the generic template).
+          credits: isCredit ? (Number(after.value) || 0) : null,
+          redeemLink: localePathOf('/booking/credits', locale),
           validFrom: fmtDateOnly(after.startDate, locale),
           validTo: fmtDateOnly(after.endDate, locale),
           description: after.description || '',

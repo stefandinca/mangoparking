@@ -73,6 +73,14 @@ Two ways to give a commuter free parking credits:
 - `UserDetailModal.js` — "Grant credits" action in the balance card
   (agent/admin, real account only) + `credits` voucher value label.
 - `Promotions.js` / `account/Vouchers.js` — `credits` value headline.
+- `functions/src/emails.js` — `onPromoVoucherAssigned` (the email sent when
+  a private voucher is assigned) now routes `credits` vouchers to a dedicated
+  **`credit-voucher-assigned`** template with gift copy (free credits, redeem
+  CTA) instead of the discount-framed `voucher-assigned`. `voucherValueText`
+  gains a `credits` branch ("N credite gratuite" / "N free credits"), so even
+  the fallback shows the right unit. New `email-templates/credit-voucher-
+  assigned-{ro,en}.html`; IDs `null` in `emailTemplates.js` until pasted into
+  Brevo, with a graceful fallback to `voucher-assigned` meanwhile.
 
 ## Files touched
 
@@ -85,8 +93,11 @@ Two ways to give a commuter free parking credits:
 this doc.
 
 **Deploy note:** `firebase deploy --only functions` (two new callables +
-the `creditTokens` / `resolveVoucher` tweaks). No rules/index changes, then
-the usual Vercel build on push.
+the `creditTokens` / `resolveVoucher` tweaks + the voucher-assignment email
+routing). No rules/index changes, then the usual Vercel build on push.
+**Brevo:** paste `email-templates/credit-voucher-assigned-{ro,en}.html` into
+Brevo and drop the two numeric IDs into `emailTemplates.js` to switch the
+credit-gift assignment email off the fallback onto its dedicated template.
 
 ## Verification
 
