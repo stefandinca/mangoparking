@@ -418,7 +418,7 @@ async function loadAndRender(user, body) {
   // Static sections render immediately from the user doc.
   const staticHtml = `
     <div class="grid sm:grid-cols-2 gap-4">
-      ${profileHtml(user)}
+      <div data-profile-slot>${profileHtml(user)}</div>
       ${vehiclesHtml(user)}
       ${billingHtml(user)}
       <div data-balance-slot>${sectionCard(t('admin.usersDetail.balance'), null, `<p class="text-[13px] text-dim">${escapeHtml(t('admin.usersDetail.loading'))}</p>`)}</div>
@@ -457,6 +457,17 @@ async function loadAndRender(user, body) {
     const kb = b.createdAt || b.dropoffAt || b.startDate || '';
     return String(kb).localeCompare(String(ka));
   });
+
+  // A guest has no users doc — the phone/name they entered live on their
+  // booking's `contact`, not a profile. Backfill from the newest booking so
+  // the profile card shows them (fixes a blank phone for guest reservations).
+  const fromBooking = bookings.find((b) => b.contact?.phone || b.contact?.name);
+  if (fromBooking) {
+    if (!user.phone && fromBooking.contact.phone) user.phone = fromBooking.contact.phone;
+    if (!user.displayName && fromBooking.contact.name) user.displayName = fromBooking.contact.name;
+    const pslot = qs('[data-profile-slot]', body);
+    if (pslot) pslot.innerHTML = profileHtml(user);
+  }
 
   const redemptionsByCode = new Map();
   for (const r of redemptions) if (r.voucherCode) redemptionsByCode.set(r.voucherCode, r);
