@@ -1671,6 +1671,7 @@ export default {
   openingHours: {
     office: 'Program birou',
     closed: 'Închis',
+    weekend: 'Weekend',
     mon: 'Luni',
     tue: 'Marți',
     wed: 'Miercuri',

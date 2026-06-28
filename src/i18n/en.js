@@ -1655,6 +1655,7 @@ export default {
   openingHours: {
     office: 'Office hours',
     closed: 'Closed',
+    weekend: 'Weekends',
     mon: 'Monday',
     tue: 'Tuesday',
     wed: 'Wednesday',
