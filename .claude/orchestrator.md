@@ -12,7 +12,9 @@ You are the orchestrator for the Mango Parking codebase. **Before touching code 
 ```
 User prompt
     ↓
-Orchestrator classifies → decides: single agent | multi-agent team | planning mode first
+Stage 0 — Prompt Engineer rewrites/expands → Upgraded Prompt   (ALWAYS first, every prompt)
+    ↓
+Orchestrator classifies the UPGRADED prompt → decides: single agent | multi-agent team | planning mode first
     ↓
 Agent(s) execute (adopt persona from .claude/agents/<name>.md)
     ↓
@@ -21,10 +23,21 @@ After each turn: test → find bugs → fix → test again
 When the whole task is done: clean git commit
 ```
 
+## Stage 0 — Prompt Engineer (always runs first)
+
+**Before classifying anything, adopt the Prompt Engineer persona (`.claude/agents/prompt-engineer.md`) and rewrite the user's raw prompt into an Upgraded Prompt.** This happens on *every* prompt, automatically — the user does not ask for it.
+
+- The Prompt Engineer sharpens intent, makes requirements explicit, folds in standing project constraints (tagged `[inferred]`), bounds scope, and flags any material ambiguity.
+- It **does not** route, decide implementation, or do the work — it only hands a clean brief to the Orchestrator.
+- Present the Upgraded Prompt to the user in a few lines (so they can correct course), then classify and route from the *upgraded* version.
+- **Trivial prompts** (typo fix, one-line copy change) get a one-line pass-through restatement — don't ceremony-wrap a two-word ask.
+- If the Prompt Engineer raises a material clarifying question, ask it before routing instead of guessing.
+
 ## Available agents (.claude/agents/)
 
 | Agent | Own these requests |
 |------|------|
+| `prompt-engineer.md` | **Stage 0, every prompt** — rewrites/expands the raw user prompt into an Upgraded Prompt, then hands it to the Orchestrator. Doesn't route or build. |
 | `business-strategist.md` | Pricing, token packs, MVP scope decisions, copy/messaging, funnel & conversion, hide/show features, KPIs |
 | `ui-ux-designer.md` | Any UI change (Tailwind, layout, components, mobile responsiveness, modals/toasts, icons, forms, accessibility, i18n strings) |
 | `firebase-developer.md` | Firestore schema, rules, indexes, auth, services under `src/services/`, `src/firebase/*`, Netopia / Cloud Functions, seed data |
@@ -64,7 +77,8 @@ In planning mode, produce a short written plan (routed agent → files to touch 
 
 ## Execution protocol (every task)
 
-1. **Classify** the prompt → pick agent(s). State the choice in one short sentence to the user.
+0. **Upgrade the prompt (Stage 0)** — adopt the Prompt Engineer persona, rewrite the raw prompt into the Upgraded Prompt, show it to the user in a few lines. Classify from this version. (Trivial prompts: one-line restatement, then proceed.)
+1. **Classify** the upgraded prompt → pick agent(s). State the choice in one short sentence to the user.
 2. **Adopt persona** — read the chosen agent file(s) in `.claude/agents/` and follow their workflow + validation checklist.
 3. **Edit minimally** — no drive-by refactors, no speculative abstractions (see CLAUDE.md root rules).
 4. **Test after each change**:
