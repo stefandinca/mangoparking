@@ -1301,6 +1301,8 @@ export default {
     confirmMessage: 'Am trimis detaliile pe email. Ne vedem la sosire.',
     invalidDates: 'Alege o perioadă validă (data plecare după data sosire).',
     minDuration: 'Rezervarea minimă este de 1 oră.',
+    afterHoursTitle: 'Rezervare last-minute',
+    afterHoursBody: 'Pentru a ne asigura că avem locuri, rezervările last-minute în afara programului de lucru se fac telefonic. Te rugăm să ne suni:',
     tierNote: 'Tarif automat, cu discount pentru șederi mai lungi.',
     tiersInfoNote: 'Informativ — tariful se aplică automat în funcție de durata aleasă.',
     yourRate: 'Tariful tău',

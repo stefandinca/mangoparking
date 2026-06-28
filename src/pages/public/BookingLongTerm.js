@@ -11,6 +11,9 @@ import { billingFieldsHtml, wireBillingToggle, readBilling } from '../../compone
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getMyVoucher } from '../../services/voucherService.js';
 import { previewVoucher, normalizeCode } from '../../services/promoVoucherService.js';
+import { getOpeningHours, isOutsideOpeningHoursNow } from '../../services/openingHoursService.js';
+import { openModal } from '../../components/core/Modal.js';
+import { CONTACT_PHONE } from '../../utils/constants.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, isValidPhone, required } from '../../utils/validators.js';
 import { showToast } from '../../components/core/Toast.js';
@@ -20,6 +23,11 @@ import { openProfileCompletionModal, profileGateCard } from '../../components/ac
 // Billing rule: 1 day = 24h from drop-off, with a single 2h grace at the end
 // of the entire booking. Booked 24h+ ≤ 26h → 1 day; >26h ≤ 50h → 2 days; etc.
 const GRACE_MS = 2 * 60 * 60 * 1000;
+
+// A long-term booking dropped off less than this away, made while the front
+// desk is closed, needs an agent dispatched — we block self-checkout and route
+// the customer to a phone call instead.
+const LAST_MINUTE_MS = 8 * 60 * 60 * 1000;
 
 function billingDays(dropoffMs, pickupMs) {
   const duration = pickupMs - dropoffMs;
@@ -95,6 +103,7 @@ export default function BookingLongTerm(container) {
   let promoVoucher = null;  // { code, name, type, value, discountAmount } when a promo code is active
   let quote = { days: 1, perDay: 0, total: 0, hours: 24 };
   let paymentMethod = 'online';   // 'online' | 'pay-at-pickup'
+  let openingHours = null;        // settings/global.openingHours — drives the after-hours gate
 
   // Accordion step card scaffold — a clickable header (number badge + title +
   // collapsed summary + Edit affordance) over a body that only shows while the
@@ -515,11 +524,13 @@ export default function BookingLongTerm(container) {
     getOnlineDiscountPercent().catch(() => 0),
     getMyVoucher().catch(() => null),
     listSeasonalPeriods().catch(() => []),
-  ]).then(([r, d, v, periods]) => {
+    getOpeningHours().catch(() => null),
+  ]).then(([r, d, v, periods, hours]) => {
     rates = r && r.tiers?.length ? r : FALLBACK_RATES;
     discount = d || 0;
     voucher = v;
     seasonalPeriods = periods || [];
+    openingHours = hours;
     renderTiers();
     recompute();
   });
@@ -875,12 +886,45 @@ export default function BookingLongTerm(container) {
     }
   }
 
+  // Last-minute + after-hours long-term bookings can't self-checkout — an agent
+  // must be dispatched, so block and route the customer to a phone call.
+  // Returns true when the gate fired (caller must stop). Reads the current
+  // drop-off; fails OPEN when the date or the hours config isn't ready.
+  function afterHoursGateBlocks() {
+    const dropoffMs = new Date(String(form.dropoffAt.value || '').replace(' ', 'T')).getTime();
+    if (!Number.isFinite(dropoffMs)) return false;
+    if (dropoffMs - Date.now() >= LAST_MINUTE_MS) return false;   // not last-minute
+    if (!isOutsideOpeningHoursNow(openingHours)) return false;    // desk is open now
+    openAfterHoursModal();
+    return true;
+  }
+
+  function openAfterHoursModal() {
+    const telHref = `tel:${CONTACT_PHONE.replace(/\s+/g, '')}`;
+    const node = html`<div class="text-center">
+      <div class="w-16 h-16 rounded-2xl bg-mango/15 flex items-center justify-center mx-auto mb-5">
+        <svg class="w-8 h-8 text-mango-deep" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
+      </div>
+      <h3 class="font-heading font-bold text-2xl text-blueberry-deep mb-3">${t('longTerm.afterHoursTitle')}</h3>
+      <p class="text-[16px] text-charcoal leading-relaxed mb-6">${t('longTerm.afterHoursBody')}</p>
+      <a href="${telHref}" class="flex items-center justify-center gap-2 w-full bg-mango hover:bg-mango-hover text-charcoal font-bold text-[18px] py-4 rounded-2xl transition-colors mb-3">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
+        ${escapeHtml(CONTACT_PHONE)}
+      </a>
+      <button type="button" data-close-afterhours class="text-[14px] text-dim hover:text-charcoal font-semibold">${t('common.close')}</button>
+    </div>`;
+    const { close } = openModal(node, { dismissible: true });
+    node.querySelector('[data-close-afterhours]')?.addEventListener('click', () => close());
+  }
+
   page.addEventListener('click', (e) => {
     const nextStepBtn = e.target.closest('[data-next-step]');
     if (nextStepBtn) {
       const card = nextStepBtn.closest('[data-step]');
       const currentStep = card?.dataset.step;
       if (currentStep && !validateStep(currentStep)) return;
+      // Block last-minute, after-hours bookings before they leave step 1.
+      if (currentStep === 'dates' && afterHoursGateBlocks()) return;
       if (currentStep) completeStep(currentStep);
       openStep(nextStepBtn.dataset.nextStep);
       return;
@@ -925,6 +969,10 @@ export default function BookingLongTerm(container) {
     }
     const days = billingDays(dropoffMs, pickupMs);
     if (days < 1) { openStep('dates'); showToast(t('longTerm.invalidDates'), 'error'); return; }
+
+    // Re-check the after-hours gate at submit, in case time crossed the closing
+    // boundary or the drop-off was edited since the dates step.
+    if (afterHoursGateBlocks()) { openStep('dates'); return; }
 
     const licensePlate = resolvePlate();
     const name = form.name.value.trim();

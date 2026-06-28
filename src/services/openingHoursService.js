@@ -3,8 +3,9 @@
 // Stored on `settings/global.openingHours` as:
 //   { mon:{open,close,closed}, tue:{…}, …, sun:{…} }
 // Shown on the Contact page (full week table) and the Footer (today's line).
-// The lot itself is 24/7 — these are the office / front-desk hours. Display
-// only; not wired into the commuter booking cutoffs. Mirrors discountService.
+// The lot itself is 24/7 — these are the office / front-desk (agent-staffed)
+// hours. Also drive the long-term booking funnel's last-minute "please call us"
+// gate via isOutsideOpeningHoursNow(). Mirrors discountService.
 
 import { getDocument, setDocument } from '../firebase/db.js';
 import { auditLog } from './auditService.js';
@@ -54,4 +55,27 @@ export function bucharestTodayKey() {
   const wd = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Bucharest', weekday: 'short' }).format(new Date());
   const map = { Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat', Sun: 'sun' };
   return map[wd] || 'mon';
+}
+
+// Current Bucharest wall-clock as "HH:MM" (24h, zero-padded) — lexically
+// comparable to a day's open/close strings.
+export function bucharestNowHm() {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(new Date());
+}
+
+// True when the front desk is NOT staffed right now per the admin-configured
+// opening hours: a `closed` day, or the current Bucharest time is before
+// `open` or at/after `close`. Drives the last-minute long-term booking
+// "please call us" gate. Pass hours from getOpeningHours(); falls back to the
+// in-module cache. Fails OPEN (returns false) when no config is loaded yet, so
+// a missed preload never wrongly blocks a booking.
+export function isOutsideOpeningHoursNow(hours) {
+  const h = hours || cached;
+  if (!h) return false;
+  const day = h[bucharestTodayKey()];
+  if (!day || day.closed) return true;
+  const now = bucharestNowHm();
+  return now < day.open || now >= day.close;
 }

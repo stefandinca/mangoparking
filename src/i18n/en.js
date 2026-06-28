@@ -1300,6 +1300,8 @@ export default {
     confirmMessage: 'We\'ve emailed the details. See you on arrival.',
     invalidDates: 'Pick a valid range (pick-up after drop-off).',
     minDuration: 'Minimum booking is 1 hour.',
+    afterHoursTitle: 'Last-minute reservation',
+    afterHoursBody: 'To ensure we have spaces, last-minute reservations outside our working hours are arranged by phone. Please call us:',
     tierNote: 'Auto-tiered pricing — cheaper per day the longer you stay.',
     tiersInfoNote: 'For reference — the rate applies automatically based on your dates.',
     yourRate: 'Your rate',
