@@ -13,7 +13,8 @@ voucher resolution).
 - This is the **"business settings"** corner of the admin panel.
 - **Vouchers:** create discount codes — a fixed amount off, a percentage off, or
   the new **"free parking days"** type. Codes can be public or assigned to
-  specific customers.
+  specific customers. Public codes appear on the public **Promotions page** only
+  if you tick **"Show on promotions page"** (opt-in, off by default).
 - **Promotions:** edit the content of the public promotions page (text + image),
   in both Romanian and English.
 - **Pricing:** set the **daily parking rates** by length of stay, plus special
@@ -36,7 +37,10 @@ voucher resolution).
 2. **+ Voucher nou** → modal defaults `type='percent'`, `value=10`,
    `visibility='public'`, `active=true`.
 3. Code field uppercases/strips to `[A-Z0-9]` live. Pick Percent/Fixed, value,
-   start/end dates, optional max-redemptions, Active.
+   start/end dates, optional max-redemptions, Active, and — for public codes —
+   **"Show on promotions page"** (opt-in, off by default; hidden for private codes
+   and forced off on save). Sets the `showOnPromotions` flag the public
+   `/promotions` page filters on (alongside active + in-window).
 4. Submit validation: code format (3–24), name non-empty, value > 0, **percent
    > 100 rejected** (`:324`), days-integer (`:325`), both dates present,
    `startDate > endDate` rejected (`:329`), private-assignees, max ≥ 1. Duplicate

@@ -9,7 +9,8 @@ import { showToast } from '../../components/core/Toast.js';
 
 // /promotions — public marketing page. Renders an admin-editable hero
 // (image + title + intro), an admin-editable markdown body, and a list
-// of currently-active public voucher codes the visitor can copy.
+// of public voucher codes the admin has flagged "show on promotions page"
+// (and that are currently active + in-window) for the visitor to copy.
 //
 // Empty content + no active vouchers → friendly fallback rather than
 // a blank page.
@@ -81,7 +82,11 @@ export default async function Promotions(container) {
     }),
   ]);
 
-  const activeVouchers = allPublic.filter((v) => isCurrentlyValid(v, todayStr));
+  // Opt-in: only vouchers the admin explicitly flagged for this page
+  // (missing/false → not shown), and only while active + in-window.
+  const activeVouchers = allPublic.filter(
+    (v) => v.showOnPromotions === true && isCurrentlyValid(v, todayStr),
+  );
 
   const localized = page?.[locale] || page?.ro || page?.en || null;
   const heroImage = page?.heroImage || '';

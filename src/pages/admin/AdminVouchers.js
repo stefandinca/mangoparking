@@ -67,7 +67,12 @@ function voucherRowHtml(v, locale) {
       <td class="px-4 py-3 font-mono text-[14px] font-semibold text-blueberry">${valueLabel(v)}</td>
       <td class="px-4 py-3 text-[13px] text-dim">${fmtDate(v.startDate, locale)} → ${fmtDate(v.endDate, locale)}</td>
       <td class="px-4 py-3">${statusBadge(v)}</td>
-      <td class="px-4 py-3">${visibilityBadge(v)}</td>
+      <td class="px-4 py-3">
+        <div class="flex flex-wrap items-center gap-1.5">
+          ${visibilityBadge(v)}
+          ${v.showOnPromotions ? `<span class="text-[11px] uppercase tracking-wider font-mono font-semibold px-2 py-0.5 rounded-full bg-mango/10 text-mango-deep">${t('vouchers.featuredBadge')}</span>` : ''}
+        </div>
+      </td>
       <td class="px-4 py-3 font-mono text-[13px]">${usage}</td>
       <td class="px-4 py-3 text-right">
         <div class="inline-flex items-center gap-2">
@@ -187,6 +192,7 @@ export default async function AdminVouchers(container) {
       endDate: yearOutStr,
       visibility: 'public',
       assignedUserIds: [],
+      showOnPromotions: false,
       maxRedemptionsTotal: '',
       redeemedCount: 0,
     };
@@ -285,6 +291,16 @@ export default async function AdminVouchers(container) {
         <span>${t('vouchers.fieldActive')}</span>
       </label>
 
+      <div data-promo-wrap class="${init.visibility === 'private' ? 'hidden' : ''}">
+        <label class="flex items-start gap-2.5 text-[14px] text-charcoal/80 cursor-pointer">
+          <input type="checkbox" name="showOnPromotions" ${init.showOnPromotions ? 'checked' : ''} class="accent-mango w-4 h-4 mt-0.5">
+          <span>
+            ${t('vouchers.fieldShowOnPromotions')}
+            <span class="block text-[12px] text-dim">${t('vouchers.showOnPromotionsHint')}</span>
+          </span>
+        </label>
+      </div>
+
       <button type="submit" class="w-full bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] py-3 rounded-xl transition-colors">${isEdit ? t('common.save') : t('vouchers.addNew')}</button>
     </form>`;
 
@@ -293,8 +309,11 @@ export default async function AdminVouchers(container) {
     // Visibility toggle shows/hides assignees block.
     form.querySelectorAll('input[name="visibility"]').forEach((r) => {
       r.addEventListener('change', () => {
-        const wrap = form.querySelector('[data-assignees-wrap]');
-        wrap.classList.toggle('hidden', form.visibility.value !== 'private');
+        const isPrivate = form.visibility.value === 'private';
+        form.querySelector('[data-assignees-wrap]').classList.toggle('hidden', !isPrivate);
+        // "Show on promotions" only applies to public vouchers — a private
+        // code should never be advertised on the public page.
+        form.querySelector('[data-promo-wrap]').classList.toggle('hidden', isPrivate);
       });
     });
 
@@ -357,6 +376,8 @@ export default async function AdminVouchers(container) {
         return;
       }
       const active = form.active.checked;
+      // Featured on the public promotions page — forced off for private codes.
+      const showOnPromotions = visibility === 'public' && form.showOnPromotions.checked;
 
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
@@ -378,6 +399,7 @@ export default async function AdminVouchers(container) {
           endDate,
           visibility,
           assignedUserIds,
+          showOnPromotions,
           maxRedemptionsTotal,
           active,
           redeemedCount: existing?.redeemedCount || 0,
