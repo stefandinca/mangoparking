@@ -1,10 +1,17 @@
 # Mango Parking v1.3 — ANPR Camera Integration
 
+> **Status: 📋 PLANNED — not yet built** (as of 2026-07-01). No camera
+> integration exists: there is no `functions/src/anpr.js` / `anprDecision.js`,
+> no `plateEvents` / `cameraHeartbeats` collections, and no `/admin/anpr` page.
+> **Exception:** the standalone overstay pieces this plan referenced *did* ship
+> independently via v1.7+ — the `adminChargeOverstay` callable and the
+> `markNoShows` scheduled detector are live. The camera hardware layer is not.
+
 ## Goal
 
 Replace the manual "agent types plate" step at entry and exit with two Hikvision ANPR cameras that detect plates on-device and push events to our backend. Known plates → automatic check-in/check-out. Unknown plates → admin queue. Misreads → manual override from the existing check-in UI. **Barrier control is deferred** — these cameras are observers, not gate openers, until barrier hardware is on site.
 
-Camera: **Hikvision iDS-2CD7A46G0/P-IZHS(Y)** — 4MP bullet, on-device deep-learning LPR, ISAPI/ONVIF, PoE+, IP67. Spec sheet in `documentation/camera-doc.pdf`.
+Camera: **Hikvision iDS-2CD7A46G0/P-IZHS(Y)** — 4MP bullet, on-device deep-learning LPR, ISAPI/ONVIF, PoE+, IP67. Spec sheet in [`camera-doc.pdf`](camera-doc.pdf) (same folder).
 
 ---
 

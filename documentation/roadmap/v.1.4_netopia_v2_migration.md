@@ -1,5 +1,12 @@
 # Mango Parking v1.4 — Netopia v1.x → v2 REST Migration
 
+> **Status: 📋 PLANNED — not yet built** (as of 2026-07-01). Payments still run
+> on the legacy crypto-envelope flow (`functions/src/netopia.js`: RSA + AES over
+> XML, `createPayment` + `netopiaCallback` IPN). There is no `netopiaV2.js`,
+> no `createPaymentV2` / `netopiaV2Callback`, and no `ntpID` / `paymentVersion`
+> fields. **Consequence today: refunds are manual** — the admin refund queue,
+> not a programmatic `/operation/credit` call. This doc is the migration plan.
+
 ## Why
 
 Our current payment flow uses Netopia's **legacy mobilpay v1.x XML stack**:

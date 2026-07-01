@@ -1,8 +1,16 @@
 # Cloud Account Switch — Personal → Client
 
+> **Status: ⏸️ DEFERRED infra checklist** (as of 2026-07-01). Not yet performed —
+> the project still runs on the `mango-parking` Firebase project. **Note:** parts
+> of the procedure below are stale — it predates the move to **Vercel** for the
+> frontend, so where it says "upload `dist/` to Plesk" the real step is now a
+> Vercel deploy (push to `main`). The Firebase-side steps (secrets, rules,
+> functions, Netopia IPN URL) are still accurate. See
+> [../vercel-deploy.md](../vercel-deploy.md) for how the frontend ships today.
+
 **Status:** deferred. Currently deployed to **`mango-parking`** under the developer's personal Google account. The client now has their own Google Cloud / Firebase access; we will move the project there before launch.
 
-This document is the checklist for that switch. Nothing here is urgent — resume work on `v1-plan.md` first, come back to this when the client account is ready.
+This document is the checklist for that switch. Nothing here is urgent — come back to it when the client account is ready.
 
 ---
 

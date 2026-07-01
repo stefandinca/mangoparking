@@ -1,5 +1,11 @@
 # Mango Parking v1.2 — SmartBill Integration
 
+> **Status: 📋 PLANNED — not yet built** (as of 2026-07-01). This is a design
+> plan; none of it is in the codebase. There is no `functions/src/smartbill.js`,
+> no `smartbill` field on any Firestore doc, and no SmartBill API call anywhere.
+> Billing identity (PF/PJ, CUI via ANAF `lookupCui`) **is** captured at checkout
+> today — that's the only part that exists; invoicing itself is unimplemented.
+
 ## Goal
 
 Issue Romanian fiscal invoices (facturi) automatically from every paid order — Netopia online, admin cash, admin card — with auto-paired chitanță for cash flows, e-Factura submission for B2B, and proper storno on cancellation. Customers and admins can download the PDF straight from the booking row.

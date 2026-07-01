@@ -1,5 +1,12 @@
 # Mango Parking v1.10 — Credit gift vouchers + direct credit grants
 
+> **Status: ✅ SHIPPED.** Implemented on the current `main`. The `credits`
+> voucher type, the `redeemCreditVoucher` and `adminGrantCredits` callables, the
+> shared `GiftCodeRedeem` widget, and the user-detail "Grant credits" action are
+> live. **Brevo follow-up:** the dedicated `credit-voucher-assigned-{ro,en}`
+> templates must be pasted into Brevo and their IDs set in `emailTemplates.js`;
+> until then that email falls back to the discount-framed `voucher-assigned`.
+
 ## Goal
 
 Two ways to give a commuter free parking credits:

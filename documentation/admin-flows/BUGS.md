@@ -4,6 +4,18 @@ Severity-ranked across all admin flows. Each row links to the flow doc with the
 full context. Verified items are marked ✔ (re-confirmed directly against source
 during this review).
 
+> **⚠️ Read this first (status, 2026-07-01).** This register is a *static
+> snapshot* from the original admin-flows audit. A **2026-06 deep-review pass
+> fixed a batch of the items** — see the **"2026-06 deep review"** section at the
+> bottom of this file for exactly what was applied (repay pricing, promo
+> double-redeem race, handover/mark-unpaid cashbook reconciliation, overstay
+> `0 lei` display, dashboard UTC→Bucharest, the AdminCheckIns listener leak,
+> `saveVoucher` count rollback, and more). The HIGH/MEDIUM rows below were **not
+> struck through individually**, so before actioning any row, cross-check it
+> against that "applied" list. Known-still-open highlights: the `{{ }}` i18n
+> interpolation bug (#1), over-refund on voucher bookings (#2), cash-refund
+> reconciliation (#3), and the two XSS sinks (#6, #20).
+
 ## HIGH — fix first
 
 | # | Area | Bug | Symptom | Ref |

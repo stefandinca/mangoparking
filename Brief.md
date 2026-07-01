@@ -4,8 +4,9 @@
 > This file began as the MVP brief (a credits-only "daily travel token" system) and
 > now describes the **current** product, which has grown well past that scope. For
 > staff-flow detail see [documentation/admin-flows/](documentation/admin-flows/); for
-> the historical MVP record see [documentation/old/implementation.md](documentation/old/implementation.md)
-> and the versioned plans `documentation/v.1.x_*.md`.
+> the historical MVP record see [documentation/archive/implementation.md](documentation/archive/implementation.md).
+> For a shipped-vs-planned index of every version doc, see
+> [documentation/README.md](documentation/README.md).
 
 ---
 
@@ -45,8 +46,10 @@ Two products run side by side:
   `seo-routes.mjs`); non-fatal in CI
 - **Backend**: Firebase (Auth, Firestore, Storage) + Cloud Functions Gen 2 (Node 22,
   `europe-west1`)
-- **Payments**: Netopia Mobilpay **v2 — live** (RSA/AES request envelope + IPN
-  callback), env-switched sandbox/live
+- **Payments**: Netopia Mobilpay — RSA/AES-encrypted request envelope + encrypted
+  IPN callback, env-switched sandbox/live (`NETOPIA_ENV`). **Refunds are manual**
+  (no programmatic refund); the JSON-REST migration that would automate them is
+  planned, not built (see `documentation/roadmap/v.1.4_netopia_v2_migration.md`)
 - **Email**: Brevo transactional templates
 - **Invoicing**: SmartBill — billing data captured (PF/PJ, CUI via ANAF lookup); API
   integration not yet wired
@@ -206,10 +209,13 @@ no-shows are explicit flows.
 
 ## 8. Payments, Email & Invoicing
 
-- **Netopia v2 (live):** `createPayment` / `repayOrder` build an RSA/AES-encrypted
-  request; Netopia confirms via the `netopiaCallback` IPN, which is idempotent and the
-  only place orders become `paid` for online payments. Sandbox vs live is chosen by
-  `NETOPIA_ENV`. Secrets: `NETOPIA_SIGNATURE`, `NETOPIA_PUBLIC_KEY`, `NETOPIA_PRIVATE_KEY`.
+- **Netopia (crypto-envelope, live):** `createPayment` / `repayOrder` build an
+  RSA/AES-encrypted request; Netopia confirms via the `netopiaCallback` IPN, which is
+  idempotent and the only place orders become `paid` for online payments. Sandbox vs
+  live is chosen by `NETOPIA_ENV`. Secrets: `NETOPIA_SIGNATURE`, `NETOPIA_PUBLIC_KEY`,
+  `NETOPIA_PRIVATE_KEY`. **Refunds have no API here** — they run through the manual
+  admin refund queue. The JSON-REST "v2" migration that adds automated refunds/voids
+  is a plan, not built (`documentation/roadmap/v.1.4_netopia_v2_migration.md`).
 - **Brevo email:** Firestore triggers + scheduled jobs send welcome, booking/credit
   confirmation, credit-used, low-credit, reminders (24h, commuter 7PM), refund, invite,
   password-reset, and private-voucher-assigned mails (customer-facing, Brevo templates).

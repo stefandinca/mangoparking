@@ -1,5 +1,11 @@
 # Mango Parking v1.9 — Long-term "free days" vouchers
 
+> **Status: ✅ SHIPPED.** Implemented on the current `main`. The `days` voucher
+> type, the `voucherDayBalances` collection, the free-order short-circuit, and
+> the splittable day-balance logic in `resolveVoucher` / `createPayment` are all
+> live. See "Caveats / follow-ups" below for the deferred edges (redemption at
+> pay-time, no re-credit on cancel).
+
 ## Goal
 
 A third promo-voucher type alongside `fixed` and `percent`: **days**. A days

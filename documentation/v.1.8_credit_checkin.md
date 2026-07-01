@@ -1,5 +1,10 @@
 # Mango Parking v1.8 — Manual commuter check-in against existing credits
 
+> **Status: ✅ SHIPPED.** Implemented on the current `main`. The
+> `checkInWithCredits` callable and the sell/use sub-mode in
+> `CreateTransactionModal` are live. The "reality snapshot (2026-06)" section
+> below is still the accurate reconciliation of what did vs. didn't get built.
+
 ## Goal
 
 Let a driver, agent, or admin check a commuter (navetist) in **using credits the
@@ -128,7 +133,7 @@ Captured here because the v1.7 doc predates some of the as-built state:
 - Still **not built** as of this doc: SmartBill invoicing (v1.2), ANPR cameras
   (v1.3), the Netopia v2 REST migration (v1.4 — payments remain on the legacy
   XML/RSA-AES `createPayment` + `netopiaCallback`, refunds stay a manual admin
-  queue). The cloud-account switch (`cloud-switch.md`) is still pending.
+  queue). The cloud-account switch (`roadmap/cloud-switch.md`) is still pending.
 
 ---
 

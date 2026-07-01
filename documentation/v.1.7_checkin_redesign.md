@@ -1,5 +1,11 @@
 # Mango Parking v1.7 — Admin Check-in / Check-out redesign
 
+> **Status: ✅ SHIPPED.** Implemented on the current `main` — this doc is the
+> implementation record. The 3-tab `AdminCheckIns` (Check-in / Check-out /
+> Overdue), the `markNoShows` scheduled detector, the shared
+> `CreateTransactionModal`, and the `autoCheckIn` walk-in path are all live.
+> (Post-ship reality notes were folded into [v.1.8](v.1.8_credit_checkin.md).)
+
 ## Goal
 
 Replace the current `/admin/checkins` page with a workflow-driven 3-tab layout (Check-in · Check-out · Overdue), each tab purpose-built for the action it serves. Lift the walk-in "create transaction" modal in from `/admin/transactions` so all on-the-lot operations live on one screen. Add a scheduled NO-SHOW detector for bookings whose owners never arrived.
