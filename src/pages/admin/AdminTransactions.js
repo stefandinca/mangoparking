@@ -24,6 +24,8 @@ const TYPE_LABEL_KEYS = {
   use: 'credit.typeUse',
   refund: 'credit.typeRefund',
   lateFee: 'credit.typeLateFee',
+  adjustment: 'credit.typeAdjustment',
+  extension: 'transactions.typeExtension',
   longTerm: 'transactions.typeLongTerm',
 };
 
@@ -32,6 +34,8 @@ const TYPE_STYLES = {
   use: 'bg-blue-100 text-blue-600',
   refund: 'bg-mango/10 text-mango',
   lateFee: 'bg-danger/10 text-danger',
+  adjustment: 'bg-gray-100 text-gray-600',
+  extension: 'bg-blueberry/10 text-blueberry',
   longTerm: 'bg-blueberry/10 text-blueberry',
 };
 
@@ -73,10 +77,12 @@ export default async function AdminTransactions(container) {
       status: tx.type === 'use' ? 'used'
             : tx.type === 'refund' ? 'refunded'
             : tx.type === 'purchase' ? 'paid'
+            : tx.type === 'extension' ? 'paid'
+            : tx.type === 'adjustment' ? 'used'
             : (tx.type || '—'),
-      sum: tx.type === 'lateFee'
+      sum: (tx.type === 'lateFee' || tx.type === 'extension')
         ? `${tx.amount ?? tx.feeAmount ?? 0} ${t('common.lei')}`
-        : tx.type === 'use' ? String(tx.quantity || 0)
+        : (tx.type === 'use' || tx.type === 'adjustment') ? String(tx.quantity || 0)
         : `+${tx.quantity || 0}`,
       plate: tx.licensePlate || '',
       customerId: tx.customerId || null,
@@ -121,6 +127,8 @@ export default async function AdminTransactions(container) {
         <option value="use">${t('credit.typeUse')}</option>
         <option value="refund">${t('credit.typeRefund')}</option>
         <option value="lateFee">${t('credit.typeLateFee')}</option>
+        <option value="adjustment">${t('credit.typeAdjustment')}</option>
+        <option value="extension">${t('transactions.typeExtension')}</option>
         <option value="longTerm">${t('transactions.typeLongTerm')}</option>
       </select>
       <select data-filter-status class="px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40 transition-colors">

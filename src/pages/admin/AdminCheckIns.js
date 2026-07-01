@@ -44,6 +44,8 @@ const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
 const adminChargeOverstayFn = httpsCallable(functions, 'adminChargeOverstay');
 const resendConfirmationFn = httpsCallable(functions, 'adminResendConfirmationEmail');
+const previewCheckoutRepriceFn = httpsCallable(functions, 'previewCheckoutReprice');
+const adminAdjustBookingCheckoutFn = httpsCallable(functions, 'adminAdjustBookingCheckout');
 
 const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
@@ -1020,6 +1022,10 @@ function openEditBookingDialog({ booking }) {
     const c = booking.contact || {};
     const showLogistics = booking.status === 'upcoming';     // before check-in only
     const showDates = showLogistics && booking.type !== 'credit';
+    // After check-in, a long-term booking's check-out date can still be moved.
+    // That re-prices the stay server-side and settles the difference (collect
+    // the extra / queue a refund) — see the submit handler below.
+    const showCheckoutReprice = booking.status === 'active' && booking.type === 'longTerm';
     const inputCls = 'w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry';
     const labelCls = 'block text-[13px] font-medium text-charcoal/70 mb-1.5';
 
@@ -1059,7 +1065,28 @@ function openEditBookingDialog({ booking }) {
           ${dateTimeFieldHtml({ name: 'pickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
         </div>
       </div>` : ''}
-      ${!showLogistics ? `<p class="text-[12px] text-dim">${t('checkins.editActiveNote')}</p>` : ''}
+      ${showCheckoutReprice ? `
+      <div class="rounded-xl bg-frost border border-frost-deep p-3 space-y-3">
+        <p class="text-[13px] font-semibold text-charcoal">${t('checkins.repriceTitle')}</p>
+        <div>
+          <label class="${labelCls}">${t('checkins.detailPickup')}</label>
+          ${dateTimeFieldHtml({ name: 'newPickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
+        </div>
+        <div data-reprice-preview class="text-[13px]"></div>
+        <div data-reprice-pay class="hidden">
+          <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('checkins.paidBy')}</label>
+          <div class="grid grid-cols-2 gap-2" data-reprice-paidby>
+            <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-mango bg-mango/5 cursor-pointer">
+              <input type="radio" name="repricePaidBy" value="cash" checked class="accent-mango">
+              <span class="text-[14px] font-medium">${t('checkins.payCash')}</span>
+            </label>
+            <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-frost-deep cursor-pointer">
+              <input type="radio" name="repricePaidBy" value="card" class="accent-mango">
+              <span class="text-[14px] font-medium">${t('checkins.payCard')}</span>
+            </label>
+          </div>
+        </div>
+      </div>` : (!showLogistics ? `<p class="text-[12px] text-dim">${t('checkins.editActiveNote')}</p>` : '')}
       <div>
         <label class="${labelCls}">${t('checkins.editNotes')}</label>
         <textarea name="notes" rows="3" placeholder="${escapeHtml(t('checkins.editNotesPlaceholder'))}" class="${inputCls}">${escapeHtml(booking.notes || '')}</textarea>
@@ -1072,10 +1099,53 @@ function openEditBookingDialog({ booking }) {
     </form>`;
 
     const modal = openModal(form, { onClose: () => resolve() });
-    if (showDates) wireDateTime(form);
+    if (showDates || showCheckoutReprice) wireDateTime(form);
     const errEl = qs('[data-edit-err]', form);
     const showErr = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
     qs('[data-cancel]', form).addEventListener('click', () => modal.close());
+
+    // Live re-price preview when the check-out date is moved on an active
+    // long-term booking. Informational only — the submit path re-derives the
+    // authoritative difference server-side before collecting / refunding.
+    const currentPickupIso = booking.pickupAt
+      ? new Date(booking.pickupAt).toISOString()
+      : (booking.endDate ? new Date(booking.endDate).toISOString() : null);
+    if (showCheckoutReprice) {
+      const previewEl = qs('[data-reprice-preview]', form);
+      const payEl = qs('[data-reprice-pay]', form);
+      const paidbyWrap = qs('[data-reprice-paidby]', form);
+      paidbyWrap?.addEventListener('change', (e) => {
+        if (!e.target.matches('input[name="repricePaidBy"]')) return;
+        paidbyWrap.querySelectorAll('label').forEach((lbl) => {
+          const inp = lbl.querySelector('input');
+          lbl.classList.toggle('border-mango', inp.checked);
+          lbl.classList.toggle('bg-mango/5', inp.checked);
+          lbl.classList.toggle('border-frost-deep', !inp.checked);
+        });
+      });
+      const runPreview = async () => {
+        const raw = qs('[name="newPickupAt"]', form)?.value;
+        if (!raw) return;
+        const iso = new Date(String(raw).replace(' ', 'T')).toISOString();
+        if (iso === currentPickupIso) { previewEl.textContent = ''; payEl.classList.add('hidden'); return; }
+        previewEl.textContent = t('common.loading');
+        try {
+          const res = await previewCheckoutRepriceFn({ bookingId: booking.id, newPickupAt: iso });
+          const { days, perDay, newTotal, difference } = res?.data || {};
+          const diff = Number(difference) || 0;
+          const line = diff > 0 ? t('checkins.repriceCollect', { amount: diff })
+            : diff < 0 ? t('checkins.repriceRefund', { amount: Math.abs(diff) })
+            : t('checkins.repriceNoChange');
+          const cls = diff > 0 ? 'text-mango' : diff < 0 ? 'text-leaf' : 'text-dim';
+          previewEl.innerHTML = `<div class="text-dim">${escapeHtml(t('transactions.priceComputed', { total: newTotal, days, perDay }))}</div><div class="mt-1 font-semibold ${cls}">${escapeHtml(line)}</div>`;
+          payEl.classList.toggle('hidden', !(diff > 0));
+        } catch (err) {
+          previewEl.textContent = err?.message || t('common.error');
+          payEl.classList.add('hidden');
+        }
+      };
+      qs('[name="newPickupAt"]', form)?.addEventListener('change', runPreview);
+    }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1109,7 +1179,33 @@ function openEditBookingDialog({ booking }) {
       submitBtn.textContent = t('common.loading');
       try {
         await updateBookingDetails(booking.id, patch);
-        showToast(t('checkins.editSaved'), 'success');
+        // Active long-term bookings: if the check-out date was moved, re-price
+        // and settle the difference (collect the extra / queue a refund). The
+        // server re-derives the difference — the live preview is advisory only.
+        let repriceMsg = null;
+        if (showCheckoutReprice) {
+          const raw = qs('[name="newPickupAt"]', form)?.value;
+          const iso = raw ? new Date(String(raw).replace(' ', 'T')).toISOString() : null;
+          if (iso && iso !== currentPickupIso) {
+            const pv = await previewCheckoutRepriceFn({ bookingId: booking.id, newPickupAt: iso });
+            const diffNow = Number(pv?.data?.difference) || 0;
+            const paidBy = form.querySelector('input[name="repricePaidBy"]:checked')?.value || 'cash';
+            if (diffNow > 0) {
+              const methodLabel = paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard');
+              const ok = await confirmModal(t('checkins.collectConfirm', { amount: diffNow, method: methodLabel }), { confirmText: t('checkins.repriceConfirm') });
+              if (!ok) { showToast(t('checkins.editSaved'), 'success'); modal.close(); resolve(); return; }
+            } else if (diffNow < 0) {
+              const ok = await confirmModal(t('checkins.repriceRefundConfirm', { amount: Math.abs(diffNow) }), { confirmText: t('checkins.repriceConfirm') });
+              if (!ok) { showToast(t('checkins.editSaved'), 'success'); modal.close(); resolve(); return; }
+            }
+            const adj = await adminAdjustBookingCheckoutFn({ bookingId: booking.id, newPickupAt: iso, paidBy });
+            const diff = Number(adj?.data?.difference) || 0;
+            repriceMsg = diff > 0 ? t('checkins.repriceCollected', { amount: diff })
+              : diff < 0 ? t('checkins.repriceRefundQueued', { amount: Math.abs(diff) })
+              : t('checkins.repriceUpdated');
+          }
+        }
+        showToast(repriceMsg || t('checkins.editSaved'), 'success');
         modal.close();
         resolve();
       } catch (err) {

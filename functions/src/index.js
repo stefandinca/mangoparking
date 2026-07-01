@@ -2600,6 +2600,105 @@ export const adminGrantCredits = onCall(
   }
 );
 
+// ── adminDeductCredits (callable) ───────────────────────────────────────
+// Admin/agent removes credits from a registered user's balance (correction
+// or clawback) — the mirror of adminGrantCredits. Floored at 0: you can't
+// drive a balance negative, and concurrent ops can't overdraw (deduct runs
+// in a transaction). Writes an `adjustment` ledger row (deliberately NOT a
+// `purchase`/`use` type, so the onTokenTransactionCreated email trigger stays
+// silent) and audit-logs. Money-adjacent → agent gate (drivers excluded).
+export const adminDeductCredits = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertAgent(request);
+    const { customerId, quantity, note } = request.data || {};
+    if (!customerId) throw new HttpsError('invalid-argument', 'Missing customerId');
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw new HttpsError('invalid-argument', 'quantity must be a positive integer');
+    }
+
+    const db = getFirestore();
+    const ref = db.collection('tokenBalances').doc(customerId);
+    const nowIso = new Date().toISOString();
+
+    const { removed, balance, plate } = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'No credit balance for this user');
+      const data = snap.data();
+      const current = Number(data.balance) || 0;
+      const take = Math.min(qty, current); // floor at 0
+      tx.update(ref, { balance: current - take });
+      return { removed: take, balance: current - take, plate: (data.plates && data.plates[0]) || null };
+    });
+
+    if (removed > 0) {
+      await db.collection('tokenTransactions').add({
+        customerId,
+        licensePlate: plate,
+        type: 'adjustment',
+        quantity: -removed,
+        amount: 0,
+        timestamp: nowIso,
+        source: 'admin-adjust',
+        paidBy: null,
+        grantedBy: uid,
+      });
+    }
+
+    await db.collection('auditLog').add({
+      action: 'admin_credits_adjusted',
+      entityType: 'tokenBalance',
+      entityId: customerId,
+      actorUid: uid,
+      payload: { customerId, requested: qty, removed, balance, note: note ? String(note).slice(0, 200) : null },
+      timestamp: nowIso,
+    }).catch(() => {});
+
+    return { ok: true, balanceDocId: customerId, removed, balance };
+  }
+);
+
+// ── adminAssignVoucher (callable) ───────────────────────────────────────
+// Admin assigns or removes a private promo/credit voucher for a specific
+// user, from that user's detail modal (the mirror of the per-voucher user
+// picker on /admin/vouchers). Mutates promoVouchers.assignedUserIds via
+// arrayUnion / arrayRemove. Assigning reuses the onPromoVoucherAssigned email
+// trigger, which notifies the recipient. Vouchers are an admin config surface
+// (Firestore rules gate promoVouchers writes to admin), so admin-only here.
+export const adminAssignVoucher = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertAdmin(request);
+    const { code, customerId, assign } = request.data || {};
+    if (!code || !customerId) throw new HttpsError('invalid-argument', 'Missing code or customerId');
+    const normCode = String(code).trim().toUpperCase();
+
+    const db = getFirestore();
+    const ref = db.collection('promoVouchers').doc(normCode);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Voucher not found');
+
+    await ref.update({
+      assignedUserIds: assign
+        ? FieldValue.arrayUnion(customerId)
+        : FieldValue.arrayRemove(customerId),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await db.collection('auditLog').add({
+      action: assign ? 'voucher_assigned' : 'voucher_unassigned',
+      entityType: 'promoVoucher',
+      entityId: normCode,
+      actorUid: uid,
+      payload: { code: normCode, customerId },
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
+
+    return { ok: true, code: normCode, assigned: !!assign };
+  }
+);
+
 // Surface a credit (commuter) check-in as a `bookings` doc so it appears on
 // the Check-out tab and the capacity map (the dashboard reads `bookings`,
 // not `activeCheckIns`). The Check-out tab buckets commuters by their
@@ -2837,6 +2936,198 @@ export const adminChargeOverstay = onCall(
     });
 
     return { ok: true, latePrice: newLate };
+  }
+);
+
+// ── previewCheckoutReprice (callable) ───────────────────────────────────
+// Read-only: re-prices an active long-term booking against a new check-out
+// (pick-up) datetime using the authoritative tier/seasonal pricer, and
+// returns the price difference vs the current stay. The difference is the
+// STANDARD incremental cost (two authoritative recomputes), independent of
+// any discount originally applied — collected at the desk like an overstay.
+// No writes; drives the admin edit-dialog preview.
+export const previewCheckoutReprice = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    await assertStaff(request);
+    const { bookingId, newPickupAt } = request.data || {};
+    if (!bookingId || !newPickupAt) {
+      throw new HttpsError('invalid-argument', 'Missing bookingId or newPickupAt');
+    }
+
+    const db = getFirestore();
+    const snap = await db.collection('bookings').doc(bookingId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const b = snap.data();
+    if (b.type !== 'longTerm') {
+      throw new HttpsError('failed-precondition', 'Only long-term bookings can be re-priced');
+    }
+
+    const newCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: newPickupAt });
+    if (!newCalc.ok) throw new HttpsError('invalid-argument', newCalc.error || 'Could not price the new date');
+    const oldCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: b.pickupAt });
+    const oldTotal = oldCalc.ok ? oldCalc.expected : (Number(b.totalPrice) || 0);
+
+    return {
+      ok: true,
+      days: newCalc.days,
+      perDay: newCalc.perDay,
+      newTotal: newCalc.expected,
+      oldTotal,
+      difference: newCalc.expected - oldTotal,
+    };
+  }
+);
+
+// ── adminAdjustBookingCheckout (callable) ───────────────────────────────
+// Changes the check-out (pick-up) datetime on an active long-term booking
+// and settles the price difference (server re-derives it — never trusts the
+// client number):
+//   • extension (difference > 0): collect the extra at the desk (cash →
+//     cashbook, card → terminal), tracked in a separate `extensionPrice`
+//     accumulator + an `extension` ledger row — mirrors adminChargeOverstay.
+//   • shortening (difference < 0): the overpaid amount is routed to the
+//     Refunds queue (`pendingRefundAmount`); the booking stays active and
+//     check-out-able.
+// pickupAt / endDate / days are updated to reflect the new check-out.
+// Money op → agent gate (drivers excluded).
+export const adminAdjustBookingCheckout = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertAgent(request);
+    const { bookingId, newPickupAt, paidBy = 'cash' } = request.data || {};
+    if (!bookingId || !newPickupAt) {
+      throw new HttpsError('invalid-argument', 'Missing bookingId or newPickupAt');
+    }
+
+    const db = getFirestore();
+    const ref = db.collection('bookings').doc(bookingId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const b = snap.data();
+    if (b.type !== 'longTerm') {
+      throw new HttpsError('failed-precondition', 'Only long-term bookings can be re-priced');
+    }
+    if (b.status !== 'active') {
+      throw new HttpsError('failed-precondition', 'Booking is not checked in');
+    }
+
+    const newCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: newPickupAt });
+    if (!newCalc.ok) throw new HttpsError('invalid-argument', newCalc.error || 'Could not price the new date');
+    const oldCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: b.pickupAt });
+    const oldTotal = oldCalc.ok ? oldCalc.expected : (Number(b.totalPrice) || 0);
+    const difference = newCalc.expected - oldTotal;
+
+    const nowIso = new Date().toISOString();
+    const patch = {
+      pickupAt: newPickupAt,
+      endDate: String(newPickupAt).slice(0, 10),
+      days: newCalc.days,
+      perDay: newCalc.perDay,
+      checkoutAdjustedAt: nowIso,
+      checkoutAdjustedBy: uid,
+    };
+
+    if (difference > 0) {
+      if (!['cash', 'card'].includes(paidBy)) {
+        throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
+      }
+      const storedPaidBy = paidBy === 'cash' ? 'admin-cash' : 'admin-card';
+      patch.extensionPrice = (Number(b.extensionPrice) || 0) + difference;
+      patch.extensionPaidBy = storedPaidBy;
+      await ref.update(patch);
+
+      await db.collection('tokenTransactions').add({
+        customerId: b.customerId || null,
+        licensePlate: b.licensePlate || null,
+        bookingId,
+        type: 'extension',
+        amount: difference,
+        paidBy: storedPaidBy,
+        timestamp: nowIso,
+        source: 'checkout-change',
+      });
+
+      if (paidBy === 'cash') {
+        await recordCashEntry({
+          agentUid: uid,
+          amount: difference,
+          source: 'longterm-extension',
+          plate: b.licensePlate || null,
+          payerName: b.contact?.name || null,
+          bookingId,
+        });
+      }
+    } else if (difference < 0) {
+      patch.pendingRefundAmount = (Number(b.pendingRefundAmount) || 0) + Math.abs(difference);
+      patch.pendingRefundReason = 'checkout-shortened';
+      patch.pendingRefundCreatedAt = nowIso;
+      await ref.update(patch);
+    } else {
+      await ref.update(patch);
+    }
+
+    await db.collection('auditLog').add({
+      action: 'booking_checkout_adjusted',
+      entityType: 'booking',
+      entityId: bookingId,
+      actorUid: uid,
+      payload: {
+        newPickupAt,
+        days: newCalc.days,
+        oldTotal,
+        newTotal: newCalc.expected,
+        difference,
+        paidBy: difference > 0 ? paidBy : null,
+      },
+      timestamp: nowIso,
+    });
+
+    return { ok: true, difference, days: newCalc.days, perDay: newCalc.perDay, newTotal: newCalc.expected };
+  }
+);
+
+// ── adminResolveCheckoutRefund (callable) ───────────────────────────────
+// Clears a pending partial refund created by a check-out-date shortening
+// (adminAdjustBookingCheckout). Marks it resolved on the booking + audits;
+// the actual money movement (Netopia panel / cash returned / card terminal)
+// is manual, mirroring the main refund queue. Money op → agent gate.
+export const adminResolveCheckoutRefund = onCall(
+  { region: 'europe-west1', cors: true },
+  async (request) => {
+    const { uid } = await assertAgent(request);
+    const { bookingId, refundedVia = 'cash-returned' } = request.data || {};
+    if (!bookingId) throw new HttpsError('invalid-argument', 'Missing bookingId');
+
+    const db = getFirestore();
+    const ref = db.collection('bookings').doc(bookingId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Booking not found');
+    const b = snap.data();
+    const amount = Number(b.pendingRefundAmount) || 0;
+    if (amount <= 0) throw new HttpsError('failed-precondition', 'No pending refund on this booking');
+
+    const nowIso = new Date().toISOString();
+    await ref.update({
+      pendingRefundAmount: FieldValue.delete(),
+      pendingRefundReason: FieldValue.delete(),
+      pendingRefundCreatedAt: FieldValue.delete(),
+      checkoutRefundedAt: nowIso,
+      checkoutRefundedBy: uid,
+      checkoutRefundedVia: refundedVia,
+      checkoutRefundedAmount: amount,
+    });
+
+    await db.collection('auditLog').add({
+      action: 'booking_checkout_refund_resolved',
+      entityType: 'booking',
+      entityId: bookingId,
+      actorUid: uid,
+      payload: { amount, refundedVia },
+      timestamp: nowIso,
+    });
+
+    return { ok: true, amount };
   }
 );
 

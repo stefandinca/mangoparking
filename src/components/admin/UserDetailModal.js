@@ -24,9 +24,12 @@ import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../widgets/BillingFields.js';
 import { isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
+import { listVouchers } from '../../services/promoVoucherService.js';
 
 const adminUpdateUserProfileFn = httpsCallable(functions, 'adminUpdateUserProfile');
 const adminGrantCreditsFn = httpsCallable(functions, 'adminGrantCredits');
+const adminDeductCreditsFn = httpsCallable(functions, 'adminDeductCredits');
+const adminAssignVoucherFn = httpsCallable(functions, 'adminAssignVoucher');
 
 function fmtDateTime(iso) {
   if (!iso) return '—';
@@ -52,6 +55,18 @@ function fmtMoney(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
   return `${v.toLocaleString('ro-RO')} RON`;
+}
+
+const TX_TYPE_KEYS = {
+  purchase: 'credit.typePurchase',
+  use: 'credit.typeUse',
+  refund: 'credit.typeRefund',
+  lateFee: 'credit.typeLateFee',
+  adjustment: 'credit.typeAdjustment',
+  extension: 'transactions.typeExtension',
+};
+function txTypeLabel(type) {
+  return TX_TYPE_KEYS[type] ? t(TX_TYPE_KEYS[type]) : (type || '—');
 }
 
 const STATUS_CLS = {
@@ -154,23 +169,35 @@ function billingHtml(u) {
 function balanceHtml(balance, canGrant = false) {
   const d = t('admin.usersDetail');
   const grantBtn = canGrant
-    ? `<button type="button" data-grant-credits class="mt-3 w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[13px] py-2 rounded-lg transition-colors">${escapeHtml(d.grantCredits)}</button>`
+    ? `<button type="button" data-grant-credits class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[13px] py-2 rounded-lg transition-colors">${escapeHtml(d.grantCredits)}</button>`
     : '';
-  if (!balance) return sectionCard(d.balance, null, `${emptyLine()}${grantBtn}`);
+  if (!balance) {
+    const actions = canGrant ? `<div class="mt-3">${grantBtn}</div>` : '';
+    return sectionCard(d.balance, null, `${emptyLine()}${actions}`);
+  }
   const plates = Array.isArray(balance.plates) && balance.plates.length
     ? balance.plates.map((p) => `<span class="font-mono">${escapeHtml(p)}</span>`).join(', ')
     : '—';
+  // Remove is only offered when there's a balance to take from — the server
+  // floors at 0, but showing it on an empty balance is pointless.
+  const removeBtn = (canGrant && Number(balance.balance || 0) > 0)
+    ? `<button type="button" data-remove-credits class="bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-[13px] py-2 rounded-lg transition-colors">${escapeHtml(d.removeCredits)}</button>`
+    : '';
+  const actions = canGrant
+    ? `<div class="mt-3 grid ${removeBtn ? 'grid-cols-2' : 'grid-cols-1'} gap-2">${grantBtn}${removeBtn}</div>`
+    : '';
   return sectionCard(d.balance, null, `
     ${row(d.balanceLabel, `<span class="font-bold text-blueberry-deep">${Number(balance.balance || 0)}</span>`)}
     ${row(d.totalPurchased, escapeHtml(String(balance.totalPurchased ?? 0)))}
     ${row(d.plates, plates)}
-    ${grantBtn}
+    ${actions}
   `);
 }
 
-// Wire the "Grant credits" action inside the balance card. Delegated on the
-// (persistent) balance slot so it survives the card ↔ form swaps. Grants free
-// credits to the account via the adminGrantCredits callable — no cash/voucher.
+// Wire the "Grant credits" / "Remove credits" actions inside the balance card.
+// Delegated on the (persistent) balance slot so it survives the card ↔ form
+// swaps. Grant adds free credits via adminGrantCredits; remove deducts them via
+// adminDeductCredits (floored at 0 server-side). Neither moves cash.
 function wireGrantCredits(body, user, initialBalance) {
   const slot = qs('[data-balance-slot]', body);
   if (!slot) return;
@@ -178,25 +205,31 @@ function wireGrantCredits(body, user, initialBalance) {
   let balance = initialBalance;
 
   slot.addEventListener('click', (e) => {
-    if (e.target.closest('[data-grant-credits]')) openForm();
+    if (e.target.closest('[data-grant-credits]')) openForm('grant');
+    else if (e.target.closest('[data-remove-credits]')) openForm('remove');
     else if (e.target.closest('[data-grant-cancel]')) slot.innerHTML = balanceHtml(balance, true);
   });
 
-  function openForm() {
+  function openForm(mode) {
+    const isRemove = mode === 'remove';
+    const qtyLabel = isRemove ? d.removeQuantity : d.grantQuantity;
+    const confirmLabel = isRemove ? d.removeConfirm : d.grantConfirm;
+    const confirmCls = isRemove ? 'bg-red-500 hover:bg-red-600' : 'bg-leaf hover:bg-leaf/90';
+    const focusCls = isRemove ? 'focus:border-red-400' : 'focus:border-leaf';
     slot.innerHTML = sectionCard(d.balance, null, `
       <form data-grant-form class="space-y-3">
         <div>
-          <label class="block text-[13px] text-dim mb-1">${escapeHtml(d.grantQuantity)}</label>
-          <input name="qty" type="number" min="1" step="1" value="1" class="w-full px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-leaf">
+          <label class="block text-[13px] text-dim mb-1">${escapeHtml(qtyLabel)}</label>
+          <input name="qty" type="number" min="1" step="1" value="1" class="w-full px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] font-mono focus:outline-none ${focusCls}">
         </div>
         <div>
           <label class="block text-[13px] text-dim mb-1">${escapeHtml(d.grantNote)}</label>
-          <input name="note" type="text" placeholder="${escapeHtml(d.grantNotePlaceholder)}" class="w-full px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-leaf">
+          <input name="note" type="text" placeholder="${escapeHtml(d.grantNotePlaceholder)}" class="w-full px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] focus:outline-none ${focusCls}">
         </div>
         <p data-grant-err class="hidden text-[13px] text-red-500"></p>
         <div class="flex gap-2 justify-end">
           <button type="button" data-grant-cancel class="px-3 py-2 rounded-lg bg-frost text-charcoal/70 font-semibold text-[13px] hover:bg-frost-deep transition-colors">${escapeHtml(d.grantCancel)}</button>
-          <button type="submit" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[13px] px-4 py-2 rounded-lg transition-colors">${escapeHtml(d.grantConfirm)}</button>
+          <button type="submit" class="${confirmCls} text-white font-semibold text-[13px] px-4 py-2 rounded-lg transition-colors">${escapeHtml(confirmLabel)}</button>
         </div>
       </form>
     `);
@@ -214,27 +247,39 @@ function wireGrantCredits(body, user, initialBalance) {
       submitBtn.disabled = true;
       submitBtn.textContent = t('common.loading');
       try {
-        const res = await adminGrantCreditsFn({ customerId: user.id, quantity: qty, note });
-        const newBal = res?.data?.balance;
-        balance = {
-          ...(balance || { plates: [], totalPurchased: 0 }),
-          balance: newBal != null ? newBal : (Number(balance?.balance || 0) + qty),
-          totalPurchased: Number(balance?.totalPurchased || 0) + qty,
-        };
-        slot.innerHTML = balanceHtml(balance, true);
-        showToast(t('admin.usersDetail.grantSuccess', { n: qty }), 'success');
+        if (isRemove) {
+          const res = await adminDeductCreditsFn({ customerId: user.id, quantity: qty, note });
+          const newBal = res?.data?.balance;
+          const removed = res?.data?.removed ?? qty;
+          balance = {
+            ...(balance || { plates: [], totalPurchased: 0 }),
+            balance: newBal != null ? newBal : Math.max(0, Number(balance?.balance || 0) - qty),
+          };
+          slot.innerHTML = balanceHtml(balance, true);
+          showToast(t('admin.usersDetail.removeSuccess', { n: removed }), 'success');
+        } else {
+          const res = await adminGrantCreditsFn({ customerId: user.id, quantity: qty, note });
+          const newBal = res?.data?.balance;
+          balance = {
+            ...(balance || { plates: [], totalPurchased: 0 }),
+            balance: newBal != null ? newBal : (Number(balance?.balance || 0) + qty),
+            totalPurchased: Number(balance?.totalPurchased || 0) + qty,
+          };
+          slot.innerHTML = balanceHtml(balance, true);
+          showToast(t('admin.usersDetail.grantSuccess', { n: qty }), 'success');
+        }
       } catch (err) {
-        console.error('adminGrantCredits', err);
+        console.error('credit adjust', err);
         errEl.textContent = err?.message || t('common.error');
         errEl.classList.remove('hidden');
         submitBtn.disabled = false;
-        submitBtn.textContent = d.grantConfirm;
+        submitBtn.textContent = confirmLabel;
       }
     });
   }
 }
 
-function vouchersHtml(promos, redemptionsByCode, legacy) {
+function vouchersHtml(promos, redemptionsByCode, legacy, canManage = false) {
   const d = t('admin.usersDetail');
   const cards = [];
   for (const v of promos) {
@@ -243,13 +288,16 @@ function vouchersHtml(promos, redemptionsByCode, legacy) {
       : v.type === 'days' ? `${v.value} ${d.daysUnit}`
       : v.type === 'credits' ? `+${v.value} ${d.creditsUnit}`
       : fmtMoney(v.value);
+    const removeBtn = canManage
+      ? `<button type="button" data-voucher-remove="${escapeHtml(v.code)}" class="ml-2 text-[11px] text-red-500 hover:text-red-600 hover:underline shrink-0">${escapeHtml(d.voucherRemove)}</button>`
+      : '';
     cards.push(`
       <li class="flex items-center justify-between gap-3 py-1.5 border-b border-frost-deep/60 last:border-0">
         <span class="min-w-0">
           <span class="font-mono font-semibold text-[13px] text-blueberry-deep">${escapeHtml(v.code)}</span>
           <span class="text-[12px] text-dim ml-2">${escapeHtml(v.name || '')}</span>
         </span>
-        <span class="shrink-0 text-[13px] text-charcoal">${val} ${used ? badge('used') : (v.active === false ? badge('inactive') : badge('active'))}</span>
+        <span class="shrink-0 text-[13px] text-charcoal flex items-center">${val} ${used ? badge('used') : (v.active === false ? badge('inactive') : badge('active'))}${removeBtn}</span>
       </li>`);
   }
   if (legacy) {
@@ -260,8 +308,100 @@ function vouchersHtml(promos, redemptionsByCode, legacy) {
       </li>`);
   }
   const count = promos.length + (legacy ? 1 : 0);
-  if (!count) return sectionCard(d.vouchers, 0, emptyLine());
-  return sectionCard(d.vouchers, count, `<ul>${cards.join('')}</ul>`);
+  const assignRow = canManage
+    ? `<div data-voucher-assign class="mt-3 pt-3 border-t border-frost-deep/60">
+        <button type="button" data-voucher-assign-open class="text-[13px] text-blueberry hover:underline font-semibold">${escapeHtml(d.voucherAssignOpen)}</button>
+      </div>`
+    : '';
+  if (!count) return sectionCard(d.vouchers, 0, `${emptyLine()}${assignRow}`);
+  return sectionCard(d.vouchers, count, `<ul>${cards.join('')}</ul>${assignRow}`);
+}
+
+// Wire assign/remove of private promo vouchers on the user record (admin only).
+// Delegated on the (persistent) vouchers slot so it survives re-renders. Assign
+// picks from the private vouchers not already on this user; both actions call
+// the adminAssignVoucher callable (mutates promoVouchers.assignedUserIds).
+function wireVouchers(body, user, promos, redemptionsByCode, legacy) {
+  const slot = qs('[data-vouchers-slot]', body);
+  if (!slot) return;
+  const d = t('admin.usersDetail');
+  let assigned = [...promos];
+  let allPrivate = null; // lazy-loaded list of private vouchers
+
+  const rerender = () => { slot.innerHTML = vouchersHtml(assigned, redemptionsByCode, legacy, true); };
+
+  slot.addEventListener('click', async (e) => {
+    const rm = e.target.closest('[data-voucher-remove]');
+    const openAssign = e.target.closest('[data-voucher-assign-open]');
+    const doAssign = e.target.closest('[data-voucher-assign-confirm]');
+    const cancelAssign = e.target.closest('[data-voucher-assign-cancel]');
+
+    if (rm) {
+      const code = rm.dataset.voucherRemove;
+      rm.disabled = true;
+      try {
+        await adminAssignVoucherFn({ code, customerId: user.id, assign: false });
+        assigned = assigned.filter((v) => v.code !== code);
+        rerender();
+        showToast(t('admin.usersDetail.voucherRemoved', { code }), 'success');
+      } catch (err) {
+        console.error('adminAssignVoucher remove', err);
+        showToast(err?.message || t('common.error'), 'error');
+      }
+      return;
+    }
+
+    if (openAssign) {
+      const wrap = qs('[data-voucher-assign]', slot);
+      if (wrap) wrap.innerHTML = `<p class="text-[13px] text-dim">${escapeHtml(t('common.loading'))}</p>`;
+      try {
+        if (!allPrivate) {
+          const all = await listVouchers();
+          allPrivate = all.filter((v) => v.visibility === 'private');
+        }
+        const assignedCodes = new Set(assigned.map((v) => v.code));
+        const options = allPrivate.filter((v) => !assignedCodes.has(v.code));
+        if (!options.length) {
+          if (wrap) wrap.innerHTML = `<p class="text-[13px] text-dim">${escapeHtml(d.voucherNonePrivate)}</p>`;
+          return;
+        }
+        const opts = options
+          .map((v) => `<option value="${escapeHtml(v.code)}">${escapeHtml(v.code)}${v.name ? ' — ' + escapeHtml(v.name) : ''}</option>`)
+          .join('');
+        if (wrap) wrap.innerHTML = `
+          <div class="flex gap-2 items-center">
+            <select data-voucher-select class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-blueberry">${opts}</select>
+            <button type="button" data-voucher-assign-confirm class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[13px] px-3 py-2 rounded-lg transition-colors shrink-0">${escapeHtml(d.voucherAssignConfirm)}</button>
+            <button type="button" data-voucher-assign-cancel class="px-3 py-2 rounded-lg bg-frost text-charcoal/70 font-semibold text-[13px] hover:bg-frost-deep transition-colors shrink-0">${escapeHtml(d.grantCancel)}</button>
+          </div>`;
+      } catch (err) {
+        console.error('listVouchers', err);
+        if (wrap) wrap.innerHTML = `<p class="text-[13px] text-red-500">${escapeHtml(err?.message || t('common.error'))}</p>`;
+      }
+      return;
+    }
+
+    if (cancelAssign) { rerender(); return; }
+
+    if (doAssign) {
+      const sel = qs('[data-voucher-select]', slot);
+      const code = sel?.value;
+      if (!code) return;
+      doAssign.disabled = true;
+      try {
+        await adminAssignVoucherFn({ code, customerId: user.id, assign: true });
+        const v = (allPrivate || []).find((x) => x.code === code);
+        if (v && !assigned.some((x) => x.code === code)) assigned.push(v);
+        rerender();
+        showToast(t('admin.usersDetail.voucherAssigned', { code }), 'success');
+      } catch (err) {
+        console.error('adminAssignVoucher assign', err);
+        showToast(err?.message || t('common.error'), 'error');
+        doAssign.disabled = false;
+      }
+      return;
+    }
+  });
 }
 
 function bookingsHtml(bookings) {
@@ -309,7 +449,7 @@ function transactionsHtml(txns) {
     return `
       <tr class="border-t border-frost-deep">
         <td class="px-2 py-2 text-[12px] text-charcoal whitespace-nowrap">${escapeHtml(fmtDateTime(tx.timestamp))}</td>
-        <td class="px-2 py-2 text-[12px] text-dim">${escapeHtml(tx.type || '—')}</td>
+        <td class="px-2 py-2 text-[12px] text-dim">${escapeHtml(txTypeLabel(tx.type))}</td>
         <td class="px-2 py-2 text-[12px] font-mono ${qtyCls} text-right">${qtyStr}</td>
         <td class="px-2 py-2 text-[12px] font-mono text-charcoal">${escapeHtml(tx.licensePlate || '—')}</td>
       </tr>`;
@@ -550,7 +690,11 @@ async function loadAndRender(user, body) {
   const canGrant = ['admin', 'agent', 'staff'].includes(getUserProfile()?.role) && !!uid;
   qs('[data-balance-slot]', body).innerHTML = balanceHtml(balance, canGrant);
   if (canGrant) wireGrantCredits(body, user, balance);
-  qs('[data-vouchers-slot]', body).innerHTML = vouchersHtml(promos, redemptionsByCode, legacy);
+  // Voucher assign/remove is an admin-only config action (promoVouchers writes
+  // are admin-gated in Firestore rules), so it's a tighter gate than canGrant.
+  const canManageVouchers = getUserProfile()?.role === 'admin' && !!uid;
+  qs('[data-vouchers-slot]', body).innerHTML = vouchersHtml(promos, redemptionsByCode, legacy, canManageVouchers);
+  if (canManageVouchers) wireVouchers(body, user, promos, redemptionsByCode, legacy);
   qs('[data-bookings-slot]', body).innerHTML = bookingsHtml(bookings);
   qs('[data-transactions-slot]', body).innerHTML = transactionsHtml(txns);
 }

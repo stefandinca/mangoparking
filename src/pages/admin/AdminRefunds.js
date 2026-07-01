@@ -3,7 +3,7 @@ import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { getCollection, where } from '../../firebase/db.js';
-import { openModal } from '../../components/core/Modal.js';
+import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
@@ -11,6 +11,7 @@ import { userNameButton, wireUserLinks } from '../../components/admin/UserDetail
 
 const adminMarkRefundedFn = httpsCallable(functions, 'adminMarkRefunded');
 const adminResendRefundEmailFn = httpsCallable(functions, 'adminResendRefundEmail');
+const adminResolveCheckoutRefundFn = httpsCallable(functions, 'adminResolveCheckoutRefund');
 
 const HISTORY_DAYS = 90;
 
@@ -126,9 +127,12 @@ export default async function AdminRefunds(container) {
   });
 
   const sinceIso = new Date(Date.now() - HISTORY_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const [pendingRaw, refundedAll] = await Promise.all([
+  const [pendingRaw, refundedAll, partialRaw] = await Promise.all([
     getCollection('bookings', where('paymentStatus', '==', 'refund-pending')).catch(() => []),
     getCollection('bookings', where('paymentStatus', '==', 'refunded')).catch(() => []),
+    // Partial refunds owed from a check-out-date shortening — the booking is
+    // still active/completed, so these don't carry paymentStatus 'refund-pending'.
+    getCollection('bookings', where('pendingRefundAmount', '>', 0)).catch(() => []),
   ]);
   // Drop anything that was never actually paid — there's nothing to refund.
   // (The cancel path already routes unpaid cancels to 'cancelled'; this also
@@ -140,6 +144,10 @@ export default async function AdminRefunds(container) {
   const history = refundedAll
     .filter((b) => (b.refundedAt || '') >= sinceIso)
     .sort((a, b) => String(b.refundedAt || '').localeCompare(String(a.refundedAt || '')));
+
+  const partial = partialRaw
+    .filter((b) => Number(b.pendingRefundAmount) > 0)
+    .sort((a, b) => String(b.pendingRefundCreatedAt || '').localeCompare(String(a.pendingRefundCreatedAt || '')));
 
   const totalAmount = pending.reduce((acc, b) => acc + (Number(b.totalPrice) || 0), 0);
   const failedCount = history.filter((b) => b.refundEmail?.status === 'failed').length;
@@ -194,6 +202,47 @@ export default async function AdminRefunds(container) {
     </section>
   `;
 
+  const partialRowHtml = (b) => {
+    const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+    const amt = Number(b.pendingRefundAmount || 0);
+    return `
+      <tr class="border-t border-frost-deep">
+        <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(code)}</td>
+        <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(b.licensePlate || '—')}</td>
+        <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
+        <td class="px-4 py-3 text-[13px] text-dim">${escapeHtml(paidByLabel(b.paidBy))}</td>
+        <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right">${amt} ${t('common.lei')}</td>
+        <td class="px-4 py-3 text-right">
+          <button type="button" data-resolve-checkout-refund="${escapeHtml(b.id)}" data-paidby="${escapeHtml(b.paidBy || '')}" data-amount="${amt}" data-code="${escapeHtml(code)}" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[12px] px-3 py-1.5 rounded-lg transition-colors">${t('refunds.markRefunded')}</button>
+        </td>
+      </tr>`;
+  };
+
+  const partialHtml = partial.length === 0 ? '' : `
+    <section class="mt-12">
+      <div class="mb-4">
+        <h2 class="font-heading text-2xl font-bold tracking-tight text-blueberry-deep">${t('refunds.partialTitle')}</h2>
+        <p class="text-dim text-[13px] mt-1">${t('refunds.partialSubtitle')}</p>
+      </div>
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-frost">
+              <tr class="text-left text-[12px] font-mono uppercase tracking-wider text-dim">
+                <th class="px-4 py-3 font-medium">${t('refunds.code')}</th>
+                <th class="px-4 py-3 font-medium">${t('refunds.plate')}</th>
+                <th class="px-4 py-3 font-medium">${t('refunds.customer')}</th>
+                <th class="px-4 py-3 font-medium">${t('refunds.paidVia')}</th>
+                <th class="px-4 py-3 font-medium text-right">${t('refunds.amount')}</th>
+                <th class="px-4 py-3 font-medium text-right">${t('refunds.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>${partial.map(partialRowHtml).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>`;
+
   const tableHtml = pending.length === 0
     ? `<div class="card-solid rounded-2xl p-10 text-center text-dim">${t('refunds.emptyQueue')}</div>`
     : `
@@ -241,6 +290,8 @@ export default async function AdminRefunds(container) {
 
     ${tableHtml}
 
+    ${partialHtml}
+
     ${historyHtml}
   `;
 
@@ -277,6 +328,29 @@ export default async function AdminRefunds(container) {
       showToast(err?.message || t('common.error'), 'error');
       btn.disabled = false;
       btn.textContent = originalText;
+    }
+  });
+
+  // Resolve a partial refund owed from a check-out-date shortening. The money
+  // movement is manual (like the main queue); this just clears the flag + audits.
+  page.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-resolve-checkout-refund]');
+    if (!btn || btn.disabled) return;
+    const bookingId = btn.dataset.resolveCheckoutRefund;
+    const paidBy = btn.dataset.paidby;
+    const amount = btn.dataset.amount;
+    const code = btn.dataset.code;
+    const ok = await confirmModal(t('refunds.partialConfirm', { amount, code }), { confirmText: t('refunds.markRefunded') });
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      await adminResolveCheckoutRefundFn({ bookingId, refundedVia: suggestedVia(paidBy) });
+      showToast(t('refunds.partialResolved', { amount }), 'success');
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      console.error('adminResolveCheckoutRefund', err);
+      showToast(err?.message || t('common.error'), 'error');
+      btn.disabled = false;
     }
   });
 }
