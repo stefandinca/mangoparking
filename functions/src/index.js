@@ -2939,18 +2939,17 @@ export const adminChargeOverstay = onCall(
   }
 );
 
-// ── previewCheckoutReprice (callable) ───────────────────────────────────
-// Read-only: re-prices an active long-term booking against a new check-out
-// (pick-up) datetime using the authoritative tier/seasonal pricer, and
-// returns the price difference vs the current stay. The difference is the
-// STANDARD incremental cost (two authoritative recomputes), independent of
-// any discount originally applied — collected at the desk like an overstay.
-// No writes; drives the admin edit-dialog preview.
-export const previewCheckoutReprice = onCall(
+// ── previewBookingReprice (callable) ────────────────────────────────────
+// Read-only: re-prices a long-term booking (upcoming or active) against new
+// drop-off / pick-up datetimes using the authoritative tier/seasonal pricer,
+// and returns the price difference vs the current stay. The difference is the
+// STANDARD incremental cost (two authoritative recomputes), independent of any
+// discount originally applied. No writes; drives the admin edit-dialog preview.
+export const previewBookingReprice = onCall(
   { region: 'europe-west1', cors: true },
   async (request) => {
     await assertStaff(request);
-    const { bookingId, newPickupAt } = request.data || {};
+    const { bookingId, newDropoffAt, newPickupAt } = request.data || {};
     if (!bookingId || !newPickupAt) {
       throw new HttpsError('invalid-argument', 'Missing bookingId or newPickupAt');
     }
@@ -2963,8 +2962,9 @@ export const previewCheckoutReprice = onCall(
       throw new HttpsError('failed-precondition', 'Only long-term bookings can be re-priced');
     }
 
-    const newCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: newPickupAt });
-    if (!newCalc.ok) throw new HttpsError('invalid-argument', newCalc.error || 'Could not price the new date');
+    const dropoff = newDropoffAt || b.dropoffAt;
+    const newCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: dropoff, pickupAt: newPickupAt });
+    if (!newCalc.ok) throw new HttpsError('invalid-argument', newCalc.error || 'Could not price the new dates');
     const oldCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: b.pickupAt });
     const oldTotal = oldCalc.ok ? oldCalc.expected : (Number(b.totalPrice) || 0);
 
@@ -2975,27 +2975,29 @@ export const previewCheckoutReprice = onCall(
       newTotal: newCalc.expected,
       oldTotal,
       difference: newCalc.expected - oldTotal,
+      paid: b.paymentStatus === 'paid',
     };
   }
 );
 
-// ── adminAdjustBookingCheckout (callable) ───────────────────────────────
-// Changes the check-out (pick-up) datetime on an active long-term booking
-// and settles the price difference (server re-derives it — never trusts the
-// client number):
-//   • extension (difference > 0): collect the extra at the desk (cash →
-//     cashbook, card → terminal), tracked in a separate `extensionPrice`
-//     accumulator + an `extension` ledger row — mirrors adminChargeOverstay.
-//   • shortening (difference < 0): the overpaid amount is routed to the
-//     Refunds queue (`pendingRefundAmount`); the booking stays active and
-//     check-out-able.
-// pickupAt / endDate / days are updated to reflect the new check-out.
+// ── adminRepriceBooking (callable) ──────────────────────────────────────
+// Moves a long-term booking's drop-off and/or pick-up datetime (upcoming or
+// active) and re-prices it. Server re-derives the price — never trusts the
+// client. Settlement depends on payment state:
+//   • unpaid (pay-at-pickup, upcoming only): re-quote — rewrite totalPrice /
+//     basePrice / days and keep the linked pending order's amount in sync. No
+//     money moves; the new total is collected at pick-up as usual.
+//   • paid: settle the difference like an overstay — extension (difference > 0)
+//     collects the extra at the desk (cash → cashbook, card → terminal) into a
+//     separate `extensionPrice` accumulator + an `extension` ledger row;
+//     shortening (difference < 0) routes the overpaid amount to the Refunds
+//     queue (`pendingRefundAmount`). The booking stays check-out-able.
 // Money op → agent gate (drivers excluded).
-export const adminAdjustBookingCheckout = onCall(
+export const adminRepriceBooking = onCall(
   { region: 'europe-west1', cors: true },
   async (request) => {
     const { uid } = await assertAgent(request);
-    const { bookingId, newPickupAt, paidBy = 'cash' } = request.data || {};
+    const { bookingId, newDropoffAt, newPickupAt, paidBy = 'cash' } = request.data || {};
     if (!bookingId || !newPickupAt) {
       throw new HttpsError('invalid-argument', 'Missing bookingId or newPickupAt');
     }
@@ -3008,18 +3010,24 @@ export const adminAdjustBookingCheckout = onCall(
     if (b.type !== 'longTerm') {
       throw new HttpsError('failed-precondition', 'Only long-term bookings can be re-priced');
     }
-    if (b.status !== 'active') {
-      throw new HttpsError('failed-precondition', 'Booking is not checked in');
+    if (!['upcoming', 'active'].includes(b.status)) {
+      throw new HttpsError('failed-precondition', 'Booking cannot be re-priced in its current state');
     }
 
-    const newCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: newPickupAt });
-    if (!newCalc.ok) throw new HttpsError('invalid-argument', newCalc.error || 'Could not price the new date');
+    const newDropoff = newDropoffAt || b.dropoffAt;
+    if (Date.parse(newPickupAt) <= Date.parse(newDropoff)) {
+      throw new HttpsError('invalid-argument', 'Pick-up must be after drop-off');
+    }
+    const newCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: newDropoff, pickupAt: newPickupAt });
+    if (!newCalc.ok) throw new HttpsError('invalid-argument', newCalc.error || 'Could not price the new dates');
     const oldCalc = await computeAuthoritativeLongTermTotal({ dropoffAt: b.dropoffAt, pickupAt: b.pickupAt });
     const oldTotal = oldCalc.ok ? oldCalc.expected : (Number(b.totalPrice) || 0);
     const difference = newCalc.expected - oldTotal;
 
     const nowIso = new Date().toISOString();
     const patch = {
+      dropoffAt: newDropoff,
+      startDate: String(newDropoff).slice(0, 10),
       pickupAt: newPickupAt,
       endDate: String(newPickupAt).slice(0, 10),
       days: newCalc.days,
@@ -3028,6 +3036,34 @@ export const adminAdjustBookingCheckout = onCall(
       checkoutAdjustedBy: uid,
     };
 
+    // Unpaid pay-at-pickup → re-quote (rewrite the gross; no money moves now).
+    // The new total is collected at pick-up via the usual collect dialog, which
+    // reads the pending order's amount — so keep that in sync too.
+    if (b.paymentStatus !== 'paid') {
+      patch.totalPrice = newCalc.expected;
+      patch.basePrice = newCalc.expected;
+      await ref.update(patch);
+      if (b.paymentId) {
+        await db.collection('pendingOrders').doc(b.paymentId).update({
+          amount: newCalc.expected,
+          totalPrice: newCalc.expected,
+          days: newCalc.days,
+          dropoffAt: newDropoff,
+          pickupAt: newPickupAt,
+        }).catch(() => {}); // best-effort; the booking is the source of truth
+      }
+      await db.collection('auditLog').add({
+        action: 'booking_repriced',
+        entityType: 'booking',
+        entityId: bookingId,
+        actorUid: uid,
+        payload: { requote: true, newDropoff, newPickupAt, days: newCalc.days, oldTotal, newTotal: newCalc.expected },
+        timestamp: nowIso,
+      });
+      return { ok: true, requote: true, difference, days: newCalc.days, perDay: newCalc.perDay, newTotal: newCalc.expected };
+    }
+
+    // Paid → settle the difference (mirrors adminChargeOverstay).
     if (difference > 0) {
       if (!['cash', 'card'].includes(paidBy)) {
         throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
@@ -3045,7 +3081,7 @@ export const adminAdjustBookingCheckout = onCall(
         amount: difference,
         paidBy: storedPaidBy,
         timestamp: nowIso,
-        source: 'checkout-change',
+        source: 'reprice',
       });
 
       if (paidBy === 'cash') {
@@ -3060,7 +3096,7 @@ export const adminAdjustBookingCheckout = onCall(
       }
     } else if (difference < 0) {
       patch.pendingRefundAmount = (Number(b.pendingRefundAmount) || 0) + Math.abs(difference);
-      patch.pendingRefundReason = 'checkout-shortened';
+      patch.pendingRefundReason = 'reprice-shortened';
       patch.pendingRefundCreatedAt = nowIso;
       await ref.update(patch);
     } else {
@@ -3068,11 +3104,12 @@ export const adminAdjustBookingCheckout = onCall(
     }
 
     await db.collection('auditLog').add({
-      action: 'booking_checkout_adjusted',
+      action: 'booking_repriced',
       entityType: 'booking',
       entityId: bookingId,
       actorUid: uid,
       payload: {
+        newDropoff,
         newPickupAt,
         days: newCalc.days,
         oldTotal,
@@ -3087,12 +3124,12 @@ export const adminAdjustBookingCheckout = onCall(
   }
 );
 
-// ── adminResolveCheckoutRefund (callable) ───────────────────────────────
-// Clears a pending partial refund created by a check-out-date shortening
-// (adminAdjustBookingCheckout). Marks it resolved on the booking + audits;
-// the actual money movement (Netopia panel / cash returned / card terminal)
-// is manual, mirroring the main refund queue. Money op → agent gate.
-export const adminResolveCheckoutRefund = onCall(
+// ── adminResolvePendingRefund (callable) ────────────────────────────────
+// Clears a pending partial refund created by re-pricing a booking to a shorter
+// stay (adminRepriceBooking). Marks it resolved on the booking + audits; the
+// actual money movement (Netopia panel / cash returned / card terminal) is
+// manual, mirroring the main refund queue. Money op → agent gate.
+export const adminResolvePendingRefund = onCall(
   { region: 'europe-west1', cors: true },
   async (request) => {
     const { uid } = await assertAgent(request);

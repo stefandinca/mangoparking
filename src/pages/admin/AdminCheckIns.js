@@ -44,8 +44,8 @@ const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
 const adminChargeOverstayFn = httpsCallable(functions, 'adminChargeOverstay');
 const resendConfirmationFn = httpsCallable(functions, 'adminResendConfirmationEmail');
-const previewCheckoutRepriceFn = httpsCallable(functions, 'previewCheckoutReprice');
-const adminAdjustBookingCheckoutFn = httpsCallable(functions, 'adminAdjustBookingCheckout');
+const previewBookingRepriceFn = httpsCallable(functions, 'previewBookingReprice');
+const adminRepriceBookingFn = httpsCallable(functions, 'adminRepriceBooking');
 
 const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
@@ -1021,13 +1021,23 @@ function openEditBookingDialog({ booking }) {
   return new Promise((resolve) => {
     const c = booking.contact || {};
     const showLogistics = booking.status === 'upcoming';     // before check-in only
-    const showDates = showLogistics && booking.type !== 'credit';
-    // After check-in, a long-term booking's check-out date can still be moved.
-    // That re-prices the stay server-side and settles the difference (collect
-    // the extra / queue a refund) — see the submit handler below.
-    const showCheckoutReprice = booking.status === 'active' && booking.type === 'longTerm';
+    // Long-term bookings can be re-priced by moving their dates: both drop-off
+    // and pick-up while `upcoming`, or just the pick-up (check-out) once active.
+    // The server re-prices and settles the difference — collect the extra /
+    // queue a refund for a paid stay, or simply re-quote an unpaid
+    // pay-at-pickup one. See the submit handler below.
+    const canReprice = booking.type === 'longTerm' && (booking.status === 'upcoming' || booking.status === 'active');
+    const isPaid = booking.paymentStatus === 'paid';
     const inputCls = 'w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry';
     const labelCls = 'block text-[13px] font-medium text-charcoal/70 mb-1.5';
+
+    const toIso = (raw) => new Date(String(raw).replace(' ', 'T')).toISOString();
+    const currentDropoffIso = booking.dropoffAt
+      ? new Date(booking.dropoffAt).toISOString()
+      : (booking.startDate ? new Date(`${booking.startDate}T00:00:00`).toISOString() : null);
+    const currentPickupIso = booking.pickupAt
+      ? new Date(booking.pickupAt).toISOString()
+      : (booking.endDate ? new Date(`${booking.endDate}T00:00:00`).toISOString() : null);
 
     const form = html`<form class="space-y-4" data-edit-form>
       <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.editTitle')}</h3>
@@ -1054,24 +1064,24 @@ function openEditBookingDialog({ booking }) {
         <label class="${labelCls}">${t('checkins.colPlate')} *</label>
         <input name="plate" value="${escapeHtml(booking.licensePlate || '')}" class="${inputCls} uppercase font-mono">
       </div>` : ''}
-      ${showDates ? `
-      <div class="grid sm:grid-cols-2 gap-3">
-        <div>
-          <label class="${labelCls}">${t('checkins.detailDropoff')} *</label>
-          ${dateTimeFieldHtml({ name: 'dropoffAt', value: isoToFlatpickr(booking.dropoffAt || booking.startDate), classes: inputCls })}
-        </div>
-        <div>
-          <label class="${labelCls}">${t('checkins.detailPickup')} *</label>
-          ${dateTimeFieldHtml({ name: 'pickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
-        </div>
-      </div>` : ''}
-      ${showCheckoutReprice ? `
+      ${canReprice ? `
       <div class="rounded-xl bg-frost border border-frost-deep p-3 space-y-3">
         <p class="text-[13px] font-semibold text-charcoal">${t('checkins.repriceTitle')}</p>
+        ${showLogistics ? `
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="${labelCls}">${t('checkins.detailDropoff')} *</label>
+            ${dateTimeFieldHtml({ name: 'dropoffAt', value: isoToFlatpickr(booking.dropoffAt || booking.startDate), classes: inputCls })}
+          </div>
+          <div>
+            <label class="${labelCls}">${t('checkins.detailPickup')} *</label>
+            ${dateTimeFieldHtml({ name: 'pickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
+          </div>
+        </div>` : `
         <div>
           <label class="${labelCls}">${t('checkins.detailPickup')}</label>
-          ${dateTimeFieldHtml({ name: 'newPickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
-        </div>
+          ${dateTimeFieldHtml({ name: 'pickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
+        </div>`}
         <div data-reprice-preview class="text-[13px]"></div>
         <div data-reprice-pay class="hidden">
           <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('checkins.paidBy')}</label>
@@ -1099,18 +1109,26 @@ function openEditBookingDialog({ booking }) {
     </form>`;
 
     const modal = openModal(form, { onClose: () => resolve() });
-    if (showDates || showCheckoutReprice) wireDateTime(form);
+    if (canReprice) wireDateTime(form);
     const errEl = qs('[data-edit-err]', form);
     const showErr = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
     qs('[data-cancel]', form).addEventListener('click', () => modal.close());
 
-    // Live re-price preview when the check-out date is moved on an active
-    // long-term booking. Informational only — the submit path re-derives the
-    // authoritative difference server-side before collecting / refunding.
-    const currentPickupIso = booking.pickupAt
-      ? new Date(booking.pickupAt).toISOString()
-      : (booking.endDate ? new Date(booking.endDate).toISOString() : null);
-    if (showCheckoutReprice) {
+    // Reads the (possibly changed) dates from the form. Active bookings only
+    // expose the pick-up field — drop-off stays at its current value.
+    const readDates = () => {
+      const pRaw = qs('[name="pickupAt"]', form)?.value;
+      const dRaw = qs('[name="dropoffAt"]', form)?.value;
+      const newPickup = pRaw ? toIso(pRaw) : null;
+      const newDropoff = dRaw ? toIso(dRaw) : currentDropoffIso;
+      const changed = !!newPickup && ((newPickup !== currentPickupIso) || (newDropoff !== currentDropoffIso));
+      return { newDropoff, newPickup, changed };
+    };
+
+    // Live re-price preview when a date is moved. Informational only — the
+    // submit path re-derives the authoritative difference server-side. For an
+    // unpaid pay-at-pickup booking it just shows the new total (re-quote).
+    if (canReprice) {
       const previewEl = qs('[data-reprice-preview]', form);
       const payEl = qs('[data-reprice-pay]', form);
       const paidbyWrap = qs('[data-reprice-paidby]', form);
@@ -1124,27 +1142,32 @@ function openEditBookingDialog({ booking }) {
         });
       });
       const runPreview = async () => {
-        const raw = qs('[name="newPickupAt"]', form)?.value;
-        if (!raw) return;
-        const iso = new Date(String(raw).replace(' ', 'T')).toISOString();
-        if (iso === currentPickupIso) { previewEl.textContent = ''; payEl.classList.add('hidden'); return; }
+        const { newDropoff, newPickup, changed } = readDates();
+        if (!newPickup || !changed) { previewEl.textContent = ''; payEl.classList.add('hidden'); return; }
         previewEl.textContent = t('common.loading');
         try {
-          const res = await previewCheckoutRepriceFn({ bookingId: booking.id, newPickupAt: iso });
+          const res = await previewBookingRepriceFn({ bookingId: booking.id, newDropoffAt: newDropoff, newPickupAt: newPickup });
           const { days, perDay, newTotal, difference } = res?.data || {};
           const diff = Number(difference) || 0;
-          const line = diff > 0 ? t('checkins.repriceCollect', { amount: diff })
-            : diff < 0 ? t('checkins.repriceRefund', { amount: Math.abs(diff) })
-            : t('checkins.repriceNoChange');
-          const cls = diff > 0 ? 'text-mango' : diff < 0 ? 'text-leaf' : 'text-dim';
+          let line; let cls;
+          if (!isPaid) {
+            line = t('checkins.repriceRequote', { amount: newTotal });
+            cls = 'text-charcoal';
+          } else {
+            line = diff > 0 ? t('checkins.repriceCollect', { amount: diff })
+              : diff < 0 ? t('checkins.repriceRefund', { amount: Math.abs(diff) })
+              : t('checkins.repriceNoChange');
+            cls = diff > 0 ? 'text-mango' : diff < 0 ? 'text-leaf' : 'text-dim';
+          }
           previewEl.innerHTML = `<div class="text-dim">${escapeHtml(t('transactions.priceComputed', { total: newTotal, days, perDay }))}</div><div class="mt-1 font-semibold ${cls}">${escapeHtml(line)}</div>`;
-          payEl.classList.toggle('hidden', !(diff > 0));
+          payEl.classList.toggle('hidden', !(isPaid && diff > 0));
         } catch (err) {
           previewEl.textContent = err?.message || t('common.error');
           payEl.classList.add('hidden');
         }
       };
-      qs('[name="newPickupAt"]', form)?.addEventListener('change', runPreview);
+      qs('[name="pickupAt"]', form)?.addEventListener('change', runPreview);
+      qs('[name="dropoffAt"]', form)?.addEventListener('change', runPreview);
     }
 
     form.addEventListener('submit', async (e) => {
@@ -1157,21 +1180,24 @@ function openEditBookingDialog({ booking }) {
       if (!isValidEmail(email)) return showErr(t('checkins.editErrorEmail'));
       if (!isValidPhone(phone)) return showErr(t('checkins.editErrorPhone'));
 
+      // Contact / plate / notes go through updateBookingDetails; date changes on
+      // a long-term booking are re-priced + settled by the callable below (so
+      // days / price stay authoritative), never written here.
       const patch = { contact: { name, email, phone }, notes: qs('[name="notes"]', form).value.trim() };
       if (showLogistics) {
         const plate = qs('[name="plate"]', form).value.trim().toUpperCase();
         if (!isValidLicensePlate(plate)) return showErr(t('checkins.errorInvalidPlate'));
         patch.licensePlate = plate;
-        if (showDates) {
-          const dRaw = qs('[name="dropoffAt"]', form).value;
-          const pRaw = qs('[name="pickupAt"]', form).value;
-          if (!dRaw || !pRaw) return showErr(t('checkins.editErrorDates'));
-          const dIso = new Date(String(dRaw).replace(' ', 'T')).toISOString();
-          const pIso = new Date(String(pRaw).replace(' ', 'T')).toISOString();
-          if (Date.parse(pIso) <= Date.parse(dIso)) return showErr(t('checkins.editErrorDates'));
-          patch.dropoffAt = dIso;
-          patch.pickupAt = pIso;
-        }
+      }
+
+      let newDropoff = null; let newPickup = null; let doReprice = false;
+      if (canReprice) {
+        const dEl = qs('[name="dropoffAt"]', form);
+        const dates = readDates();
+        if (!dates.newPickup || (dEl && !dEl.value)) return showErr(t('checkins.editErrorDates'));
+        newDropoff = dates.newDropoff; newPickup = dates.newPickup;
+        if (!newDropoff || Date.parse(newPickup) <= Date.parse(newDropoff)) return showErr(t('checkins.editErrorDates'));
+        doReprice = dates.changed;
       }
 
       const submitBtn = form.querySelector('button[type="submit"]');
@@ -1179,17 +1205,15 @@ function openEditBookingDialog({ booking }) {
       submitBtn.textContent = t('common.loading');
       try {
         await updateBookingDetails(booking.id, patch);
-        // Active long-term bookings: if the check-out date was moved, re-price
-        // and settle the difference (collect the extra / queue a refund). The
-        // server re-derives the difference — the live preview is advisory only.
+        // If a long-term booking's dates changed, re-price + settle server-side:
+        // collect the extra / queue a refund on a paid stay, or re-quote an
+        // unpaid one. The server re-derives the difference — preview is advisory.
         let repriceMsg = null;
-        if (showCheckoutReprice) {
-          const raw = qs('[name="newPickupAt"]', form)?.value;
-          const iso = raw ? new Date(String(raw).replace(' ', 'T')).toISOString() : null;
-          if (iso && iso !== currentPickupIso) {
-            const pv = await previewCheckoutRepriceFn({ bookingId: booking.id, newPickupAt: iso });
+        if (doReprice) {
+          const paidBy = form.querySelector('input[name="repricePaidBy"]:checked')?.value || 'cash';
+          if (isPaid) {
+            const pv = await previewBookingRepriceFn({ bookingId: booking.id, newDropoffAt: newDropoff, newPickupAt: newPickup });
             const diffNow = Number(pv?.data?.difference) || 0;
-            const paidBy = form.querySelector('input[name="repricePaidBy"]:checked')?.value || 'cash';
             if (diffNow > 0) {
               const methodLabel = paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard');
               const ok = await confirmModal(t('checkins.collectConfirm', { amount: diffNow, method: methodLabel }), { confirmText: t('checkins.repriceConfirm') });
@@ -1198,12 +1222,14 @@ function openEditBookingDialog({ booking }) {
               const ok = await confirmModal(t('checkins.repriceRefundConfirm', { amount: Math.abs(diffNow) }), { confirmText: t('checkins.repriceConfirm') });
               if (!ok) { showToast(t('checkins.editSaved'), 'success'); modal.close(); resolve(); return; }
             }
-            const adj = await adminAdjustBookingCheckoutFn({ bookingId: booking.id, newPickupAt: iso, paidBy });
-            const diff = Number(adj?.data?.difference) || 0;
-            repriceMsg = diff > 0 ? t('checkins.repriceCollected', { amount: diff })
-              : diff < 0 ? t('checkins.repriceRefundQueued', { amount: Math.abs(diff) })
-              : t('checkins.repriceUpdated');
           }
+          const adj = await adminRepriceBookingFn({ bookingId: booking.id, newDropoffAt: newDropoff, newPickupAt: newPickup, paidBy });
+          const out = adj?.data || {};
+          const diff = Number(out.difference) || 0;
+          repriceMsg = out.requote ? t('checkins.repriceRequoted', { amount: out.newTotal })
+            : diff > 0 ? t('checkins.repriceCollected', { amount: diff })
+            : diff < 0 ? t('checkins.repriceRefundQueued', { amount: Math.abs(diff) })
+            : t('checkins.repriceUpdated');
         }
         showToast(repriceMsg || t('checkins.editSaved'), 'success');
         modal.close();

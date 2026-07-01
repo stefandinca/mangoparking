@@ -11,7 +11,7 @@ import { userNameButton, wireUserLinks } from '../../components/admin/UserDetail
 
 const adminMarkRefundedFn = httpsCallable(functions, 'adminMarkRefunded');
 const adminResendRefundEmailFn = httpsCallable(functions, 'adminResendRefundEmail');
-const adminResolveCheckoutRefundFn = httpsCallable(functions, 'adminResolveCheckoutRefund');
+const adminResolvePendingRefundFn = httpsCallable(functions, 'adminResolvePendingRefund');
 
 const HISTORY_DAYS = 90;
 
@@ -344,11 +344,11 @@ export default async function AdminRefunds(container) {
     if (!ok) return;
     btn.disabled = true;
     try {
-      await adminResolveCheckoutRefundFn({ bookingId, refundedVia: suggestedVia(paidBy) });
+      await adminResolvePendingRefundFn({ bookingId, refundedVia: suggestedVia(paidBy) });
       showToast(t('refunds.partialResolved', { amount }), 'success');
       setTimeout(() => window.location.reload(), 600);
     } catch (err) {
-      console.error('adminResolveCheckoutRefund', err);
+      console.error('adminResolvePendingRefund', err);
       showToast(err?.message || t('common.error'), 'error');
       btn.disabled = false;
     }
