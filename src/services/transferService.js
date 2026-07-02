@@ -24,7 +24,8 @@
 //   returnTo           string   — round-trip only (defaults to pickupAddress)
 //   price              string   — free-text note, e.g. "150 lei"
 //   groupNotes         string   — special/oversized luggage, disability, etc.
-//   status             'scheduled' | 'completed' | 'cancelled'
+//   status             'scheduled' | 'completed' | 'cancelled'  — OUTBOUND leg
+//   returnStatus       'scheduled' | 'completed' | 'cancelled'  — return leg (round-trip)
 //   createdBy          uid
 //   createdAt/updatedAt serverTimestamp (added by db helpers)
 
@@ -73,7 +74,8 @@ export async function createTransfer(data) {
   const doc = normalize(data);
   const id = await addDocument(COLLECTION, {
     ...doc,
-    status: 'scheduled',
+    status: 'scheduled',        // outbound leg
+    returnStatus: 'scheduled',  // return leg (only acted on for round trips)
     createdBy: getCurrentUser()?.uid || null,
   });
   await auditLog('transfer_created', 'transfer', id, null, doc);
@@ -86,10 +88,14 @@ export async function updateTransfer(id, data) {
   await auditLog('transfer_updated', 'transfer', id, null, patch);
 }
 
-export async function setTransferStatus(id, status) {
+// Sets the status of a single leg. `leg` is 'out' (outbound, the default and
+// the only leg a one-way transfer has) or 'return' (the round-trip return leg,
+// stored separately so it can be completed/cancelled independently).
+export async function setTransferStatus(id, status, leg = 'out') {
   const next = STATUSES.includes(status) ? status : 'scheduled';
-  await updateDocument(COLLECTION, id, { status: next });
-  await auditLog('transfer_status', 'transfer', id, null, { status: next });
+  const field = leg === 'return' ? 'returnStatus' : 'status';
+  await updateDocument(COLLECTION, id, { [field]: next });
+  await auditLog('transfer_status', 'transfer', id, null, { status: next, leg });
 }
 
 export async function deleteTransfer(id) {

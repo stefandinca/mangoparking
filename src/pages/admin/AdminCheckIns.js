@@ -462,14 +462,14 @@ function transferTypeChip(tr) {
   return `<span class="${base} bg-blueberry/10 text-blueberry">${carIcon}${label}</span>`;
 }
 
-function transferStatusBadge(tr) {
-  const status = tr.status || 'scheduled';
+function transferStatusBadge(status) {
+  const s = status || 'scheduled';
   const map = {
     scheduled: ['bg-mango/10 text-mango', t('transfers.statusScheduled')],
     completed: ['bg-leaf/10 text-leaf', t('transfers.statusCompleted')],
     cancelled: ['bg-gray-100 text-dim', t('transfers.statusCancelled')],
   };
-  const [cls, label] = map[status] || map.scheduled;
+  const [cls, label] = map[s] || map.scheduled;
   return `<span class="inline-flex items-center text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls}">${label}</span>`;
 }
 
@@ -497,7 +497,10 @@ function transferCardHtml(tr, { locale, canCancel, leg = 'out' }) {
   const legBadge = roundtrip
     ? `<span class="inline-flex items-center text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${isReturn ? 'bg-blueberry/10 text-blueberry' : 'bg-leaf/10 text-leaf'}">${isReturn ? t('transfers.legReturn') : t('transfers.legOutbound')}</span>`
     : '';
-  const isScheduled = (tr.status || 'scheduled') === 'scheduled';
+  // Status is per leg: the outbound uses `status`, the return uses `returnStatus`.
+  const legStatusVal = isReturn ? (tr.returnStatus || 'scheduled') : (tr.status || 'scheduled');
+  const isScheduled = legStatusVal === 'scheduled';
+  const legAttr = `data-transfer="${escapeHtml(tr.id)}" data-leg="${leg}"`;
 
   const detail = (label, value) => `
     <div class="flex justify-between gap-3 py-1 border-b border-frost-deep/60 last:border-0">
@@ -515,14 +518,14 @@ function transferCardHtml(tr, { locale, canCancel, leg = 'out' }) {
   const returnLine = `${escapeHtml(tr.returnTo || tr.pickupAddress || '—')} · ${fmtDateTime(tr.returnAt, locale)}${tr.returnFlightNumber ? ` · ${escapeHtml(tr.returnFlightNumber)}` : ''}`;
 
   const actions = [
-    actionButton({ key: 'transfer-edit', label: t('transfers.actionEdit'), variant: 'neutral', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }),
+    actionButton({ key: 'transfer-edit', label: t('transfers.actionEdit'), variant: 'neutral', dataAttrs: legAttr }),
   ];
   if (isScheduled) {
-    actions.push(actionButton({ key: 'transfer-complete', label: t('transfers.actionComplete'), variant: 'primary', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }));
-    actions.push(actionButton({ key: 'transfer-cancel', label: t('transfers.actionCancel'), variant: 'warning', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }));
+    actions.push(actionButton({ key: 'transfer-complete', label: t('transfers.actionComplete'), variant: 'primary', dataAttrs: legAttr }));
+    actions.push(actionButton({ key: 'transfer-cancel', label: t('transfers.actionCancel'), variant: 'warning', dataAttrs: legAttr }));
   }
   if (canCancel) {
-    actions.push(actionButton({ key: 'transfer-delete', label: t('transfers.actionDelete'), variant: 'danger', dataAttrs: `data-transfer="${escapeHtml(tr.id)}"` }));
+    actions.push(actionButton({ key: 'transfer-delete', label: t('transfers.actionDelete'), variant: 'danger', dataAttrs: legAttr }));
   }
 
   return `
@@ -536,7 +539,7 @@ function transferCardHtml(tr, { locale, canCancel, leg = 'out' }) {
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <span class="text-[12px] font-mono text-charcoal/70 hidden sm:inline">${headerTime}</span>
-          ${transferStatusBadge(tr)}
+          ${transferStatusBadge(legStatusVal)}
           <svg data-transfer-chevron class="w-4 h-4 text-dim transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
         </div>
       </button>
@@ -881,6 +884,13 @@ export default async function AdminCheckIns(container) {
     if (!id) return;
     const tr = transfers.find((x) => x.id === id);
     if (!tr) return;
+    // Which leg the button belongs to (round-trip return vs outbound). Complete
+    // / cancel act on that leg only; edit / delete act on the whole record.
+    const leg = btn.dataset.leg === 'return' ? 'return' : 'out';
+    const legLabel = tr.transferType === 'roundtrip'
+      ? (leg === 'return' ? t('transfers.legReturn') : t('transfers.legOutbound'))
+      : '';
+    const who = legLabel ? `${tr.contactName || '—'} (${legLabel})` : (tr.contactName || '—');
     btn.disabled = true;
     try {
       if (action === 'transfer-edit') {
@@ -889,14 +899,14 @@ export default async function AdminCheckIns(container) {
           rerender();
         }, { editTransfer: tr });
       } else if (action === 'transfer-complete') {
-        await setTransferStatus(id, 'completed');
+        await setTransferStatus(id, 'completed', leg);
         showToast(t('transfers.statusToast'), 'success');
       } else if (action === 'transfer-cancel') {
-        const ok = await confirmModal(t('transfers.cancelConfirm', { name: tr.contactName || '—' }), {
+        const ok = await confirmModal(t('transfers.cancelConfirm', { name: who }), {
           danger: true, confirmText: t('transfers.actionCancel'),
         });
         if (!ok) return;
-        await setTransferStatus(id, 'cancelled');
+        await setTransferStatus(id, 'cancelled', leg);
         showToast(t('transfers.statusToast'), 'success');
       } else if (action === 'transfer-delete') {
         const ok = await confirmModal(t('transfers.deleteConfirm', { name: tr.contactName || '—' }), {

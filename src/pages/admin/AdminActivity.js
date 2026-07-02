@@ -111,10 +111,11 @@ export default function AdminActivity(container) {
       if (b.status === 'active' && pickup && inWin(pickup)) events.push({ at: pickup, kind: 'checkout', booking: b });
     }
     for (const tr of transfers) {
-      if (tr.status !== 'scheduled') continue;
-      if (tr.pickupAt && inWin(tr.pickupAt)) events.push({ at: tr.pickupAt, kind: 'transfer-out', transfer: tr });
+      // Status is per leg — an outbound can be completed while the return is
+      // still due, so each leg is gated on its own status (default scheduled).
+      if (tr.pickupAt && (tr.status || 'scheduled') === 'scheduled' && inWin(tr.pickupAt)) events.push({ at: tr.pickupAt, kind: 'transfer-out', transfer: tr });
       // Round-trip return leg is its own event at the return time.
-      if (tr.transferType === 'roundtrip' && tr.returnAt && inWin(tr.returnAt)) events.push({ at: tr.returnAt, kind: 'transfer-return', transfer: tr });
+      if (tr.transferType === 'roundtrip' && tr.returnAt && (tr.returnStatus || 'scheduled') === 'scheduled' && inWin(tr.returnAt)) events.push({ at: tr.returnAt, kind: 'transfer-return', transfer: tr });
     }
     events.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     return events;
