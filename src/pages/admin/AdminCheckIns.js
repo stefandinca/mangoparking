@@ -1046,9 +1046,10 @@ export default async function AdminCheckIns(container) {
 }
 
 // ── Edit reservation (contact + logistics) ───────────────────────────────
-// Agents/admins edit a booking's contact (name/email/phone) any time, plus
-// plate + dates while it's still `upcoming` (editing those after check-in would
-// desync activeCheckIns / the assigned spot). No money/payment/status here.
+// Agents/admins edit a booking's contact (name/email/phone) any time. The
+// plate stays editable only while `upcoming` (it keys the activeCheckIns row).
+// Long-term drop-off / pick-up dates can be edited while upcoming OR active —
+// changing them re-prices the stay and settles the difference (see below).
 function isoToFlatpickr(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -1061,8 +1062,10 @@ function openEditBookingDialog({ booking }) {
   return new Promise((resolve) => {
     const c = booking.contact || {};
     const showLogistics = booking.status === 'upcoming';     // before check-in only
-    // Long-term bookings can be re-priced by moving their dates: both drop-off
-    // and pick-up while `upcoming`, or just the pick-up (check-out) once active.
+    // Long-term bookings can be re-priced by moving their dates — BOTH the
+    // drop-off (check-in) and the pick-up (check-out), whether the booking is
+    // still `upcoming` or already `active` (an active drop-off edit corrects
+    // the billing start; it doesn't touch the plate-keyed activeCheckIns row).
     // The server re-prices and settles the difference — collect the extra /
     // queue a refund for a paid stay, or simply re-quote an unpaid
     // pay-at-pickup one. See the submit handler below.
@@ -1107,7 +1110,6 @@ function openEditBookingDialog({ booking }) {
       ${canReprice ? `
       <div class="rounded-xl bg-frost border border-frost-deep p-3 space-y-3">
         <p class="text-[13px] font-semibold text-charcoal">${t('checkins.repriceTitle')}</p>
-        ${showLogistics ? `
         <div class="grid sm:grid-cols-2 gap-3">
           <div>
             <label class="${labelCls}">${t('checkins.detailDropoff')} *</label>
@@ -1117,11 +1119,7 @@ function openEditBookingDialog({ booking }) {
             <label class="${labelCls}">${t('checkins.detailPickup')} *</label>
             ${dateTimeFieldHtml({ name: 'pickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
           </div>
-        </div>` : `
-        <div>
-          <label class="${labelCls}">${t('checkins.detailPickup')}</label>
-          ${dateTimeFieldHtml({ name: 'pickupAt', value: isoToFlatpickr(booking.pickupAt || booking.endDate), classes: inputCls })}
-        </div>`}
+        </div>
         <div data-reprice-preview class="text-[13px]"></div>
         <div data-reprice-pay class="hidden">
           <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('checkins.paidBy')}</label>
