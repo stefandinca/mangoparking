@@ -1606,6 +1606,8 @@ export default {
     transferTypeLabel: 'Transfer type',
     typeOneway: 'One-way',
     typeRoundtrip: 'Round-trip',
+    legOutbound: 'Outbound',
+    legReturn: 'Return',
     flightNumber: 'Flight number',
     adults: 'Adults',
     children: 'Children',

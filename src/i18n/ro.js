@@ -1622,6 +1622,8 @@ export default {
     transferTypeLabel: 'Tip transfer',
     typeOneway: 'Doar dus',
     typeRoundtrip: 'Dus-întors',
+    legOutbound: 'Dus',
+    legReturn: 'Retur',
     flightNumber: 'Număr zbor',
     adults: 'Adulți',
     children: 'Copii',

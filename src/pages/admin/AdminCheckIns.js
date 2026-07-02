@@ -473,13 +473,30 @@ function transferStatusBadge(tr) {
   return `<span class="inline-flex items-center text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls}">${label}</span>`;
 }
 
-// The "mini dashboard" card: collapsed header (contact · phone · type ·
-// pickup · status); expands to every rubric the client asked for + actions.
-function transferCardHtml(tr, { locale, canCancel }) {
+// A transfer is up to two dated events: the outbound home→airport pickup and,
+// for round trips, the airport→home return leg. Surfacing both lets a return
+// show up on its OWN date in the Transfers tab (mirrors the activity feed),
+// not just the outbound pickup date.
+function transferLegs(tr) {
+  const legs = [{ leg: 'out', at: tr.pickupAt }];
+  if (tr.transferType === 'roundtrip' && tr.returnAt) legs.push({ leg: 'return', at: tr.returnAt });
+  return legs;
+}
+
+// The "mini dashboard" card: collapsed header (contact · phone · type · leg ·
+// time · status); expands to every rubric the client asked for + actions.
+// `leg` picks which event this card represents ('out' = pickup, 'return' =
+// the round-trip return) so its header time + badge match the tab's date.
+function transferCardHtml(tr, { locale, canCancel, leg = 'out' }) {
   const name = tr.contactName || '—';
   const phone = tr.phone || '—';
   const pickup = fmtDateTime(tr.pickupAt, locale);
   const roundtrip = tr.transferType === 'roundtrip';
+  const isReturn = roundtrip && leg === 'return';
+  const headerTime = fmtDateTime(isReturn ? tr.returnAt : tr.pickupAt, locale);
+  const legBadge = roundtrip
+    ? `<span class="inline-flex items-center text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${isReturn ? 'bg-blueberry/10 text-blueberry' : 'bg-leaf/10 text-leaf'}">${isReturn ? t('transfers.legReturn') : t('transfers.legOutbound')}</span>`
+    : '';
   const isScheduled = (tr.status || 'scheduled') === 'scheduled';
 
   const detail = (label, value) => `
@@ -515,9 +532,10 @@ function transferCardHtml(tr, { locale, canCancel }) {
           <span class="font-semibold text-[14px] text-charcoal truncate">${escapeHtml(name)}</span>
           <span class="font-mono text-[13px] text-dim hidden sm:inline">${escapeHtml(phone)}</span>
           ${transferTypeChip(tr)}
+          ${legBadge}
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <span class="text-[12px] font-mono text-charcoal/70 hidden sm:inline">${pickup}</span>
+          <span class="text-[12px] font-mono text-charcoal/70 hidden sm:inline">${headerTime}</span>
           ${transferStatusBadge(tr)}
           <svg data-transfer-chevron class="w-4 h-4 text-dim transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
         </div>
@@ -622,7 +640,13 @@ export default async function AdminCheckIns(container) {
     const checkout = bookings.filter((b) => b.status === 'active' && (b.type === 'credit' || isInWindow(checkoutDate(b), range)) && matchesSearch(b, q)).length;
     const overdue = bookings.filter((b) => isOverdue(b) && matchesSearch(b, q)).length;
     const noshow = bookings.filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
-    const transfersCount = transfers.filter((tr) => isInWindow(tr.pickupAt, range) && matchesTransferSearch(tr, q)).length;
+    // Count each in-window leg (a round-trip contributes its outbound and/or
+    // its return depending on which fall in the range) to match the list.
+    const transfersCount = transfers.reduce((n, tr) => (
+      matchesTransferSearch(tr, q)
+        ? n + transferLegs(tr).filter((lg) => isInWindow(lg.at, range)).length
+        : n
+    ), 0);
     return { checkin, checkout, overdue, noshow, transfers: transfersCount };
   }
 
@@ -761,15 +785,21 @@ export default async function AdminCheckIns(container) {
     }
     if (activeTab === 'transfers') {
       const range = windowRange(activeWindow);
-      const rows = transfers
-        .filter((tr) => isInWindow(tr.pickupAt, range) && matchesTransferSearch(tr, q))
-        .sort((a, b) => String(a.pickupAt || '').localeCompare(String(b.pickupAt || '')))
-        .map((tr) => transferCardHtml(tr, { locale, canCancel }));
-      if (!rows.length) {
+      // Expand each transfer into its in-window legs so a round-trip appears on
+      // both its pickup date (outbound) and its return date (return leg).
+      const legRows = [];
+      for (const tr of transfers) {
+        if (!matchesTransferSearch(tr, q)) continue;
+        for (const lg of transferLegs(tr)) {
+          if (isInWindow(lg.at, range)) legRows.push({ tr, leg: lg.leg, at: lg.at });
+        }
+      }
+      legRows.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+      if (!legRows.length) {
         bodyEl.innerHTML = `<div class="card-solid rounded-2xl p-10 text-center text-dim">${t('transfers.tabEmpty')}</div>`;
         return;
       }
-      bodyEl.innerHTML = rows.join('');
+      bodyEl.innerHTML = legRows.map(({ tr, leg }) => transferCardHtml(tr, { locale, canCancel, leg })).join('');
       return;
     }
     // overdue
