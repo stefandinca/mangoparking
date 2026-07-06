@@ -32,6 +32,15 @@ function bucharestDate(iso) {
     }).format(new Date(iso));
   } catch { return String(iso); }
 }
+// Browser-local calendar day (YYYY-MM-DD) of an instant. Matches how the
+// check-ins page builds its custom window range (local midnight boundaries),
+// so linking with this day guarantees the clicked event falls inside it.
+function localDayKey(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 function dayLabel(iso, locale) {
   const day = bucharestDate(iso);
   const todayKey = bucharestDate(new Date().toISOString());
@@ -55,7 +64,7 @@ function eventRow(e, locale) {
     const label = isCheckin ? t('activity.kindCheckin') : t('activity.kindCheckout');
     const name = b.contact?.name || b.contact?.email || '—';
     return `
-      <button type="button" data-go="${isCheckin ? 'checkin' : 'checkout'}" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
+      <button type="button" data-go="${isCheckin ? 'checkin' : 'checkout'}" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(b.id)}" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
         <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
         <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls} shrink-0">${label}</span>
         <span class="font-mono text-[13px] text-charcoal shrink-0">${escapeHtml(b.licensePlate || '—')}</span>
@@ -67,7 +76,7 @@ function eventRow(e, locale) {
   const label = isReturn ? t('activity.kindTransferReturn') : t('activity.kindTransferOut');
   const place = isReturn ? (tr.returnTo || tr.pickupAddress || '') : (tr.pickupAddress || '');
   return `
-    <button type="button" data-go="transfers" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
+    <button type="button" data-go="transfers" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(tr.id)}" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
       <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
       <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-mango/15 text-charcoal shrink-0">${label}</span>
       <span class="text-[13px] text-charcoal truncate">${escapeHtml(tr.contactName || '—')}</span>
@@ -146,9 +155,14 @@ export default function AdminActivity(container) {
   unsubT = subscribeCollection('transfers', (rows) => { transfers = rows; render(); });
   render();
 
-  // Jump to the relevant check-in tab.
+  // Jump to the relevant check-in tab, scoped to the clicked event's day and
+  // asking that page to scroll to + highlight the specific reservation.
   delegate(page, 'click', '[data-go]', (_e, btn) => {
-    navigate(`${localePath('/admin/checkins')}?tab=${btn.dataset.go}`);
+    const params = new URLSearchParams({ tab: btn.dataset.go });
+    const day = localDayKey(btn.dataset.at);
+    if (day) params.set('window', `${day}..${day}`);
+    if (btn.dataset.focus) params.set('focus', btn.dataset.focus);
+    navigate(`${localePath('/admin/checkins')}?${params.toString()}`);
   });
 
   return () => { if (unsubB) unsubB(); if (unsubT) unsubT(); };

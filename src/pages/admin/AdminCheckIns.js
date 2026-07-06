@@ -583,6 +583,10 @@ export default async function AdminCheckIns(container) {
   const rawWindow = params.get('window') || 'today';
   let activeWindow = parseWindowParam(rawWindow);
   let searchQuery = (params.get('q') || '').trim().toLowerCase();
+  // Deep-link from the activity feed: scroll to + flash this reservation once
+  // its row renders (data arrives async, so we retry on each render until found).
+  let focusId = params.get('focus');
+  let focusDone = false;
 
   // Pull users once for the walk-in modal (matches the AdminTransactions pattern).
   const users = await getCollection('users').catch(() => []);
@@ -818,10 +822,25 @@ export default async function AdminCheckIns(container) {
     bodyEl.innerHTML = rows.join('');
   }
 
+  // Scroll the deep-linked row into view and flash it once — retried on each
+  // render because bookings/transfers load asynchronously after first paint.
+  function maybeApplyFocus() {
+    if (!focusId || focusDone) return;
+    if (!/^[A-Za-z0-9_-]+$/.test(focusId)) { focusDone = true; return; }
+    const el = bodyEl.querySelector(`[data-booking-id="${focusId}"], [data-transfer-id="${focusId}"]`);
+    if (!el) return; // not rendered yet — try again on the next render
+    focusDone = true;
+    const hl = ['ring-2', 'ring-mango', 'ring-inset', 'bg-mango/10'];
+    el.classList.add(...hl);
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => el.classList.remove(...hl), 3000);
+  }
+
   function rerender() {
     renderTabs();
     renderWindowBar();
     renderBody();
+    maybeApplyFocus();
   }
 
   // ── Subscriptions ──
