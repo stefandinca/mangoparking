@@ -584,9 +584,13 @@ export default async function AdminCheckIns(container) {
   let activeWindow = parseWindowParam(rawWindow);
   let searchQuery = (params.get('q') || '').trim().toLowerCase();
   // Deep-link from the activity feed: scroll to + flash this reservation once
-  // its row renders (data arrives async, so we retry on each render until found).
+  // its row renders. Data loads async AND a later snapshot can rebuild the tab
+  // (which would wipe a one-shot highlight), so we re-apply the flash on every
+  // render until a short deadline.
   let focusId = params.get('focus');
-  let focusDone = false;
+  if (focusId && !/^[A-Za-z0-9_-]+$/.test(focusId)) focusId = null;
+  let focusScrolled = false;
+  let focusUntil = 0;
 
   // Pull users once for the walk-in modal (matches the AdminTransactions pattern).
   const users = await getCollection('users').catch(() => []);
@@ -685,7 +689,7 @@ export default async function AdminCheckIns(container) {
     // button alongside the preset pills (it used to look like a bare text
     // field). Active range = mango like a selected pill; idle = white with
     // a calendar affordance. Shared by the input and flatpickr's altInput.
-    const rangeBtnCls = `pl-9 pr-3 py-1.5 rounded-lg text-[13px] font-semibold cursor-pointer transition-colors min-w-[200px] focus:outline-none ${rangeActive ? 'bg-mango text-charcoal' : 'bg-white text-charcoal/70 hover:bg-frost'}`;
+    const rangeBtnCls = `pl-3 pr-9 py-1.5 rounded-lg text-[13px] font-semibold cursor-pointer transition-colors min-w-[200px] focus:outline-none ${rangeActive ? 'bg-mango text-charcoal' : 'bg-white text-charcoal/70 hover:bg-frost'}`;
     windowBarEl.innerHTML = `
       <span class="text-[12px] uppercase tracking-wider text-dim font-mono mr-1">${t('checkins.windowLabel')}</span>
       ${windowPill('today', presetActive, t('checkins.windowToday'))}
@@ -693,7 +697,7 @@ export default async function AdminCheckIns(container) {
       ${windowPill('month', presetActive, t('checkins.windowMonth'))}
       <span class="text-[12px] text-dim mx-1">${t('checkins.windowOr')}</span>
       <span class="relative inline-flex items-center">
-        <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${rangeActive ? 'text-charcoal/70' : 'text-charcoal/40'}" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3.75 9h16.5M5.25 5.25h13.5A1.5 1.5 0 0 1 20.25 6.75v12A1.5 1.5 0 0 1 18.75 20.25H5.25A1.5 1.5 0 0 1 3.75 18.75v-12A1.5 1.5 0 0 1 5.25 5.25z"/></svg>
+        <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 ${rangeActive ? 'text-charcoal/70' : 'text-charcoal/40'}" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3.75 9h16.5M5.25 5.25h13.5A1.5 1.5 0 0 1 20.25 6.75v12A1.5 1.5 0 0 1 18.75 20.25H5.25A1.5 1.5 0 0 1 3.75 18.75v-12A1.5 1.5 0 0 1 5.25 5.25z"/></svg>
         <input type="text" data-range-picker value="${escapeHtml(rangeValue)}" placeholder="${t('checkins.windowCustom')}"
           class="${rangeBtnCls}">
       </span>
@@ -822,22 +826,14 @@ export default async function AdminCheckIns(container) {
     bodyEl.innerHTML = rows.join('');
   }
 
-  // Scroll the deep-linked row into view and flash it once — retried on each
-  // render because bookings/transfers load asynchronously after first paint.
-  // Uses the Web Animations API with inline colors (not Tailwind utilities):
-  // `ring-*` box-shadow doesn't paint on <tr>, and a faint tint is invisible,
-  // so we animate a strong mango wash on the cells (table rows) or the card.
-  function maybeApplyFocus() {
-    if (!focusId || focusDone) return;
-    if (!/^[A-Za-z0-9_-]+$/.test(focusId)) { focusDone = true; return; }
-    const el = bodyEl.querySelector(`[data-booking-id="${focusId}"], [data-transfer-id="${focusId}"]`);
-    if (!el) return; // not rendered yet — try again on the next render
-    focusDone = true;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const opts = { duration: 2400, easing: 'ease-out' };
+  // Web Animations API flash with inline colors (not Tailwind utilities):
+  // `ring-*` box-shadow doesn't paint on a <tr>, and a faint tint is invisible,
+  // so we wash a strong mango over the cells (table rows) or the card. Duration
+  // shrinks to the shared deadline so repeated re-applies converge to one fade.
+  function flashRow(el, duration) {
+    const opts = { duration: Math.max(500, duration), easing: 'ease-out' };
     const wash = [
       { backgroundColor: 'rgba(253,187,48,0.6)' },
-      { backgroundColor: 'rgba(253,187,48,0.6)', offset: 0.55 },
       { backgroundColor: 'rgba(253,187,48,0)' },
     ];
     // For a table row the <td>s paint over the <tr>, so wash the cells too.
@@ -847,11 +843,24 @@ export default async function AdminCheckIns(container) {
       try {
         el.animate([
           { boxShadow: '0 0 0 3px rgba(253,187,48,0.95)' },
-          { boxShadow: '0 0 0 3px rgba(253,187,48,0.95)', offset: 0.55 },
           { boxShadow: '0 0 0 3px rgba(253,187,48,0)' },
         ], opts);
       } catch { /* no WAAPI */ }
     }
+  }
+
+  function maybeApplyFocus() {
+    if (!focusId) return;
+    const el = bodyEl.querySelector(`[data-booking-id="${focusId}"], [data-transfer-id="${focusId}"]`);
+    if (!el) return; // not rendered yet — retry on the next render
+    if (!focusScrolled) {
+      focusScrolled = true;
+      focusUntil = Date.now() + 2600;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const remaining = focusUntil - Date.now();
+    if (remaining <= 0) { focusId = null; return; } // flashed long enough — stop
+    flashRow(el, remaining);
   }
 
   function rerender() {
