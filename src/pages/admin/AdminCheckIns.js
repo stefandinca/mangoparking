@@ -29,6 +29,7 @@ import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { checkInBooking, checkOutBooking, updateBookingDetails } from '../../services/bookingService.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate } from '../../utils/validators.js';
+import { phoneField, phoneValue } from '../../components/core/PhoneField.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
@@ -1095,7 +1096,7 @@ function openEditBookingDialog({ booking }) {
         </div>
         <div>
           <label class="${labelCls}">${t('checkins.detailPhone')} *</label>
-          <input name="phone" type="tel" value="${escapeHtml(c.phone || '')}" class="${inputCls}">
+          ${phoneField({ name: 'phone', value: c.phone || '', inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-blueberry' })}
         </div>
       </div>
       <div>
@@ -1213,7 +1214,7 @@ function openEditBookingDialog({ booking }) {
       errEl.classList.add('hidden');
       const name = qs('[name="name"]', form).value.trim();
       const email = qs('[name="email"]', form).value.trim();
-      const phone = qs('[name="phone"]', form).value.trim();
+      const phone = phoneValue(qs('[name="phone"]', form));
       if (!name) return showErr(t('checkins.editErrorName'));
       if (!isValidEmail(email)) return showErr(t('checkins.editErrorEmail'));
       if (!isValidPhone(phone)) return showErr(t('checkins.editErrorPhone'));

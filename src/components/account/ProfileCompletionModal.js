@@ -20,6 +20,7 @@ import { showToast } from '../core/Toast.js';
 import { updateDocument } from '../../firebase/db.js';
 import { getCurrentUser, getUserProfile, refreshUserProfile } from '../../firebase/auth.js';
 import { isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
+import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { isProfileComplete } from '../../utils/profileComplete.js';
 import { billingFieldsHtml, wireBillingToggle, readBilling } from '../widgets/BillingFields.js';
 
@@ -54,7 +55,7 @@ export function openProfileCompletionModal({ onComplete } = {}) {
         </div>
         <div>
           <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('profileComplete.phone')} *</label>
-          <input type="tel" name="pcPhone" value="${escapeHtml(profile.phone || '')}" placeholder="07xx xxx xxx" autocomplete="tel" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+          ${phoneField({ name: 'pcPhone', value: profile.phone || '', placeholder: '07xx xxx xxx', inputClass: 'flex-1 min-w-0 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry' })}
         </div>
       </div>
 
@@ -86,7 +87,7 @@ export function openProfileCompletionModal({ onComplete } = {}) {
     errEl.classList.add('hidden');
 
     const name = qs('[name="pcName"]', body).value.trim();
-    const phone = qs('[name="pcPhone"]', body).value.trim();
+    const phone = phoneValue(qs('[name="pcPhone"]', body));
     const plate = qs('[name="pcPlate"]', body).value.trim().toUpperCase();
     const make = qs('[name="pcMake"]', body).value.trim();
     const model = qs('[name="pcModel"]', body).value.trim();

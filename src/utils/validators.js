@@ -3,7 +3,13 @@ export function isValidEmail(email) {
 }
 
 export function isValidPhone(phone) {
-  return /^(\+?40|0)[27]\d{8}$/.test(String(phone ?? '').replace(/[\s-]/g, ''));
+  const compact = String(phone ?? '').replace(/[\s-]/g, '');
+  // International E.164: "+" then a country code (leading 1–9) and 6–14 more
+  // digits (7–15 total). The phone field emits this for every country.
+  if (/^\+[1-9]\d{6,14}$/.test(compact)) return true;
+  // Legacy Romanian local format (0 + area/mobile + 8 digits) — keeps older
+  // numbers already stored without a "+" prefix valid.
+  return /^0[27]\d{8}$/.test(compact);
 }
 
 export function isValidLicensePlate(plate) {

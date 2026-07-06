@@ -5,6 +5,7 @@ import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { isValidEmail, isValidLicensePlate, isValidPhone } from '../../utils/validators.js';
+import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getBalance, lookupByPlate, getTokenPacks } from '../../services/tokenService.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
@@ -158,8 +159,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <input type="email" name="newEmail" placeholder="${t('transactions.createNewEmail')}"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
-          <input type="tel" name="newPhone" placeholder="${t('transactions.createNewPhone')}"
-            class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          ${phoneField({ name: 'newPhone', placeholder: t('transactions.createNewPhone'), inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
         </div>
       </div>
 
@@ -244,8 +244,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <input type="text" name="transferName" value="${escapeHtml(ed.contactName || '')}" placeholder="${escapeHtml(t('transfers.contactName'))} *"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
-          <input type="tel" name="transferPhone" value="${escapeHtml(ed.phone || '')}" placeholder="${escapeHtml(t('transfers.phone'))} *"
-            class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          ${phoneField({ name: 'transferPhone', value: ed.phone || '', placeholder: `${t('transfers.phone')} *`, inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
         </div>
         <input type="email" name="transferEmail" value="${escapeHtml(ed.email || '')}" placeholder="${escapeHtml(t('transfers.email'))}"
           class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
@@ -737,7 +736,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       const showErr = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
       const val = (name) => String(qs(`[name="${name}"]`, contentEl)?.value || '').trim();
       const contactName = val('transferName');
-      const phone = val('transferPhone');
+      const phone = phoneValue(qs('[name="transferPhone"]', contentEl));
       const pickupAddress = val('transferPickupAddress');
       const pickupRaw = qs('[name="transferPickupAt"]', contentEl)?.value || '';
       const transferType = qs('input[name="transferType"]:checked', contentEl)?.value === 'roundtrip' ? 'roundtrip' : 'oneway';
@@ -863,7 +862,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     } else {
       const newName = String(qs('[name="newName"]', contentEl).value || '').trim();
       const newEmail = String(qs('[name="newEmail"]', contentEl).value || '').trim();
-      const newPhone = String(qs('[name="newPhone"]', contentEl).value || '').trim();
+      const newPhone = phoneValue(qs('[name="newPhone"]', contentEl));
       if (!isValidEmail(newEmail)) {
         errEl.textContent = t('admin.usersError');
         errEl.classList.remove('hidden');

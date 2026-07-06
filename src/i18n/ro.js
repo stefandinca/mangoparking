@@ -1250,6 +1250,7 @@ export default {
   common: {
     loading: 'Se încarcă...',
     error: 'A apărut o eroare',
+    phoneCountry: 'Prefix țară',
     retry: 'Încearcă din nou',
     back: 'Înapoi',
     close: 'Închide',

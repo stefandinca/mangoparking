@@ -13,6 +13,7 @@ import { giftCodeRedeemCard } from '../../components/widgets/GiftCodeRedeem.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { getDocument, updateDocument } from '../../firebase/db.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
+import { phoneField, phoneValue } from '../../components/core/PhoneField.js';
 import { showToast } from '../../components/core/Toast.js';
 import { isProfileComplete } from '../../utils/profileComplete.js';
 import { openProfileCompletionModal, profileGateCard } from '../../components/account/ProfileCompletionModal.js';
@@ -237,7 +238,7 @@ export default async function Booking(container) {
         </div>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.phone')} *</label>
-          <input type="tel" name="phone" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40" required>
+          ${phoneField({ name: 'phone', required: true, inputClass: 'flex-1 min-w-0 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[7rem] px-2 py-3 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
         </div>
         <div class="sm:col-span-2">
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('booking.email')} *</label>
@@ -683,7 +684,7 @@ export default async function Booking(container) {
         let ok = plateOk;
         if (!user) {
           const nameOk = required(form.elements.name?.value);
-          const phoneOk = isValidPhone(form.elements.phone?.value);
+          const phoneOk = isValidPhone(phoneValue(form.elements.phone));
           const emailOk = isValidEmail(form.elements.email?.value);
           setFieldError(form.elements.name, !nameOk);
           setFieldError(form.elements.phone, !phoneOk);
@@ -725,7 +726,7 @@ export default async function Booking(container) {
 
       const fd = new FormData(form);
       const name = fd.get('name');
-      const phone = fd.get('phone');
+      const phone = phoneValue(form.elements.phone);
       const email = fd.get('email');
 
       // Resolve license plate from saved vehicle or new input

@@ -16,6 +16,7 @@ import { openModal } from '../../components/core/Modal.js';
 import { CONTACT_PHONE } from '../../utils/constants.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, isValidPhone, required } from '../../utils/validators.js';
+import { phoneField, phoneValue } from '../../components/core/PhoneField.js';
 import { showToast } from '../../components/core/Toast.js';
 import { isProfileComplete } from '../../utils/profileComplete.js';
 import { openProfileCompletionModal, profileGateCard } from '../../components/account/ProfileCompletionModal.js';
@@ -211,7 +212,7 @@ export default function BookingLongTerm(container) {
                   </div>
                   <div>
                     <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('contact.phone')} *</label>
-                    <input type="tel" name="phone" required value="${escapeHtml(profile?.phone || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                    ${phoneField({ name: 'phone', value: profile?.phone || '', required: true, inputClass: 'flex-1 min-w-0 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry' })}
                   </div>
                 </div>
               </div>
@@ -977,7 +978,7 @@ export default function BookingLongTerm(container) {
     const licensePlate = resolvePlate();
     const name = form.name.value.trim();
     const email = form.email.value.trim();
-    const phone = form.phone.value.trim();
+    const phone = phoneValue(form.phone);
 
     const plateInput = form.querySelector('input[name="licensePlate"]');
     const checks = [

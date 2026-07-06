@@ -1249,6 +1249,7 @@ export default {
   common: {
     loading: 'Loading...',
     error: 'An error occurred',
+    phoneCountry: 'Country code',
     retry: 'Try again',
     back: 'Back',
     close: 'Close',

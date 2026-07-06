@@ -7,6 +7,7 @@ import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { html } from '../../utils/dom.js';
 import { isValidPhone } from '../../utils/validators.js';
+import { phoneField, phoneValue } from '../../components/core/PhoneField.js';
 
 const FIREBASE_ERROR_MAP = {
   'auth/invalid-email': 'auth.errors.invalidEmail',
@@ -70,7 +71,7 @@ export default function Register(container) {
             </div>
             <div>
               <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('auth.phone')} *</label>
-              <input type="tel" name="phone" required placeholder="${t('auth.phonePlaceholder')}" autocomplete="tel" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
+              ${phoneField({ name: 'phone', required: true, placeholder: t('auth.phonePlaceholder'), inputClass: 'flex-1 min-w-0 px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors', selectClass: 'shrink-0 w-[7rem] px-2 py-3 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40 transition-colors' })}
             </div>
             <div>
               <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('auth.password')} *</label>
@@ -126,7 +127,7 @@ export default function Register(container) {
 
     const displayName = form.displayName.value.trim();
     const email = form.email.value.trim();
-    const phone = form.phone.value.trim();
+    const phone = phoneValue(form.phone);
     const password = form.password.value;
     const confirmPassword = form.confirmPassword.value;
 

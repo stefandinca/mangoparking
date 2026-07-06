@@ -2,6 +2,7 @@ import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
+import { phoneField, phoneValue } from '../../components/core/PhoneField.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getUserProfile, getCurrentUser } from '../../firebase/auth.js';
 import { updateDocument, getDocument, getCollection, where, orderBy } from '../../firebase/db.js';
@@ -119,7 +120,7 @@ export default async function Dashboard(container) {
           </div>
           <div>
             <label class="block text-[13px] text-dim mb-1">${t('booking.phone')}</label>
-            <input type="tel" name="phone" value="${profile?.phone || ''}" class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40">
+            ${phoneField({ name: 'phone', value: profile?.phone || '', inputClass: 'flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
           </div>
         </div>
         <div class="mb-4">
@@ -272,6 +273,7 @@ export default async function Dashboard(container) {
     profileForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(profileForm);
+      const phone = phoneValue(profileForm.elements.phone);
       const uid = getCurrentUser()?.uid;
       if (!uid) return;
       const billing = readBilling(profileForm);
@@ -283,14 +285,14 @@ export default async function Dashboard(container) {
         await updateDocument('users', uid, {
           displayName: fd.get('displayName') || '',
           email: fd.get('email') || '',
-          phone: fd.get('phone') || '',
+          phone: phone || '',
           billing,
         });
         // Update view
         const vals = profileView.querySelectorAll('p.font-medium');
         if (vals[0]) vals[0].textContent = fd.get('displayName') || '—';
         if (vals[1]) vals[1].textContent = fd.get('email') || '—';
-        if (vals[2]) vals[2].textContent = fd.get('phone') || '—';
+        if (vals[2]) vals[2].textContent = phone || '—';
         profileForm.classList.add('hidden');
         profileView.classList.remove('hidden');
         showToast(locale === 'ro' ? 'Profil actualizat!' : 'Profile updated!', 'success');
