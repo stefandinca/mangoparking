@@ -824,16 +824,34 @@ export default async function AdminCheckIns(container) {
 
   // Scroll the deep-linked row into view and flash it once — retried on each
   // render because bookings/transfers load asynchronously after first paint.
+  // Uses the Web Animations API with inline colors (not Tailwind utilities):
+  // `ring-*` box-shadow doesn't paint on <tr>, and a faint tint is invisible,
+  // so we animate a strong mango wash on the cells (table rows) or the card.
   function maybeApplyFocus() {
     if (!focusId || focusDone) return;
     if (!/^[A-Za-z0-9_-]+$/.test(focusId)) { focusDone = true; return; }
     const el = bodyEl.querySelector(`[data-booking-id="${focusId}"], [data-transfer-id="${focusId}"]`);
     if (!el) return; // not rendered yet — try again on the next render
     focusDone = true;
-    const hl = ['ring-2', 'ring-mango', 'ring-inset', 'bg-mango/10'];
-    el.classList.add(...hl);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => el.classList.remove(...hl), 3000);
+    const opts = { duration: 2400, easing: 'ease-out' };
+    const wash = [
+      { backgroundColor: 'rgba(253,187,48,0.6)' },
+      { backgroundColor: 'rgba(253,187,48,0.6)', offset: 0.55 },
+      { backgroundColor: 'rgba(253,187,48,0)' },
+    ];
+    // For a table row the <td>s paint over the <tr>, so wash the cells too.
+    const targets = el.tagName === 'TR' ? [el, ...el.querySelectorAll('td')] : [el];
+    for (const node of targets) { try { node.animate(wash, opts); } catch { /* no WAAPI */ } }
+    if (el.tagName !== 'TR') {
+      try {
+        el.animate([
+          { boxShadow: '0 0 0 3px rgba(253,187,48,0.95)' },
+          { boxShadow: '0 0 0 3px rgba(253,187,48,0.95)', offset: 0.55 },
+          { boxShadow: '0 0 0 3px rgba(253,187,48,0)' },
+        ], opts);
+      } catch { /* no WAAPI */ }
+    }
   }
 
   function rerender() {
