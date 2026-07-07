@@ -720,6 +720,16 @@ export async function openUserDetail({ customerId = null, email = null, displayN
     user = await getDocument('users', cid).catch(() => null);
     if (user && !user.id) user.id = cid;
   }
+  // The customerId may point at the WRONG account: when a staff member creates
+  // a booking while signed in (e.g. on the public site on a customer's behalf),
+  // the booking's customerId is the staff uid, not the customer's. If the
+  // resolved account's email doesn't match the reservation's contact email, it
+  // isn't the person the booking is for — resolve by the contact email instead
+  // so the modal shows (and lets us edit) the actual customer.
+  if (user && mail && user.email && user.email.trim().toLowerCase() !== mail.trim().toLowerCase()) {
+    const byMail = (await getCollection('users', where('email', '==', mail)).catch(() => []))[0];
+    user = byMail || { id: null, email: mail, displayName: displayName || mail };
+  }
   if (!user && mail) {
     const matches = await getCollection('users', where('email', '==', mail)).catch(() => []);
     user = matches[0] || null;
