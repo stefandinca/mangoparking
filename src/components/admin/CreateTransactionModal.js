@@ -190,6 +190,11 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
           <p data-price-hint class="text-[12px] text-dim mt-1.5 hidden"></p>
         </div>
+        <div>
+          <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createNotes')}</label>
+          <textarea name="notes" rows="2" placeholder="${escapeHtml(t('transactions.createNotesPlaceholder'))}"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40"></textarea>
+        </div>
       </div>
 
       <!-- Credit-specific fields (hidden by default) -->
@@ -907,10 +912,11 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         const brokerName = paidBy === 'broker'
           ? String(qs('[name="brokerName"]', contentEl)?.value || '').trim()
           : '';
+        const notes = String(qs('[name="notes"]', contentEl)?.value || '').trim();
         result = await adminCreateLongtermBookingFn({
           plate, dropoffAt, pickupAt, days, totalPrice,
           payerEmail, payerName, payerPhone, customerId,
-          paidBy, brokerName, autoCheckIn,
+          paidBy, brokerName, autoCheckIn, notes,
         });
       } else {
         const qtyRaw = qs('[name="quantity"]', contentEl).value;

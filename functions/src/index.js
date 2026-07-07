@@ -2236,6 +2236,7 @@ export const adminCreateLongtermBooking = onCall(
       paidBy = 'cash',
       brokerName,           // broker/prepaid reservations (e.g. ParkVia)
       autoCheckIn = false,  // walk-in flow: car is at the lot now
+      notes,                // optional internal note, mirrors the edit-booking flow
     } = request.data || {};
 
     if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
@@ -2293,6 +2294,7 @@ export const adminCreateLongtermBooking = onCall(
         phone: payerPhone || '',
       },
       billing: { type: 'PF' },
+      notes: String(notes || '').trim() || null,
       paymentId: orderId,
       paymentMethod: payLater ? 'pay-at-pickup' : (paidBy === 'broker' ? 'broker' : 'admin'),
       paymentStatus: payLater ? 'unpaid' : 'paid',
