@@ -1142,7 +1142,7 @@ function openEditBookingDialog({ booking }) {
         </div>
         <div>
           <label class="${labelCls}">${t('checkins.detailPhone')} *</label>
-          ${phoneField({ name: 'phone', value: c.phone || '', inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-blueberry' })}
+          ${phoneField({ name: 'phone', value: c.phone || '', inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry', selectClass: 'shrink-0 w-[7rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-blueberry' })}
         </div>
       </div>
       <div>

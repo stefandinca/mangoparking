@@ -52,6 +52,13 @@ const DEFAULT_DIAL = '40';
 
 function digitsOnly(s) { return String(s ?? '').replace(/\D/g, ''); }
 
+// ISO 3166 alpha-2 → the corresponding flag emoji, by offsetting each letter
+// into its Regional Indicator Symbol (U+1F1E6 = 'A'). "RO" → 🇷🇴.
+function flagEmoji(iso) {
+  return String(iso).toUpperCase().replace(/[A-Z]/g, (c) =>
+    String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
 // Build the combined E.164 number from a dial code + a national number as
 // typed. Strips a single leading trunk zero (the national-prefix convention
 // across RO/DE/FR/NL/GB/…) so "0769…" under +40 becomes +40769….
@@ -88,8 +95,8 @@ export function parsePhone(value) {
 }
 
 function optionsHtml(selectedDial) {
-  return DIAL_CODES.map(([, d, n]) =>
-    `<option value="${d}"${d === selectedDial ? ' selected' : ''}>${escapeHtml(n)} +${d}</option>`
+  return DIAL_CODES.map(([iso, d]) =>
+    `<option value="${d}"${d === selectedDial ? ' selected' : ''}>${flagEmoji(iso)} ${iso} +${d}</option>`
   ).join('');
 }
 

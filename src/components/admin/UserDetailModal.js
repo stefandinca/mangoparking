@@ -547,7 +547,7 @@ function enterEditMode(user, body, refreshHeader) {
       <section class="bg-white rounded-2xl border border-frost-deep p-4">
         <div class="grid sm:grid-cols-2 gap-3">
           <div><label class="${labelCls}">${escapeHtml(d.editName)}</label><input name="displayName" value="${escapeHtml(user.displayName || '')}" class="${inputCls}"></div>
-          <div><label class="${labelCls}">${escapeHtml(d.editPhone)} *</label>${phoneField({ name: 'phone', value: user.phone || '', inputClass: 'flex-1 min-w-0 px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2 rounded-lg border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-blueberry' })}</div>
+          <div><label class="${labelCls}">${escapeHtml(d.editPhone)} *</label>${phoneField({ name: 'phone', value: user.phone || '', inputClass: 'flex-1 min-w-0 px-3 py-2 rounded-lg border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry', selectClass: 'shrink-0 w-[7rem] px-2 py-2 rounded-lg border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-blueberry' })}</div>
         </div>
       </section>
       <section class="bg-white rounded-2xl border border-frost-deep p-4">

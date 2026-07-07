@@ -120,7 +120,7 @@ export default async function Dashboard(container) {
           </div>
           <div>
             <label class="block text-[13px] text-dim mb-1">${t('booking.phone')}</label>
-            ${phoneField({ name: 'phone', value: profile?.phone || '', inputClass: 'flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
+            ${phoneField({ name: 'phone', value: profile?.phone || '', inputClass: 'flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[7rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
           </div>
         </div>
         <div class="mb-4">

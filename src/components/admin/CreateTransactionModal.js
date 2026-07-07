@@ -154,12 +154,14 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           <div data-user-plates class="mt-2 hidden"></div>
         </div>
 
-        <div data-new-block class="hidden grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div data-new-block class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
           <input type="text" name="newName" placeholder="${t('transactions.createNewName')}"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <input type="email" name="newEmail" placeholder="${t('transactions.createNewEmail')}"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
-          ${phoneField({ name: 'newPhone', placeholder: t('transactions.createNewPhone'), inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
+          <div class="sm:col-span-2">
+            ${phoneField({ name: 'newPhone', placeholder: t('transactions.createNewPhone'), inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[7rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
+          </div>
         </div>
       </div>
 
@@ -244,7 +246,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <input type="text" name="transferName" value="${escapeHtml(ed.contactName || '')}" placeholder="${escapeHtml(t('transfers.contactName'))} *"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
-          ${phoneField({ name: 'transferPhone', value: ed.phone || '', placeholder: `${t('transfers.phone')} *`, inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[6.5rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
+          ${phoneField({ name: 'transferPhone', value: ed.phone || '', placeholder: `${t('transfers.phone')} *`, inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40', selectClass: 'shrink-0 w-[7rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40' })}
         </div>
         <input type="email" name="transferEmail" value="${escapeHtml(ed.email || '')}" placeholder="${escapeHtml(t('transfers.email'))}"
           class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
