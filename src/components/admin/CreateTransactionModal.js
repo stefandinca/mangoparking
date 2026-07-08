@@ -1,10 +1,11 @@
-import { html, qs, escapeHtml } from '../../utils/dom.js';
+import { html, qs, escapeHtml, setFieldError } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { openModal } from '../../components/core/Modal.js';
 import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
-import { isValidEmail, isValidLicensePlate, isValidPhone } from '../../utils/validators.js';
+import { isValidEmail, isValidLicensePlate, isValidPhone, isValidCnp, isValidCui } from '../../utils/validators.js';
+import { lookupCui } from '../../services/cuiService.js';
 import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
 import { getBalance, lookupByPlate, getTokenPacks } from '../../services/tokenService.js';
@@ -346,6 +347,51 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         </div>
       </div>
 
+      <!-- Billing (invoice) details — mandatory for admin-created long-term
+           reservations and credit-pack sales so the customer can be invoiced.
+           Shown for those two paths only (hidden for transfers + credit
+           check-in). Pre-filled from a matched customer's saved billing. -->
+      <div data-billing-wrap class="space-y-2.5 rounded-xl bg-frost border border-frost-deep p-3">
+        <p class="text-[12px] uppercase tracking-wider text-dim font-mono">${t('transactions.billingSection')}</p>
+        <div class="grid grid-cols-2 gap-2" data-billing-type-toggle>
+          <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-mango bg-mango/5 cursor-pointer">
+            <input type="radio" name="ctBillingType" value="PF" checked class="accent-mango w-4 h-4">
+            <span class="text-[12px] font-medium">${t('billing.typePF')}</span>
+          </label>
+          <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-frost-deep cursor-pointer">
+            <input type="radio" name="ctBillingType" value="PJ" class="accent-mango w-4 h-4">
+            <span class="text-[12px] font-medium">${t('billing.typePJ')}</span>
+          </label>
+        </div>
+
+        <!-- PF: person -->
+        <div data-billing-pf class="space-y-2">
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" name="ctBillNume" placeholder="${escapeHtml(t('transactions.billNume'))} *"
+              class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+            <input type="text" name="ctBillPrenume" placeholder="${escapeHtml(t('transactions.billPrenume'))} *"
+              class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          </div>
+          <input type="text" name="ctBillAddress" placeholder="${escapeHtml(t('transactions.billAddress'))} *"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          <input type="text" name="ctBillCnp" placeholder="${escapeHtml(t('transactions.billCnpOptional'))}"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
+        </div>
+
+        <!-- PJ: company -->
+        <div data-billing-pj class="hidden space-y-2">
+          <input type="text" name="ctBillCompany" placeholder="${escapeHtml(t('transactions.billCompany'))} *"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          <div class="relative">
+            <input type="text" name="ctBillCui" placeholder="${escapeHtml(t('transactions.billCuiOptional'))}"
+              class="w-full px-4 py-2.5 pr-10 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40" data-ct-cui>
+            <span class="hidden absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-blueberry/30 border-t-blueberry animate-spin" data-ct-cui-spinner></span>
+          </div>
+          <input type="text" name="ctBillCompanyAddress" placeholder="${escapeHtml(t('transactions.billCompanyAddress'))} *"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+        </div>
+      </div>
+
       <!-- Paid by (hidden when using existing credits — no money moves) -->
       <div data-paidby-wrap>
         <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createPaidBy')}</label>
@@ -499,6 +545,16 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
   const userPickerWrap = qs('[data-user-picker]', contentEl);
   const plateWrap = qs('[data-plate-wrap]', contentEl);
   const userPlatesEl = qs('[data-user-plates]', contentEl);
+  const billingWrap = qs('[data-billing-wrap]', contentEl);
+  const billingPf = qs('[data-billing-pf]', contentEl);
+  const billingPj = qs('[data-billing-pj]', contentEl);
+  const billingTypeToggle = qs('[data-billing-type-toggle]', contentEl);
+  const ctCuiInput = qs('[data-ct-cui]', contentEl);
+  const ctCuiSpinner = qs('[data-ct-cui-spinner]', contentEl);
+  // Reg. Com. isn't shown as a field — it's captured only when the CUI lookup
+  // (ANAF) returns one, so it still lands on the stored billing record.
+  let cuiRegCom = '';
+  let lastBillingUserId = null; // guards prefill from re-clobbering on each keystroke
 
   // State readers — the DOM is the single source of truth.
   const getType = () => qs('input[name="tType"]:checked', contentEl).value;
@@ -531,6 +587,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     // Money + walk-in affordances are irrelevant when spending existing
     // credits or when recording a transfer (no money moves here).
     paidbyWrap?.classList.toggle('hidden', useExisting || isTransfer);
+    // Billing is required only for invoiceable admin sales: a long-term
+    // reservation or selling new credits. Not for credit check-in or transfers.
+    const billingNeeded = isLT || (isCredit && !useExisting);
+    billingWrap?.classList.toggle('hidden', !billingNeeded);
     // Broker/prepaid and pay-later are long-term-only payment routes. Hide
     // both options on the credit funnel (grantCreditsForCash only takes
     // cash/card) and snap the selector back to cash if it was left on either.
@@ -595,6 +655,119 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     const roundtrip = qs('input[name="transferType"]:checked', contentEl)?.value === 'roundtrip';
     transferReturn?.classList.toggle('hidden', !roundtrip);
   });
+
+  // ── Billing (PF/PJ) block ──
+  function setBillingType(type) {
+    const isPJ = type === 'PJ';
+    billingPf?.classList.toggle('hidden', isPJ);
+    billingPj?.classList.toggle('hidden', !isPJ);
+    billingTypeToggle?.querySelectorAll('label').forEach((lbl) => {
+      const inp = lbl.querySelector('input');
+      lbl.classList.toggle('border-mango', inp.checked);
+      lbl.classList.toggle('bg-mango/5', inp.checked);
+      lbl.classList.toggle('border-frost-deep', !inp.checked);
+    });
+  }
+  billingTypeToggle?.addEventListener('change', (e) => {
+    if (!e.target.matches('input[name="ctBillingType"]')) return;
+    setBillingType(e.target.value);
+  });
+
+  // CUI (ANAF) autofill — the field is optional, but when a valid CUI is typed
+  // we prefill company name + address (and capture Reg. Com. behind the scenes).
+  // Mirrors the public BillingFields widget; only fills empty fields.
+  if (ctCuiInput) {
+    let cuiTimer = null;
+    ctCuiInput.addEventListener('input', () => {
+      clearTimeout(cuiTimer);
+      cuiTimer = setTimeout(async () => {
+        const value = ctCuiInput.value.trim();
+        if (!isValidCui(value)) return;
+        ctCuiSpinner?.classList.remove('hidden');
+        const result = await lookupCui(value).catch(() => ({ error: true }));
+        ctCuiSpinner?.classList.add('hidden');
+        if (!result || result.error) return;
+        const fill = (name, v) => {
+          const el = qs(`[name="${name}"]`, contentEl);
+          if (el && v && !el.value.trim()) el.value = v;
+        };
+        fill('ctBillCompany', result.companyName);
+        fill('ctBillCompanyAddress', result.address);
+        if (result.regCom) cuiRegCom = result.regCom;
+      }, 600);
+    });
+  }
+
+  // Pre-fill billing from a matched customer's saved record. Only re-applies
+  // when the resolved account changes, so switching customer refreshes it but
+  // ordinary typing doesn't clobber the agent's edits.
+  function applyBillingToForm(b) {
+    if (!b || typeof b !== 'object') return;
+    const type = b.type === 'PJ' ? 'PJ' : 'PF';
+    const radio = qs(`input[name="ctBillingType"][value="${type}"]`, contentEl);
+    if (radio) radio.checked = true;
+    setBillingType(type);
+    const set = (name, v) => { const el = qs(`[name="${name}"]`, contentEl); if (el) el.value = v || ''; };
+    if (type === 'PJ') {
+      set('ctBillCompany', b.companyName);
+      set('ctBillCui', b.cui);
+      set('ctBillCompanyAddress', b.companyAddress);
+      cuiRegCom = b.regCom || '';
+    } else {
+      let nume = b.lastName || '';
+      let prenume = b.firstName || '';
+      if (!nume && !prenume && b.name) {
+        const parts = String(b.name).split(/\s+/).filter(Boolean);
+        nume = parts[0] || b.name;
+        prenume = parts.slice(1).join(' ');
+      }
+      set('ctBillNume', nume);
+      set('ctBillPrenume', prenume);
+      set('ctBillAddress', b.address || b.personalAddress || '');
+      set('ctBillCnp', b.cnp);
+    }
+  }
+  function maybePrefillBilling() {
+    if (getMode() !== 'existing') { lastBillingUserId = null; return; }
+    const u = resolveMatchedUser();
+    const uid = u?.id || null;
+    if (uid === lastBillingUserId) return;
+    lastBillingUserId = uid;
+    if (u && u.billing && Object.keys(u.billing).length) applyBillingToForm(u.billing);
+  }
+
+  // Read + validate the billing block. Returns { billing } or { error }.
+  // PF requires Nume/Prenume/Adresă (CNP optional, checksum-validated if given);
+  // PJ requires company name + address (CUI optional, validated if given).
+  function readCtBilling() {
+    const type = qs('input[name="ctBillingType"]:checked', contentEl)?.value === 'PJ' ? 'PJ' : 'PF';
+    const val = (name) => String(qs(`[name="${name}"]`, contentEl)?.value || '').trim();
+    const fail = (name, msgKey) => {
+      const el = qs(`[name="${name}"]`, contentEl);
+      if (el) setFieldError(el, true);
+      return { error: t(msgKey) };
+    };
+    if (type === 'PJ') {
+      const companyName = val('ctBillCompany');
+      const cui = val('ctBillCui');
+      const companyAddress = val('ctBillCompanyAddress');
+      if (!companyName) return fail('ctBillCompany', 'billing.errors.companyName');
+      if (cui && !isValidCui(cui)) return fail('ctBillCui', 'billing.errors.cui');
+      if (!companyAddress) return fail('ctBillCompanyAddress', 'billing.errors.companyAddress');
+      return { billing: { type: 'PJ', companyName, cui, regCom: cuiRegCom, companyAddress } };
+    }
+    const nume = val('ctBillNume');
+    const prenume = val('ctBillPrenume');
+    const address = val('ctBillAddress');
+    const cnp = val('ctBillCnp');
+    if (!nume) return fail('ctBillNume', 'transactions.billErrorNume');
+    if (!prenume) return fail('ctBillPrenume', 'transactions.billErrorPrenume');
+    if (!address) return fail('ctBillAddress', 'transactions.billErrorAddress');
+    if (cnp && !isValidCnp(cnp)) return fail('ctBillCnp', 'billing.errors.cnp');
+    const billing = { type: 'PF', name: `${nume} ${prenume}`.trim(), firstName: prenume, lastName: nume, address };
+    if (cnp) billing.cnp = cnp;
+    return { billing };
+  }
 
   // ── Matched-customer resolution (existing-user mode) ──
   // The datalist input is free text; we treat a customer as "selected" only
@@ -705,6 +878,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
   qs('[name="plate"]', contentEl).addEventListener('input', scheduleBalance);
   qs('[data-user-search]', contentEl).addEventListener('input', scheduleBalance);
   qs('[data-user-search]', contentEl).addEventListener('input', refreshUserPlates);
+  qs('[data-user-search]', contentEl).addEventListener('input', maybePrefillBilling);
 
   applyVisibility();
   refreshUserPlates();
@@ -725,6 +899,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       lbl.classList.toggle('border-frost-deep', !inp.checked);
     });
     refreshUserPlates();
+    maybePrefillBilling();
   });
 
   qs('[data-cancel]', contentEl).addEventListener('click', close);
@@ -886,6 +1061,17 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       payerPhone = newPhone;
     }
 
+    // Billing is mandatory for admin-created sales (long-term + credit packs).
+    // Credit check-in against existing credits already returned above, so at
+    // this point the sale is always invoiceable.
+    const billingRes = readCtBilling();
+    if (billingRes.error) {
+      errEl.textContent = billingRes.error;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    const billing = billingRes.billing;
+
     btn.disabled = true;
     btn.textContent = '…';
 
@@ -916,7 +1102,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         result = await adminCreateLongtermBookingFn({
           plate, dropoffAt, pickupAt, days, totalPrice,
           payerEmail, payerName, payerPhone, customerId,
-          paidBy, brokerName, autoCheckIn, notes,
+          paidBy, brokerName, autoCheckIn, notes, billing,
         });
       } else {
         const qtyRaw = qs('[name="quantity"]', contentEl).value;
@@ -932,7 +1118,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         result = await grantCreditsForCashFn({
           plate, quantity, amount,
           payerEmail, payerName, payerPhone, customerId,
-          paidBy, autoCheckIn,
+          paidBy, autoCheckIn, billing,
         });
       }
 

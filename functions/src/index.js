@@ -2214,6 +2214,36 @@ export const adminResendConfirmationEmail = onCall(
   }
 );
 
+// Normalize a client-supplied billing object into the stored shape. Defensive:
+// never trust the client — coerce to strings, cap length, drop unknown keys,
+// emit no `undefined` (Firestore rejects it). The client already enforces the
+// required fields; this just keeps the persisted doc clean. Falls back to a
+// bare PF record when nothing usable is provided.
+function sanitizeBilling(raw) {
+  const b = raw && typeof raw === 'object' ? raw : {};
+  const s = (v) => (v == null ? '' : String(v)).trim().slice(0, 200);
+  if (b.type === 'PJ') {
+    return {
+      type: 'PJ',
+      companyName: s(b.companyName),
+      cui: s(b.cui),
+      regCom: s(b.regCom),
+      companyAddress: s(b.companyAddress),
+    };
+  }
+  const out = {
+    type: 'PF',
+    name: s(b.name),
+    firstName: s(b.firstName),
+    lastName: s(b.lastName),
+    locality: s(b.locality),
+    address: s(b.address),
+  };
+  const cnp = s(b.cnp);
+  if (cnp) out.cnp = cnp;
+  return out;
+}
+
 // ── grantCreditsForCash (callable) ──────────────────────────────────────
 // Admin/staff grants tokens directly to a plate (or registered customer)
 // after collecting cash/card at the lot. No Netopia involvement. Reuses
@@ -2237,6 +2267,7 @@ export const adminCreateLongtermBooking = onCall(
       brokerName,           // broker/prepaid reservations (e.g. ParkVia)
       autoCheckIn = false,  // walk-in flow: car is at the lot now
       notes,                // optional internal note, mirrors the edit-booking flow
+      billing,              // PF/PJ invoice identity captured at the desk
     } = request.data || {};
 
     if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
@@ -2252,6 +2283,7 @@ export const adminCreateLongtermBooking = onCall(
     if (!['cash', 'card', 'broker', 'later'].includes(paidBy)) {
       throw new HttpsError('invalid-argument', 'paidBy must be cash, card, broker or later');
     }
+    const billingClean = sanitizeBilling(billing);
     // 'later' = an unpaid reservation the customer pays afterwards (online via
     // the confirmation-email link, or at the lot). It rides the same rails as
     // a customer pay-at-pickup booking — see the pendingOrder created below.
@@ -2293,7 +2325,7 @@ export const adminCreateLongtermBooking = onCall(
         email: payerEmail || '',
         phone: payerPhone || '',
       },
-      billing: { type: 'PF' },
+      billing: billingClean,
       notes: String(notes || '').trim() || null,
       paymentId: orderId,
       paymentMethod: payLater ? 'pay-at-pickup' : (paidBy === 'broker' ? 'broker' : 'admin'),
@@ -2338,7 +2370,7 @@ export const adminCreateLongtermBooking = onCall(
           name: payerName || '',
           email: payerEmail || '',
           phone: payerPhone || '',
-          billing: { type: 'PF' },
+          billing: billingClean,
         },
         createdAt: nowIso,
         createdBy: uid,
@@ -2353,6 +2385,14 @@ export const adminCreateLongtermBooking = onCall(
       payload: { plate, days: d, totalPrice: total, paidBy, spotId, source: bookingSource, brokerName: brokerName || null },
       timestamp: nowIso,
     });
+
+    // Cache billing on the customer profile for future pre-fill (mirrors the
+    // online-purchase path in creditTokens). Only for a registered account.
+    if (customerId) {
+      await db.collection('users').doc(customerId)
+        .set({ billing: billingClean }, { merge: true })
+        .catch((err) => console.warn('billing profile cache failed:', err?.message));
+    }
 
     // Cash drawer only for physically-collected cash. Card is reconciled by
     // the terminal; broker/prepaid money never touches the lot.
@@ -2423,6 +2463,7 @@ export const grantCreditsForCash = onCall(
       customerId,
       paidBy = 'cash',
       autoCheckIn = false,  // walk-in flow: consume one token immediately
+      billing,              // PF/PJ invoice identity captured at the desk
     } = request.data || {};
     if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
     const qty = Number(quantity);
@@ -2434,6 +2475,7 @@ export const grantCreditsForCash = onCall(
     }
 
     const adminPaidBy = paidBy === 'cash' ? 'admin-cash' : 'admin-card';
+    const billingClean = sanitizeBilling(billing);
     const docId = await creditTokens({
       packId: packId || null,
       quantity: qty,
@@ -2444,6 +2486,7 @@ export const grantCreditsForCash = onCall(
         email: payerEmail || '',
         name: payerName || '',
         phone: payerPhone || '',
+        billing: billingClean,
       },
       source: 'admin-cash',
       paidBy: adminPaidBy,
