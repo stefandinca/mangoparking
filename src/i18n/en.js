@@ -1758,6 +1758,29 @@ export default {
     },
   },
 
+  // Reservation detail modal (click a reservation number)
+  bookingDetail: {
+    title: 'Reservation details',
+    customer: 'Customer',
+    phone: 'Phone',
+    email: 'Email',
+    plate: 'Plate',
+    type: 'Type',
+    period: 'Period',
+    status: 'Status',
+    payment: 'Payment',
+    total: 'Total',
+    checkedIn: 'Checked in',
+    checkedOut: 'Checked out',
+    notes: 'Notes',
+    viewCustomer: 'View customer profile',
+    typeLongterm: 'Long-term',
+    typeCredit: 'Credits',
+    madeByStaff: 'Reservation made by {name} on {date}',
+    madeByStaffGeneric: 'Reservation made by staff on {date}',
+    madeOnline: 'Reservation made online on {date}',
+  },
+
   // Cashbook (admin)
   cashbook: {
     pageTitle: 'Cashbook',

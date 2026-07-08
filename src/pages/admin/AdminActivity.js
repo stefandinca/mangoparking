@@ -15,6 +15,8 @@ import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { subscribeCollection } from '../../firebase/db.js';
 import { navigate } from '../../router/index.js';
+import { openUserDetail } from '../../components/admin/UserDetailModal.js';
+import { openBookingDetail } from '../../components/admin/BookingDetailModal.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
@@ -94,7 +96,15 @@ function statusBadge(status) {
   return `<span class="inline-block text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls}">${escapeHtml(label)}</span>`;
 }
 
-// ── Upcoming event rows (unchanged behaviour: click → check-ins deep-link) ─
+// A customer name that opens their profile (shared user-detail modal). Renders
+// a plain span when there's nothing to resolve (no account id and no email).
+function nameSpan(name, customerId, email, cls) {
+  const label = escapeHtml(name || email || '—');
+  if (!customerId && !email) return `<span class="${cls}">${label}</span>`;
+  return `<span data-user-link data-uid="${escapeHtml(customerId || '')}" data-email="${escapeHtml(email || '')}" class="${cls} hover:text-blueberry hover:underline cursor-pointer">${label}</span>`;
+}
+
+// ── Upcoming event rows (click → check-ins deep-link; name → profile) ─
 function eventRow(e, locale) {
   const time = fmtTime(e.at, locale);
   if (e.kind === 'checkin' || e.kind === 'checkout') {
@@ -102,13 +112,12 @@ function eventRow(e, locale) {
     const isCheckin = e.kind === 'checkin';
     const cls = isCheckin ? 'bg-leaf/10 text-leaf' : 'bg-blueberry/10 text-blueberry';
     const label = isCheckin ? t('activity.kindCheckin') : t('activity.kindCheckout');
-    const name = b.contact?.name || b.contact?.email || '—';
     return `
       <button type="button" data-go="${isCheckin ? 'checkin' : 'checkout'}" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(b.id)}" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
         <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
         <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls} shrink-0">${label}</span>
         <span class="font-mono text-[13px] text-charcoal shrink-0">${escapeHtml(b.licensePlate || '—')}</span>
-        <span class="text-[13px] text-dim truncate">${escapeHtml(name)}</span>
+        ${nameSpan(b.contact?.name || b.contact?.email, b.customerId, b.contact?.email, 'text-[13px] text-dim truncate')}
       </button>`;
   }
   const tr = e.transfer;
@@ -119,7 +128,7 @@ function eventRow(e, locale) {
     <button type="button" data-go="transfers" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(tr.id)}" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
       <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
       <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-mango/15 text-charcoal shrink-0">${label}</span>
-      <span class="text-[13px] text-charcoal truncate">${escapeHtml(tr.contactName || '—')}</span>
+      ${nameSpan(tr.contactName, null, tr.email, 'text-[13px] text-charcoal truncate')}
       <span class="text-[12px] text-dim truncate hidden sm:inline">${escapeHtml(place)}</span>
     </button>`;
 }
@@ -141,11 +150,11 @@ function bookingDetailHtml(b, locale) {
   const end = b.pickupAt || b.endDate;
   const period = start ? `${fmtDateTime(start, locale)} → ${fmtDateTime(end, locale)}` : '';
   return [
-    detailLine(t('activity.detailCustomer'), esc(b.contact?.name || '—')),
+    detailLine(t('activity.detailCustomer'), nameSpan(b.contact?.name, b.customerId, b.contact?.email, 'text-blueberry')),
     detailLine(t('activity.detailPhone'), telLink(b.contact?.phone)),
     detailLine(t('activity.detailEmail'), b.contact?.email ? esc(b.contact.email) : ''),
     detailLine(t('activity.detailPlate'), `<span class="font-mono">${esc(b.licensePlate || '—')}</span>`),
-    detailLine(t('activity.detailBooking'), b.code ? `<span class="font-mono">${esc(b.code)}</span>` : ''),
+    detailLine(t('activity.detailBooking'), b.code ? `<button type="button" data-booking-detail data-id="${esc(b.id)}" class="font-mono text-blueberry hover:underline">${esc(b.code)}</button>` : ''),
     detailLine(t('activity.detailPeriod'), esc(period)),
     detailLine(t('activity.detailStatus'), statusBadge(b.status)),
     detailLine(t('activity.detailTotal'), b.totalPrice != null ? `${Number(b.totalPrice)} ${esc(t('common.lei'))}` : ''),
@@ -161,7 +170,7 @@ function transferDetailHtml(tr, isReturn, locale) {
   ].filter(Boolean).join(' · ');
   const status = isReturn ? (tr.returnStatus || 'scheduled') : (tr.status || 'scheduled');
   return [
-    detailLine(t('activity.detailCustomer'), esc(tr.contactName || '—')),
+    detailLine(t('activity.detailCustomer'), nameSpan(tr.contactName, null, tr.email, 'text-blueberry')),
     detailLine(t('activity.detailPhone'), telLink(tr.phone)),
     detailLine(t('activity.detailEmail'), tr.email ? esc(tr.email) : ''),
     detailLine(t('transfers.pickupAddress'), esc(tr.pickupAddress || '')),
@@ -177,14 +186,15 @@ function transferDetailHtml(tr, isReturn, locale) {
 function historyRow(e, locale) {
   const time = fmtTime(e.at, locale);
   const isBooking = e.kind === 'checkin' || e.kind === 'checkout';
-  let badgeCls, label, plate, name, status, detail;
+  let badgeCls, label, plate, nameHtml, status, detail;
+  const nameCls = 'text-[13px] text-dim truncate flex-1 min-w-0';
   if (isBooking) {
     const b = e.booking;
     const isCheckin = e.kind === 'checkin';
     badgeCls = isCheckin ? 'bg-leaf/10 text-leaf' : 'bg-blueberry/10 text-blueberry';
     label = isCheckin ? t('activity.kindCheckin') : t('activity.kindCheckout');
     plate = `<span class="font-mono text-[13px] text-charcoal shrink-0">${escapeHtml(b.licensePlate || '—')}</span>`;
-    name = escapeHtml(b.contact?.name || b.contact?.email || '—');
+    nameHtml = nameSpan(b.contact?.name || b.contact?.email, b.customerId, b.contact?.email, nameCls);
     status = b.status;
     detail = bookingDetailHtml(b, locale);
   } else {
@@ -193,7 +203,7 @@ function historyRow(e, locale) {
     badgeCls = 'bg-mango/15 text-charcoal';
     label = isReturn ? t('activity.kindTransferReturn') : t('activity.kindTransferOut');
     plate = '';
-    name = escapeHtml(tr.contactName || '—');
+    nameHtml = nameSpan(tr.contactName, null, tr.email, nameCls);
     status = isReturn ? (tr.returnStatus || 'scheduled') : (tr.status || 'scheduled');
     detail = transferDetailHtml(tr, isReturn, locale);
   }
@@ -203,7 +213,7 @@ function historyRow(e, locale) {
         <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
         <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${badgeCls} shrink-0">${label}</span>
         ${plate}
-        <span class="text-[13px] text-dim truncate flex-1 min-w-0">${name}</span>
+        ${nameHtml}
         ${statusBadge(status)}
         <svg class="w-4 h-4 text-dim shrink-0 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
       </summary>
@@ -433,9 +443,26 @@ export default function AdminActivity(container) {
   // History range presets.
   delegate(page, 'click', '[data-hist-preset]', (_e, btn) => applyPreset(Number(btn.dataset.histPreset)));
 
+  // Client name (anywhere in either tab) → open their profile.
+  delegate(page, 'click', '[data-user-link]', (e, el) => {
+    e.preventDefault();  // also stops the <details> summary from toggling
+    e.stopPropagation();
+    openUserDetail({ customerId: el.dataset.uid || null, email: el.dataset.email || null, displayName: el.textContent.trim() });
+  });
+
+  // Reservation number → reservation details + who created it and when.
+  delegate(page, 'click', '[data-booking-detail]', (e, el) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const b = bookings.find((x) => x.id === el.dataset.id);
+    if (b) openBookingDetail(b);
+  });
+
   // Upcoming rows: jump to the relevant check-in tab, scoped to the clicked
   // event's day, and ask that page to scroll to + highlight the reservation.
-  delegate(page, 'click', '[data-go]', (_e, btn) => {
+  // A click on the name / reservation-number is handled above — skip it here.
+  delegate(page, 'click', '[data-go]', (e, btn) => {
+    if (e.target.closest('[data-user-link], [data-booking-detail]')) return;
     const goParams = new URLSearchParams({ tab: btn.dataset.go });
     const day = localDayKey(btn.dataset.at);
     if (day) goParams.set('window', `${day}..${day}`);
