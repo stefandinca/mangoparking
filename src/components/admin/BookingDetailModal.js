@@ -110,6 +110,8 @@ export function openBookingDetail(booking) {
         ${row(t('bookingDetail.passengers'), b.passengers != null ? String(b.passengers) : '')}
         ${row(t('bookingDetail.type'), esc(typeLabel))}
         ${row(t('bookingDetail.period'), esc(period))}
+        ${row(t('bookingDetail.flightDropoff'), b.flightNumberDropoff ? `<span class="font-mono">${esc(b.flightNumberDropoff)}</span>` : '')}
+        ${row(t('bookingDetail.flightPickup'), b.flightNumberPickup ? `<span class="font-mono">${esc(b.flightNumberPickup)}</span>` : '')}
         ${row(t('bookingDetail.status'), badge(b.status))}
         ${row(t('bookingDetail.payment'), badge(b.paymentStatus))}
         ${row(t('bookingDetail.total'), b.totalPrice != null ? `${Number(b.totalPrice)} ${esc(t('common.lei'))}` : '')}

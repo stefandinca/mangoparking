@@ -247,6 +247,8 @@ async function createBookingFromOrder(orderId, order) {
     pickupAt: order.pickupAt || null,
     days: order.days,
     passengers: sanitizePassengers(order.customerData?.passengers),
+    flightNumberDropoff: sanitizeFlight(order.customerData?.flightNumberDropoff),
+    flightNumberPickup: sanitizeFlight(order.customerData?.flightNumberPickup),
     basePrice: chargedAmount,
     latePrice: 0,
     totalPrice: chargedAmount,
@@ -2250,6 +2252,13 @@ function sanitizeBilling(raw) {
 function sanitizePassengers(v) {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
+}
+
+// Flight number captured on a long-term reservation (optional). Upper-cased,
+// whitespace-collapsed and capped; null when blank so older bookings stay unset.
+function sanitizeFlight(v) {
+  const s = (v == null ? '' : String(v)).trim().toUpperCase().replace(/\s+/g, ' ').slice(0, 12);
+  return s || null;
 }
 
 // ── grantCreditsForCash (callable) ──────────────────────────────────────

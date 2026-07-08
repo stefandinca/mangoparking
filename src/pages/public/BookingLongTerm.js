@@ -129,6 +129,32 @@ export default function BookingLongTerm(container) {
       <button type="button" data-next-step="${to}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-6 py-2.5 rounded-xl transition-colors">${t('longTerm.nextStep')} →</button>
     </div>`;
 
+  // Small (i) tooltip: desktop shows on hover (CSS group-hover), touch toggles
+  // on tap (delegated handler below). The bubble is a descendant of the group
+  // span but positioned against the `relative` label, so it spans the field
+  // width and never gets clipped by the step card's `overflow-hidden`.
+  const infoTip = (text) => `
+    <span class="group inline-flex align-middle ml-1.5">
+      <button type="button" data-tip-btn aria-label="${escapeHtml(text)}"
+        class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-frost-deep text-charcoal/60 text-[10px] font-bold leading-none hover:bg-blueberry hover:text-white focus:outline-none focus:bg-blueberry focus:text-white transition-colors">i</button>
+      <span data-tip-bubble role="tooltip"
+        class="hidden group-hover:block absolute z-30 left-0 top-full mt-1 w-full px-3 py-2 rounded-xl bg-blueberry-deep text-white text-[12px] font-normal leading-snug shadow-lg pointer-events-none">
+        ${escapeHtml(text)}
+      </span>
+    </span>`;
+
+  // Optional flight-number field shown under each date (drop-off / pick-up).
+  const flightField = (name) => `
+    <div class="mt-2.5">
+      <label class="relative flex items-center text-[13px] font-medium text-charcoal/70 mb-1.5">
+        ${t('longTerm.flightNumber')}
+        <span class="text-dim font-normal ml-1">(${t('wizard.optional')})</span>
+        ${infoTip(t('longTerm.flightTooltip'))}
+      </label>
+      <input type="text" name="${name}" placeholder="RO 201" maxlength="10" autocomplete="off"
+        class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
+    </div>`;
+
   const page = html`<div>
     <div data-navbar></div>
 
@@ -153,6 +179,7 @@ export default function BookingLongTerm(container) {
                   </label>
                   ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true, stepToNext: 'pickupAt' })}
                   <p class="text-[12px] text-charcoal/70 mt-1.5 leading-snug">${t('longTerm.dropoffHint')}</p>
+                  ${flightField('flightNumberDropoff')}
                 </div>
                 <div>
                   <label class="flex items-center gap-2 text-[14px] font-medium text-charcoal/70 mb-1.5">
@@ -161,6 +188,7 @@ export default function BookingLongTerm(container) {
                   </label>
                   ${dateTimeFieldHtml({ name: 'pickupAt', value: toLocalDatetimeValue(dayAfter10), min: toLocalDatetimeValue(tomorrow10), required: true })}
                   <p class="text-[12px] text-charcoal/70 mt-1.5 leading-snug">${t('longTerm.pickupHint')}</p>
+                  ${flightField('flightNumberPickup')}
                 </div>
               </div>
               <p class="text-[12px] text-dim mt-3">${t('longTerm.graceNote')}</p>
@@ -945,6 +973,18 @@ export default function BookingLongTerm(container) {
     }
   });
 
+  // Flight-number info tooltips: desktop reveals on hover (CSS group-hover);
+  // touch devices toggle on tap. A tap anywhere else closes any open bubble.
+  page.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tip-btn]');
+    const bubble = btn ? btn.parentElement.querySelector('[data-tip-bubble]') : null;
+    page.querySelectorAll('[data-tip-bubble]').forEach((b) => { if (b !== bubble) b.classList.add('hidden'); });
+    if (btn) {
+      e.preventDefault();
+      bubble?.classList.toggle('hidden');
+    }
+  });
+
   // Start with only the first step expanded.
   openStep('dates', { scroll: false });
 
@@ -988,6 +1028,10 @@ export default function BookingLongTerm(container) {
     const phone = phoneValue(form.phone);
     // Number of travellers (1–10) so the shuttle knows the party size.
     const passengers = Math.min(10, Math.max(1, parseInt(form.passengers?.value, 10) || 1));
+    // Optional flight numbers (departure under drop-off, return under pick-up).
+    const cleanFlight = (v) => String(v || '').trim().toUpperCase().replace(/\s+/g, ' ').slice(0, 12);
+    const flightNumberDropoff = cleanFlight(form.flightNumberDropoff?.value);
+    const flightNumberPickup = cleanFlight(form.flightNumberPickup?.value);
 
     const plateInput = form.querySelector('input[name="licensePlate"]');
     const checks = [
@@ -1069,6 +1113,8 @@ export default function BookingLongTerm(container) {
           phone,
           billing,
           passengers,
+          flightNumberDropoff,
+          flightNumberPickup,
         },
       });
       // The browser is now navigating to Netopia's hosted page —
