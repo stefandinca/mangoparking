@@ -1,6 +1,6 @@
 # Mango Parking — Documentation Index
 
-_Last reconciled against the codebase: **2026-07-01**._
+_Last reconciled against the codebase: **2026-07-09**._
 
 This folder holds the product/architecture docs, per-version feature records, the
 admin-flow audit, and the deploy guide. Docs are split three ways so it's always
@@ -34,6 +34,7 @@ Each `v.1.x_*.md` doc now carries a status banner at the top. Summary:
 | v1.9 | Long-term "free days" vouchers (splittable day balances) | ✅ Shipped | [v.1.9_days_vouchers.md](v.1.9_days_vouchers.md) |
 | v1.10 | Credit gift vouchers + direct admin credit grants | ✅ Shipped | [v.1.10_credit_vouchers.md](v.1.10_credit_vouchers.md) |
 | June'26 | Client feedback round (real online discount, voucher breakdowns, billing prefill, single-name field, check-in/overdue polish) | ✅ Shipped | [feedback-june.md](feedback-june.md) · [feedback-june-status.md](feedback-june-status.md) |
+| July'26 | Second feedback round (int'l phone entry, activity history + clickable client/reservation links, user CSV export, admin billing required, passengers + flight numbers, flight delay/cancel warnings, time-slider picker) | ✅ Shipped (needs Functions deploy) | [feedback-july.md](feedback-july.md) |
 
 > **The numbering gap (v1.2–v1.6).** v1.2/1.3/1.4 were *planned* but leapfrogged —
 > the work that actually shipped jumped to **v1.7+**. The three planned docs now
@@ -70,6 +71,9 @@ The three headline integrations are the easiest to misread, so explicitly:
   to `main`); Firebase CLI for functions/rules/indexes/storage.
 - [feedback-june.md](feedback-june.md) / [feedback-june-status.md](feedback-june-status.md)
   — the June client-feedback round and its item-by-item resolution.
+- [feedback-july.md](feedback-july.md) — the July round (phone entry, activity
+  history + clickable links, CSV export, admin billing, passengers/flight
+  numbers, flight-status warnings, time-slider picker) and its resolution.
 
 ## Roadmap (planned / deferred, not built)
 
