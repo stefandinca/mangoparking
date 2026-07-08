@@ -531,8 +531,134 @@ function openReportModal(report, locale) {
     <p class="text-[11px] text-dim text-center pt-3 border-t border-frost-deep">${t('cashbook.reportFooter')}</p>
   </div>`;
 
-  const modal = openModal(body);
+  openModal(body);
   body.querySelector('[data-print]')?.addEventListener('click', () => {
-    window.print();
+    printReport(report, locale);
   });
+}
+
+// Build a self-contained, print-optimized HTML document for a closed report.
+// It is printed inside an isolated iframe (see printReport) so the browser
+// renders ONLY this — not the live admin page + scrollable modal, which is
+// what window.print() captured before and produced the broken/clipped output.
+// No Tailwind classes reach the iframe, so all styling is inline here.
+function buildPrintDoc(report, locale) {
+  const esc = escapeHtml;
+  const lei = t('common.lei');
+  const entriesByDay = groupByDay(report.entries || []);
+  const handoversList = (report.handovers || [])
+    .sort((a, b) => String(a.handedAt || '').localeCompare(String(b.handedAt || '')));
+
+  const days = entriesByDay.map(([day, entries]) => {
+    const daySum = sumAmount(entries);
+    const rows = entries
+      .sort((a, b) => String(a.paidAt || '').localeCompare(String(b.paidAt || '')))
+      .map((e) => `
+        <tr>
+          <td class="mono">${esc(formatTime(e.paidAt, locale))}</td>
+          <td class="mono">${esc(e.plate || '—')}</td>
+          <td>${esc(e.payerName || '—')}</td>
+          <td class="dim">${esc(sourceLabel(e.source))}</td>
+          <td class="mono right">${Number(e.amount || 0)} ${esc(lei)}</td>
+        </tr>`).join('');
+    return `
+      <section class="day">
+        <div class="day-head">
+          <span class="day-title">${esc(formatDay(day, locale))}</span>
+          <span class="mono bold">${daySum} ${esc(lei)}</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>${esc(t('cashbook.time'))}</th>
+            <th>${esc(t('cashbook.plate'))}</th>
+            <th>${esc(t('cashbook.payer'))}</th>
+            <th>${esc(t('cashbook.source'))}</th>
+            <th class="right">${esc(t('cashbook.amount'))}</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>`;
+  }).join('');
+
+  const handovers = handoversList.length
+    ? `<ul class="handovers">${handoversList.map((h) => `
+        <li>
+          <span>${esc(h.handedTo || '—')} · ${esc(formatDateTime(h.handedAt, locale))}${h.notes ? ' · ' + esc(h.notes) : ''}</span>
+          <span class="mono bold">${Number(h.amount || 0)} ${esc(lei)}</span>
+        </li>`).join('')}</ul>`
+    : `<p class="dim italic">${esc(t('cashbook.noHandovers'))}</p>`;
+
+  const styles = `
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1A1A1A; font-size: 13px; line-height: 1.4; padding: 24px; }
+    .brand { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #C8912A; font-weight: 700; }
+    h1 { font-size: 20px; margin: 2px 0 4px; color: #0F2D66; }
+    .sub { color: #666; font-size: 12px; margin: 1px 0; }
+    .sub.mono { font-size: 11px; }
+    .summary { display: flex; gap: 16px; margin: 16px 0; }
+    .card { border: 1px solid #EDE3CC; border-radius: 8px; padding: 8px 14px; min-width: 140px; }
+    .card .label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #999; }
+    .card .value { font-size: 22px; font-weight: 700; }
+    .value.leaf { color: #3E9B37; }
+    .day { margin-bottom: 14px; page-break-inside: avoid; }
+    .day-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .day-title { font-weight: 600; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; border: 1px solid #EDE3CC; }
+    th { background: #FFF8E8; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #999; padding: 6px 10px; font-weight: 600; }
+    th.right { text-align: right; }
+    td { padding: 5px 10px; border-top: 1px solid #F0EADB; font-size: 12px; }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace; }
+    .right { text-align: right; }
+    .dim { color: #888; }
+    .bold { font-weight: 700; }
+    .italic { font-style: italic; }
+    .section-title { font-weight: 600; font-size: 14px; margin: 18px 0 6px; }
+    .handovers { list-style: none; padding: 0; margin: 0; }
+    .handovers li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #F0EADB; }
+    .footer { text-align: center; color: #999; font-size: 11px; margin-top: 22px; padding-top: 10px; border-top: 1px solid #EDE3CC; }
+    @page { margin: 14mm; }
+  `;
+
+  const title = esc(t('cashbook.reportTitle'));
+  return `<!DOCTYPE html><html lang="${esc(locale)}"><head><meta charset="utf-8"><title>${title}</title><style>${styles}</style></head><body>
+    <div class="brand">ManGO Parking</div>
+    <h1>${title}</h1>
+    <p class="sub">${esc(report.agentName || '—')} · ${esc(formatDateTime(report.generatedAt, locale))}</p>
+    <p class="sub mono">${esc(formatDateTime(report.rangeFromIso, locale))} → ${esc(formatDateTime(report.rangeToIso, locale))}</p>
+    <div class="summary">
+      <div class="card"><div class="label">${esc(t('cashbook.reportEntries'))}</div><div class="value">${Number(report.entryCount || 0)}</div></div>
+      <div class="card"><div class="label">${esc(t('cashbook.reportTotal'))}</div><div class="value leaf">${Number(report.totalAmount || 0)} ${esc(lei)}</div></div>
+    </div>
+    ${days || `<p class="dim italic">${esc(t('cashbook.emptyOpen'))}</p>`}
+    <div class="section-title">${esc(t('cashbook.handovers'))}</div>
+    ${handovers}
+    <div class="footer">${esc(t('cashbook.reportFooter'))}</div>
+  </body></html>`;
+}
+
+// Print a closed report in isolation: write the self-contained doc into a
+// hidden iframe and print that window, so nothing from the SPA (sidebar,
+// navbar, modal overflow) bleeds into the output. Cleaned up on afterprint,
+// with a long safety-net timeout for browsers that don't fire it.
+function printReport(report, locale) {
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  iframe.srcdoc = buildPrintDoc(report, locale);
+  iframe.onload = () => {
+    const win = iframe.contentWindow;
+    const cleanup = () => { if (iframe.parentNode) iframe.remove(); };
+    try {
+      win.focus();
+      win.onafterprint = cleanup;
+      win.print();
+    } catch (err) {
+      console.error('cashbook print failed', err);
+      cleanup();
+      return;
+    }
+    setTimeout(cleanup, 60000);
+  };
+  document.body.appendChild(iframe);
 }
