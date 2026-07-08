@@ -107,6 +107,7 @@ export function openBookingDetail(booking) {
         ${row(t('bookingDetail.phone'), b.contact?.phone ? `<a href="tel:${esc(b.contact.phone)}" class="text-blueberry hover:underline">${esc(b.contact.phone)}</a>` : '')}
         ${row(t('bookingDetail.email'), b.contact?.email ? esc(b.contact.email) : '')}
         ${row(t('bookingDetail.plate'), `<span class="font-mono">${esc(b.licensePlate || '—')}</span>`)}
+        ${row(t('bookingDetail.passengers'), b.passengers != null ? String(b.passengers) : '')}
         ${row(t('bookingDetail.type'), esc(typeLabel))}
         ${row(t('bookingDetail.period'), esc(period))}
         ${row(t('bookingDetail.status'), badge(b.status))}

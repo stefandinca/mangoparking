@@ -186,6 +186,12 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           </div>
         </div>
         <div>
+          <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createPassengers')}</label>
+          <select name="passengers" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+            ${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
+          </select>
+        </div>
+        <div>
           <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createTotal')} *</label>
           <input type="number" name="totalPrice" min="1" step="1" required placeholder="120"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
@@ -1099,10 +1105,11 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           ? String(qs('[name="brokerName"]', contentEl)?.value || '').trim()
           : '';
         const notes = String(qs('[name="notes"]', contentEl)?.value || '').trim();
+        const passengers = Math.min(10, Math.max(1, parseInt(qs('[name="passengers"]', contentEl)?.value, 10) || 1));
         result = await adminCreateLongtermBookingFn({
           plate, dropoffAt, pickupAt, days, totalPrice,
           payerEmail, payerName, payerPhone, customerId,
-          paidBy, brokerName, autoCheckIn, notes, billing,
+          paidBy, brokerName, autoCheckIn, notes, billing, passengers,
         });
       } else {
         const qtyRaw = qs('[name="quantity"]', contentEl).value;

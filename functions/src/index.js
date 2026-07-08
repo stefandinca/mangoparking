@@ -246,6 +246,7 @@ async function createBookingFromOrder(orderId, order) {
     dropoffAt: order.dropoffAt || null,
     pickupAt: order.pickupAt || null,
     days: order.days,
+    passengers: sanitizePassengers(order.customerData?.passengers),
     basePrice: chargedAmount,
     latePrice: 0,
     totalPrice: chargedAmount,
@@ -2244,6 +2245,13 @@ function sanitizeBilling(raw) {
   return out;
 }
 
+// Number of passengers captured on a long-term reservation (1–10). Returns
+// null for anything out of range / missing so older bookings stay unset.
+function sanitizePassengers(v) {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
+}
+
 // ── grantCreditsForCash (callable) ──────────────────────────────────────
 // Admin/staff grants tokens directly to a plate (or registered customer)
 // after collecting cash/card at the lot. No Netopia involvement. Reuses
@@ -2268,6 +2276,7 @@ export const adminCreateLongtermBooking = onCall(
       autoCheckIn = false,  // walk-in flow: car is at the lot now
       notes,                // optional internal note, mirrors the edit-booking flow
       billing,              // PF/PJ invoice identity captured at the desk
+      passengers,           // number of people travelling (1–10), for the shuttle
     } = request.data || {};
 
     if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
@@ -2316,6 +2325,7 @@ export const adminCreateLongtermBooking = onCall(
       dropoffAt,
       pickupAt,
       days: d,
+      passengers: sanitizePassengers(passengers),
       basePrice: total,
       latePrice: 0,
       totalPrice: total,

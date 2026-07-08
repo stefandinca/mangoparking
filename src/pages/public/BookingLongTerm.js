@@ -199,6 +199,13 @@ export default function BookingLongTerm(container) {
                 <input type="text" name="licensePlate" placeholder="B 123 ABC" value="${(user && profileVehicles.length > 0) ? '' : escapeHtml(profile?.vehicles?.[0]?.plate || '')}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] uppercase focus:outline-none focus:border-blueberry">
               </div>
 
+              <div class="mt-4">
+                <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('longTerm.passengers')}</label>
+                <select name="passengers" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+                  ${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
+                </select>
+              </div>
+
               <h3 class="font-heading font-bold text-[15px] text-blueberry-deep mt-6 mb-3">${t('longTerm.contactInfo')}</h3>
               <div class="space-y-3">
                 <div>
@@ -979,6 +986,8 @@ export default function BookingLongTerm(container) {
     const name = form.name.value.trim();
     const email = form.email.value.trim();
     const phone = phoneValue(form.phone);
+    // Number of travellers (1–10) so the shuttle knows the party size.
+    const passengers = Math.min(10, Math.max(1, parseInt(form.passengers?.value, 10) || 1));
 
     const plateInput = form.querySelector('input[name="licensePlate"]');
     const checks = [
@@ -1059,6 +1068,7 @@ export default function BookingLongTerm(container) {
           email,
           phone,
           billing,
+          passengers,
         },
       });
       // The browser is now navigating to Netopia's hosted page —
