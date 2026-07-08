@@ -100,7 +100,10 @@ export default function AdminUsers(container) {
   // Aggregates all bookings + credit purchases once inside buildUsersExport.
   async function exportCsv(e) {
     const btn = e.currentTarget;
-    const list = currentFiltered();
+    // Invoicing is for customers only — exclude staff (admin/agent/driver, incl.
+    // the legacy 'staff' alias). The per-user modal export can still export any
+    // account you explicitly open.
+    const list = currentFiltered().filter((u) => normalizeRole(u.role) === 'customer');
     if (!list.length) { showToast(t('admin.usersExport.empty'), 'info'); return; }
     const original = btn.textContent;
     btn.disabled = true;
