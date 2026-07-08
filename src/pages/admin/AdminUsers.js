@@ -22,6 +22,8 @@ import { functions } from '../../firebase/config.js';
 import { getCurrentUser } from '../../firebase/auth.js';
 import { isValidEmail } from '../../utils/validators.js';
 import { openUserDetailModal } from '../../components/admin/UserDetailModal.js';
+import { buildUsersExport } from '../../services/userExportService.js';
+import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
 
 const adminCreateUserFn = httpsCallable(functions, 'adminCreateUser');
 const adminSendInviteFn = httpsCallable(functions, 'adminSendInvite');
@@ -50,6 +52,9 @@ export default function AdminUsers(container) {
         <p class="text-dim text-[15px] mt-1">${t('admin.usersSubtitle')}</p>
       </div>
       <div class="flex gap-2 shrink-0">
+        <button data-export class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-4 py-2.5 rounded-xl transition-colors">
+          ${t('admin.usersExport.button')}
+        </button>
         <button data-create class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-4 py-2.5 rounded-xl transition-colors">
           ${t('admin.usersCreate')}
         </button>
@@ -79,6 +84,39 @@ export default function AdminUsers(container) {
   });
   qs('[data-create]', page).addEventListener('click', () => openCreateModal(reload));
   qs('[data-invite]', page).addEventListener('click', () => openInviteModal(reload));
+  qs('[data-export]', page).addEventListener('click', exportCsv);
+
+  // Users currently shown (respects the search box) — shared by render + export
+  // so the CSV matches exactly what the admin is looking at.
+  function currentFiltered() {
+    return users.filter((u) => {
+      if (!filter) return true;
+      const hay = `${u.email || ''} ${u.displayName || ''}`.toLowerCase();
+      return hay.includes(filter);
+    });
+  }
+
+  // Bulk invoice export: identity + lifetime spend totals, one row per user.
+  // Aggregates all bookings + credit purchases once inside buildUsersExport.
+  async function exportCsv(e) {
+    const btn = e.currentTarget;
+    const list = currentFiltered();
+    if (!list.length) { showToast(t('admin.usersExport.empty'), 'info'); return; }
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = t('common.loading');
+    try {
+      const { headers, rows } = await buildUsersExport(list);
+      downloadCsv(`mango-users-${todayStamp()}.csv`, buildCsv(headers, rows));
+      showToast(t('admin.usersExport.done', { n: rows.length }), 'success');
+    } catch (err) {
+      console.error('AdminUsers: export failed', err);
+      showToast(err?.message || t('admin.usersError'), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
 
   // Delegate "view detail" clicks on the name cell.
   rows.addEventListener('click', (e) => {
@@ -145,11 +183,7 @@ export default function AdminUsers(container) {
 
   function render() {
     const currentUid = getCurrentUser()?.uid;
-    const filtered = users.filter((u) => {
-      if (!filter) return true;
-      const hay = `${u.email || ''} ${u.displayName || ''}`.toLowerCase();
-      return hay.includes(filter);
-    });
+    const filtered = currentFiltered();
     if (filtered.length === 0) {
       rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">${t('admin.usersEmpty')}</div>`;
       return;

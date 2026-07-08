@@ -26,6 +26,8 @@ import { billingFieldsHtml, wireBillingToggle, readBilling } from '../widgets/Bi
 import { isValidPhone, isValidLicensePlate, required } from '../../utils/validators.js';
 import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { listVouchers } from '../../services/promoVoucherService.js';
+import { buildSingleUserExport } from '../../services/userExportService.js';
+import { buildCsv, downloadCsv, todayStamp, slugify } from '../../utils/csv.js';
 
 const adminUpdateUserProfileFn = httpsCallable(functions, 'adminUpdateUserProfile');
 const adminGrantCreditsFn = httpsCallable(functions, 'adminGrantCredits');
@@ -480,6 +482,9 @@ export function openUserDetailModal(user) {
   // the legacy 'staff' alias), matching the adminUpdateUserProfile guard. It
   // needs a real account (uid); a pure-guest booking reference has none.
   const canEdit = ['admin', 'agent', 'staff'].includes(getUserProfile()?.role) && !!user.id;
+  // Export (invoice data) needs a back-office role but not an account — a guest
+  // record resolved by email still has bookings worth exporting.
+  const canExport = ['admin', 'agent', 'staff'].includes(getUserProfile()?.role);
 
   const overlay = html`
     <div class="fixed inset-0 z-[90] flex items-start sm:items-center justify-center p-4 overflow-y-auto" data-detail-overlay>
@@ -491,6 +496,7 @@ export function openUserDetailModal(user) {
             <p class="text-[13px] text-dim truncate">${escapeHtml(user.email || '')}</p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
+            ${canExport ? `<button data-detail-export class="px-3 h-9 rounded-xl bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[13px] transition-colors">${escapeHtml(d.export)}</button>` : ''}
             ${canEdit ? `<button data-detail-edit class="px-3 h-9 rounded-xl bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[13px] transition-colors">${escapeHtml(d.editProfile)}</button>` : ''}
             <button data-detail-close class="w-9 h-9 rounded-xl bg-frost hover:bg-frost-deep text-charcoal/70 flex items-center justify-center transition-colors" aria-label="${escapeHtml(d.close)}">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -521,6 +527,26 @@ export function openUserDetailModal(user) {
       if (h) h.textContent = u.displayName || u.email || u.id || '—';
     };
     qs('[data-detail-edit]', overlay).addEventListener('click', () => enterEditMode(user, body, refreshHeader));
+  }
+  if (canExport) {
+    qs('[data-detail-export]', overlay).addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = t('common.loading');
+      try {
+        const { headers, rows } = await buildSingleUserExport(user);
+        const name = slugify(user.displayName || user.email || user.id);
+        downloadCsv(`mango-user-${name}-${todayStamp()}.csv`, buildCsv(headers, rows));
+        showToast(d.exportDone, 'success');
+      } catch (err) {
+        console.error('UserDetailModal: export failed', err);
+        showToast(err?.message || t('common.error'), 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = orig;
+      }
+    });
   }
   loadAndRender(user, body);
   return { close };

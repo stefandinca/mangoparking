@@ -741,6 +741,20 @@ export default {
       bookingCol: { code: 'Code', type: 'Type', dates: 'Period', status: 'Status', payment: 'Payment', price: 'Price' },
       transactions: 'Credit transactions',
       txnCol: { date: 'Date', type: 'Type', qty: 'Qty', plate: 'Plate' },
+      export: 'Export',
+      exportDone: 'Customer data exported.',
+    },
+    usersExport: {
+      button: 'Export CSV',
+      empty: 'No users to export.',
+      done: 'Exported {n} users.',
+      col: {
+        name: 'Name', email: 'Email', phone: 'Phone', role: 'Role',
+        billingType: 'Billing type', billingName: 'Billing name',
+        cui: 'CUI', regCom: 'Reg. No.', cnp: 'CNP', address: 'Address',
+        registered: 'Registered', bookings: 'Bookings',
+        credits: 'Credits bought', totalPaid: 'Total paid (RON)',
+      },
     },
     // Dashboard
     dashboardSubtitle: 'Overview of your parking facility',

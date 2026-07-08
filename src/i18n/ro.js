@@ -742,6 +742,20 @@ export default {
       bookingCol: { code: 'Cod', type: 'Tip', dates: 'Perioadă', status: 'Status', payment: 'Plată', price: 'Preț' },
       transactions: 'Tranzacții credite',
       txnCol: { date: 'Dată', type: 'Tip', qty: 'Cant.', plate: 'Plăcuță' },
+      export: 'Export',
+      exportDone: 'Datele clientului au fost exportate.',
+    },
+    usersExport: {
+      button: 'Export CSV',
+      empty: 'Nu există utilizatori de exportat.',
+      done: '{n} utilizatori exportați.',
+      col: {
+        name: 'Nume', email: 'Email', phone: 'Telefon', role: 'Rol',
+        billingType: 'Tip facturare', billingName: 'Nume facturare',
+        cui: 'CUI', regCom: 'Reg. Com.', cnp: 'CNP', address: 'Adresă',
+        registered: 'Înregistrat', bookings: 'Rezervări',
+        credits: 'Credite cumpărate', totalPaid: 'Total plătit (RON)',
+      },
     },
     // Dashboard
     dashboardSubtitle: 'Prezentare generală a parcării',
