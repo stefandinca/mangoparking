@@ -50,16 +50,20 @@ function row(label, valueHtml) {
   </div>`;
 }
 
-// "Reservation made by {name} on {date}" — resolves the creator uid to a staff
-// name; falls back to a generic staff/online label from the booking's source.
+// "Reservation made by {name} on {date}" — resolves the creator uid to a name.
+// A booking's `createdBy` is only ever written by the staff-only
+// adminCreateLongtermBooking callable, so whoever it points to IS a staff
+// member: resolve their uid to a name with NO role gating (gating on the role
+// field was too strict — a legacy/changed/missing role dropped a legitimate
+// creator to the generic "made by staff" label). Only fall back to the source
+// when there's no createdBy, or the account no longer resolves to a name.
 async function creatorLine(b, locale) {
   const when = fmt(b.createdAt, locale);
-  const staffRoles = ['admin', 'agent', 'staff', 'driver'];
   if (b.createdBy) {
     const u = await getDocument('users', b.createdBy).catch(() => null);
-    if (u && staffRoles.includes(u.role)) {
-      return t('bookingDetail.madeByStaff', { name: u.displayName || u.email || '—', date: when });
-    }
+    const name = u && (u.displayName || u.email);
+    if (name) return t('bookingDetail.madeByStaff', { name, date: when });
+    return t('bookingDetail.madeByStaffGeneric', { date: when });
   }
   if (b.source === 'admin' || b.source === 'broker' || b.paidBy === 'admin-cash' || b.paidBy === 'admin-card') {
     return t('bookingDetail.madeByStaffGeneric', { date: when });
