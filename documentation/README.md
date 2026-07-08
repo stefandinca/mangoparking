@@ -1,95 +1,90 @@
-# Mango Parking — Documentation Index
+# Mango Parking — Documentation
 
 _Last reconciled against the codebase: **2026-07-09**._
 
-This folder holds the product/architecture docs, per-version feature records, the
-admin-flow audit, and the deploy guide. Docs are split three ways so it's always
-clear whether something is **live**, **planned**, or **historical**:
+Reference documentation for Mango Parking — parking near Henri Coandă (Otopeni)
+airport with a free shuttle, run as two products (daily **credits** and
+**long-term bookings**) plus an `/admin` back office.
 
-| Location | Meaning |
+## How these docs are organized
+
+Docs are organized **by topic — backend, feature, and section — not by release
+or feedback round.** The goal is that a fresh session can read this folder and
+**completely understand the project: what is implemented and what is planned.**
+
+| Folder | What's in it |
 |---|---|
-| `documentation/` (this folder) | **Current** — describes what is live on `main`, or shipped-feature records. |
-| `documentation/roadmap/` | **Planned / deferred** — design docs for work **not yet built**. |
-| `documentation/archive/` | **Historical** — superseded plans and raw change notes, kept for provenance. |
+| [`backend/`](backend/) | How the server works: data model, Cloud Functions, security rules, payments, email, external integrations, i18n & permissions. |
+| [`features/`](features/) | One doc per product feature (credits, long-term bookings, pricing, vouchers, billing, cashbook & refunds, capacity, transfers, shuttle, reviews, trip info). |
+| [`sections/`](sections/) | The app surfaces: public site, customer account, admin panel. |
+| [`admin-flows/`](admin-flows/) | Detailed step-by-step staff walkthroughs, one per admin area, + the [BUGS.md](admin-flows/BUGS.md) register. |
+| [`roadmap/`](roadmap/) | **Planned / not built** — design docs for future work. |
+| [`archive/`](archive/) | **Historical** — superseded plans, raw change notes, past feedback rounds. |
 
-Start with [../Brief.md](../Brief.md) for the product + architecture overview.
+> **Maintenance rule.** After any task that changes behavior, structure, or plans,
+> update the affected doc(s) here in the same commit (and `CLAUDE.md` / `Brief.md`
+> when conventions or architecture shift). Keeping these current is part of
+> "done," not a follow-up.
 
----
+## Start here
 
-## Version docs — shipped vs. planned
+- [../Brief.md](../Brief.md) — product + architecture overview (the big picture).
+- [../CLAUDE.md](../CLAUDE.md) — working guide: stack, commands, directory map, conventions.
 
-Each `v.1.x_*.md` doc now carries a status banner at the top. Summary:
+## Backend
 
-| Version | Feature | Status | Doc |
-|---|---|---|---|
-| v1 (baseline) | Credits storefront + manual plate-lookup admin | ✅ Shipped | [archive/implementation.md](archive/implementation.md) |
-| v1 | Brevo email layer, pay-at-pickup, PF/PJ billing + CUI lookup, admin users/invites, unified check-in dashboard, reservation codes | ✅ Shipped | [archive/v1-plan.md](archive/v1-plan.md) _(plan, archived)_ |
-| v1.1 | Billing prefill, cancellation-with-refund, step-through date picker, cashbook | ✅ Shipped | [archive/v1.1-plan.md](archive/v1.1-plan.md) _(plan, archived)_ |
-| **v1.2** | **SmartBill fiscal invoicing (facturi / e-Factura)** | 📋 **Planned — not built** | [roadmap/v.1.2_smartbill.md](roadmap/v.1.2_smartbill.md) |
-| **v1.3** | **ANPR camera integration** (auto check-in/out by plate) | 📋 **Planned — not built** | [roadmap/v.1.3_anpr.md](roadmap/v.1.3_anpr.md) |
-| **v1.4** | **Netopia v1.x → v2 REST migration** (automated refunds/voids) | 📋 **Planned — not built** | [roadmap/v.1.4_netopia_v2_migration.md](roadmap/v.1.4_netopia_v2_migration.md) |
-| v1.5 – v1.6 | _(no docs — numbering gap; see note below)_ | — | — |
-| v1.7 | Admin check-in/check-out redesign (3 tabs) + `markNoShows` | ✅ Shipped | [v.1.7_checkin_redesign.md](v.1.7_checkin_redesign.md) |
-| v1.8 | Manual commuter check-in against existing credits | ✅ Shipped | [v.1.8_credit_checkin.md](v.1.8_credit_checkin.md) |
-| v1.9 | Long-term "free days" vouchers (splittable day balances) | ✅ Shipped | [v.1.9_days_vouchers.md](v.1.9_days_vouchers.md) |
-| v1.10 | Credit gift vouchers + direct admin credit grants | ✅ Shipped | [v.1.10_credit_vouchers.md](v.1.10_credit_vouchers.md) |
-| June'26 | Client feedback round (real online discount, voucher breakdowns, billing prefill, single-name field, check-in/overdue polish) | ✅ Shipped | [feedback-june.md](feedback-june.md) · [feedback-june-status.md](feedback-june-status.md) |
-| July'26 | Second feedback round (int'l phone entry, activity history + clickable client/reservation links, user CSV export, admin billing required, passengers + flight numbers, flight delay/cancel warnings, time-slider picker) | ✅ Shipped (needs Functions deploy) | [feedback-july.md](feedback-july.md) |
+- [backend/data-model.md](backend/data-model.md) — every Firestore collection, doc shape, and ID convention.
+- [backend/cloud-functions.md](backend/cloud-functions.md) — every Cloud Function (HTTP, callable, trigger, scheduled).
+- [backend/security-rules.md](backend/security-rules.md) — Firestore/Storage rules and the "server-only writes" principle.
+- [backend/payments-netopia.md](backend/payments-netopia.md) — Netopia Mobilpay (legacy crypto-envelope flow; **refunds are manual**).
+- [backend/email-brevo.md](backend/email-brevo.md) — Brevo transactional emails + ops alerts.
+- [backend/integrations.md](backend/integrations.md) — ANAF CUI lookup, flight-status lookup (dormant), planned SmartBill/ANPR.
+- [backend/i18n-and-permissions.md](backend/i18n-and-permissions.md) — the i18n system and the roles/permissions model.
 
-> **The numbering gap (v1.2–v1.6).** v1.2/1.3/1.4 were *planned* but leapfrogged —
-> the work that actually shipped jumped to **v1.7+**. The three planned docs now
-> live under `roadmap/` so they're not mistaken for shipped features.
+## Features
 
----
+- [features/credits.md](features/credits.md) — daily-parking credits/tokens.
+- [features/long-term-bookings.md](features/long-term-bookings.md) — date-range reservations.
+- [features/pricing.md](features/pricing.md) — tiers, seasonal periods, online discount, server-authoritative recompute.
+- [features/vouchers.md](features/vouchers.md) — promo / signup / credit / days vouchers.
+- [features/billing.md](features/billing.md) — PF/PJ invoice capture + CUI/ANAF (capture-only; SmartBill not wired).
+- [features/cashbook-refunds.md](features/cashbook-refunds.md) — cash drawer + manual refund queue.
+- [features/capacity.md](features/capacity.md) — spots/zones, live occupancy, the capacity map.
+- [features/transfers.md](features/transfers.md) — door-to-airport passenger transfers.
+- [features/shuttle.md](features/shuttle.md) — the ManGO buzz shuttle + opening hours.
+- [features/reviews.md](features/reviews.md) — customer reviews CMS.
+- [features/trip-info.md](features/trip-info.md) — passengers, flight numbers, flight delay/cancel warnings.
 
-## What the big integrations actually do today
+## Sections
 
-The three headline integrations are the easiest to misread, so explicitly:
+- [sections/public-site.md](sections/public-site.md) — public routes/pages + SEO prerender.
+- [sections/account.md](sections/account.md) — auth + customer account area.
+- [sections/admin.md](sections/admin.md) — the `/admin` panel, section by section (→ [admin-flows/](admin-flows/) for deep walkthroughs).
 
-- **Payments (Netopia)** — **live**, but on the **legacy crypto-envelope flow**
-  (`functions/src/netopia.js`: RSA + AES over XML, `createPayment` +
-  `netopiaCallback` IPN). **Refunds are manual** — handled through the admin
-  refund queue, not an API. The JSON-REST "v2" rewrite that would automate
-  refunds/voids is the **planned** [roadmap/v.1.4](roadmap/v.1.4_netopia_v2_migration.md).
-- **Invoicing (SmartBill)** — **not built.** Billing identity (PF/PJ, CUI via
-  ANAF `lookupCui`) is *captured* at checkout, but no invoice is ever issued.
-  Plan: [roadmap/v.1.2](roadmap/v.1.2_smartbill.md).
-- **ANPR cameras** — **not built.** No ingestion endpoints, no `plateEvents`, no
-  `/admin/anpr`. _Exception:_ the standalone overstay pieces that plan referenced
-  **did** ship independently — the `adminChargeOverstay` callable and the
-  `markNoShows` scheduled detector are live. Plan: [roadmap/v.1.3](roadmap/v.1.3_anpr.md).
+## Shipped-feature records (historical detail)
 
----
+Per-increment records kept for provenance; the topic docs above are the canonical
+current reference:
 
-## Current reference docs (live)
+- [v.1.7_checkin_redesign.md](v.1.7_checkin_redesign.md) — admin check-in/out redesign + `markNoShows`.
+- [v.1.8_credit_checkin.md](v.1.8_credit_checkin.md) — manual commuter check-in against credits.
+- [v.1.9_days_vouchers.md](v.1.9_days_vouchers.md) — splittable "free days" vouchers.
+- [v.1.10_credit_vouchers.md](v.1.10_credit_vouchers.md) — credit gift vouchers + admin credit grants.
 
-- [../Brief.md](../Brief.md) — product + architecture overview.
-- [admin-flows/](admin-flows/) — staff-flow walkthroughs, one per admin area,
-  plus the consolidated **[BUGS.md](admin-flows/BUGS.md)** register (note its
-  status banner: a 2026-06 pass fixed a batch).
-- [vercel-deploy.md](vercel-deploy.md) — how the frontend ships (Vercel, on push
-  to `main`); Firebase CLI for functions/rules/indexes/storage.
-- [feedback-june.md](feedback-june.md) / [feedback-june-status.md](feedback-june-status.md)
-  — the June client-feedback round and its item-by-item resolution.
-- [feedback-july.md](feedback-july.md) — the July round (phone entry, activity
-  history + clickable links, CSV export, admin billing, passengers/flight
-  numbers, flight-status warnings, time-slider picker) and its resolution.
+## Roadmap (planned / not built)
 
-## Roadmap (planned / deferred, not built)
+- [roadmap/v.1.2_smartbill.md](roadmap/v.1.2_smartbill.md) — SmartBill fiscal invoicing.
+- [roadmap/v.1.3_anpr.md](roadmap/v.1.3_anpr.md) — ANPR camera auto check-in/out.
+- [roadmap/v.1.4_netopia_v2_migration.md](roadmap/v.1.4_netopia_v2_migration.md) — Netopia v2 REST (automated refunds/voids).
+- [roadmap/cloud-switch.md](roadmap/cloud-switch.md) — move the Firebase project to the client's account.
 
-- [roadmap/v.1.2_smartbill.md](roadmap/v.1.2_smartbill.md) — SmartBill invoicing.
-- [roadmap/v.1.3_anpr.md](roadmap/v.1.3_anpr.md) — ANPR cameras.
-- [roadmap/v.1.4_netopia_v2_migration.md](roadmap/v.1.4_netopia_v2_migration.md) — Netopia v2 REST.
-- [roadmap/cloud-switch.md](roadmap/cloud-switch.md) — move the Firebase project
-  from the developer's personal Google account to the client's (deferred infra;
-  partly stale re: Plesk → Vercel).
+## Deploy
 
-## Archive (historical, superseded)
+- [vercel-deploy.md](vercel-deploy.md) — frontend ships on push to `main` (Vercel); Firebase CLI deploys functions/rules/indexes/storage.
 
-- [archive/implementation.md](archive/implementation.md) — original MVP build record.
-- [archive/v1-plan.md](archive/v1-plan.md), [archive/v1.1-plan.md](archive/v1.1-plan.md)
-  — the v1 / v1.1 implementation plans (both shipped; kept for provenance).
-- [archive/changes 10-05.md](archive/changes%2010-05.md),
-  [archive/changes 13-05.md](archive/changes%2013-05.md) — raw client change notes (May 2026).
-- [archive/client-feedback.md](archive/client-feedback.md),
-  [archive/feedback-plan.md](archive/feedback-plan.md) — early feedback + planning notes.
+## Big integrations at a glance
+
+- **Payments (Netopia)** — live, on the legacy crypto-envelope flow. **Refunds are manual** (admin refund queue). v2 REST automation is [planned](roadmap/v.1.4_netopia_v2_migration.md).
+- **Invoicing (SmartBill)** — **not built.** Billing identity is captured at checkout but no invoice is issued. [Plan](roadmap/v.1.2_smartbill.md).
+- **ANPR cameras** — **not built.** (The overstay/no-show pieces that plan referenced did ship independently.) [Plan](roadmap/v.1.3_anpr.md).
+- **Flight status** — code shipped but **dormant** until a flight-API key is configured. See [backend/integrations.md](backend/integrations.md).
