@@ -179,10 +179,16 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           <div>
             <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createDropoff')} *</label>
             ${dateTimeFieldHtml({ name: 'dropoffAt', value: defaultDropoff, required: true, stepToNext: 'pickupAt' })}
+            <label class="block text-[12px] font-medium text-charcoal/60 mt-2 mb-1">${t('transactions.createFlight')} <span class="text-dim font-normal">(${t('wizard.optional')})</span></label>
+            <input type="text" name="flightNumberDropoff" placeholder="RO 201" maxlength="10" autocomplete="off" title="${escapeHtml(t('transactions.createFlightTooltip'))}"
+              class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] uppercase font-mono focus:outline-none focus:border-mango/40">
           </div>
           <div>
             <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createPickup')} *</label>
             ${dateTimeFieldHtml({ name: 'pickupAt', value: defaultPickup, required: true })}
+            <label class="block text-[12px] font-medium text-charcoal/60 mt-2 mb-1">${t('transactions.createFlight')} <span class="text-dim font-normal">(${t('wizard.optional')})</span></label>
+            <input type="text" name="flightNumberPickup" placeholder="RO 201" maxlength="10" autocomplete="off" title="${escapeHtml(t('transactions.createFlightTooltip'))}"
+              class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] uppercase font-mono focus:outline-none focus:border-mango/40">
           </div>
         </div>
         <div>
@@ -1106,10 +1112,14 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           : '';
         const notes = String(qs('[name="notes"]', contentEl)?.value || '').trim();
         const passengers = Math.min(10, Math.max(1, parseInt(qs('[name="passengers"]', contentEl)?.value, 10) || 1));
+        const cleanFlight = (v) => String(v || '').trim().toUpperCase().replace(/\s+/g, ' ').slice(0, 12);
+        const flightNumberDropoff = cleanFlight(qs('[name="flightNumberDropoff"]', contentEl)?.value);
+        const flightNumberPickup = cleanFlight(qs('[name="flightNumberPickup"]', contentEl)?.value);
         result = await adminCreateLongtermBookingFn({
           plate, dropoffAt, pickupAt, days, totalPrice,
           payerEmail, payerName, payerPhone, customerId,
           paidBy, brokerName, autoCheckIn, notes, billing, passengers,
+          flightNumberDropoff, flightNumberPickup,
         });
       } else {
         const qtyRaw = qs('[name="quantity"]', contentEl).value;

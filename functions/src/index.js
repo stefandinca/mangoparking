@@ -2286,6 +2286,8 @@ export const adminCreateLongtermBooking = onCall(
       notes,                // optional internal note, mirrors the edit-booking flow
       billing,              // PF/PJ invoice identity captured at the desk
       passengers,           // number of people travelling (1–10), for the shuttle
+      flightNumberDropoff,  // optional flight numbers (departure / return)
+      flightNumberPickup,
     } = request.data || {};
 
     if (!plate) throw new HttpsError('invalid-argument', 'Missing plate');
@@ -2335,6 +2337,8 @@ export const adminCreateLongtermBooking = onCall(
       pickupAt,
       days: d,
       passengers: sanitizePassengers(passengers),
+      flightNumberDropoff: sanitizeFlight(flightNumberDropoff),
+      flightNumberPickup: sanitizeFlight(flightNumberPickup),
       basePrice: total,
       latePrice: 0,
       totalPrice: total,

@@ -1449,6 +1449,8 @@ export default {
     createDropoff: 'Data și ora sosire',
     createPickup: 'Data și ora plecare',
     createPassengers: 'Număr pasageri',
+    createFlight: 'Număr zbor',
+    createFlightTooltip: 'Introdu numărul real al zborului (ex. RO201) — nu codul de rezervare de la compania aeriană.',
     createDays: 'Zile',
     createTotal: 'Total (lei)',
     createNotes: 'Note / comentarii',

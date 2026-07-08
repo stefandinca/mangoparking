@@ -1448,6 +1448,8 @@ export default {
     createDropoff: 'Drop-off date & time',
     createPickup: 'Pick-up date & time',
     createPassengers: 'Number of passengers',
+    createFlight: 'Flight number',
+    createFlightTooltip: 'Enter the actual flight number (e.g. RO201) — not the booking or reservation code from the airline.',
     createDays: 'Days',
     createTotal: 'Total (RON)',
     createNotes: 'Notes / comments',
