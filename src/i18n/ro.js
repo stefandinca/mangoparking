@@ -1231,6 +1231,7 @@ export default {
   picker: {
     nextStep: 'Pasul următor',
     done: 'Gata',
+    time: 'Ora',
   },
 
   seasonal: {

@@ -1230,6 +1230,7 @@ export default {
   picker: {
     nextStep: 'Next step',
     done: 'Done',
+    time: 'Time',
   },
 
   seasonal: {

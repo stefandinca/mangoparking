@@ -102,33 +102,132 @@
   color: rgba(26, 26, 26, 0.25) !important;
 }
 
-/* Time picker (24h, no AM/PM) */
-.flatpickr-time {
-  border-top: 1px solid var(--color-frost-deep) !important;
-  padding-top: 8px !important;
-  margin-top: 4px;
+/* Time picker — flatpickr's default number-spinner is replaced by the
+ * rentalcars-style slider below. Hide the spinner only on pickers we
+ * enhanced (the class is added in FormDateTime's injectTimeSlider); flatpickr
+ * still tracks the hour/minute in those now-hidden inputs. */
+.flatpickr-calendar.mp-has-time-slider .flatpickr-time {
+  display: none !important;
 }
 
-.flatpickr-time input {
-  font-family: var(--font-mono) !important;
-  font-weight: 600 !important;
-  font-size: 16px !important;
-  color: var(--color-blueberry-deep) !important;
+/* ── Rentalcars-style horizontal time slider ──────────────────────────────
+ * A draggable pill showing HH:MM rides a thin track. The native range input
+ * is transparent (thumb invisible) and drives the value + keyboard support;
+ * the pill + blue fill are painted over it and positioned by JS. */
+.mp-time-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 6px 2px;
+  padding: 14px 6px 8px;
+  border-top: 1px solid var(--color-frost-deep);
 }
-
-.flatpickr-time .flatpickr-time-separator {
-  color: var(--color-charcoal) !important;
+.mp-time-slider-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-charcoal);
+  opacity: 0.7;
+}
+.mp-time-slider-track {
+  position: relative;
+  flex: 1;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* Base line (full width) */
+.mp-time-slider-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-frost-deep);
+  pointer-events: none;
+}
+/* Filled portion (left of the pill) */
+.mp-time-slider-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-blueberry);
+  pointer-events: none;
+  z-index: 1;
+}
+/* Native range: transparent, full-width, carries pointer + keyboard input */
+.mp-time-range {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 42px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 2;
+  cursor: pointer;
+}
+.mp-time-range:focus {
+  outline: none;
+}
+.mp-time-range::-webkit-slider-runnable-track {
+  background: transparent;
+}
+.mp-time-range::-moz-range-track {
+  background: transparent;
+}
+.mp-time-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 54px;
+  height: 42px;
+  opacity: 0;
+  cursor: grab;
+}
+.mp-time-range::-moz-range-thumb {
+  width: 54px;
+  height: 42px;
+  border: 0;
+  opacity: 0;
+  cursor: grab;
+}
+.mp-time-range:active::-webkit-slider-thumb {
+  cursor: grabbing;
+}
+/* The visible pill — follows the (invisible) thumb via JS `left` */
+.mp-time-slider-bubble {
+  position: absolute;
+  top: 50%;
+  left: 27px;
+  transform: translate(-50%, -50%);
+  min-width: 54px;
+  padding: 6px 6px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-blueberry);
+  background: #ffffff;
+  color: var(--color-blueberry-deep);
+  font-family: var(--font-mono);
   font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: 0 2px 8px rgba(30, 91, 214, 0.22);
+  transition: box-shadow 120ms ease;
 }
-
-.flatpickr-time input:hover,
-.flatpickr-time input:focus {
-  background: rgba(30, 91, 214, 0.08) !important;
-}
-
-.flatpickr-time .numInputWrapper:hover .arrowUp,
-.flatpickr-time .numInputWrapper:hover .arrowDown {
-  border-color: var(--color-blueberry);
+.mp-time-range:focus ~ .mp-time-slider-bubble {
+  box-shadow: 0 0 0 3px rgba(30, 91, 214, 0.18), 0 2px 8px rgba(30, 91, 214, 0.22);
 }
 
 /* Match the trigger input to the rest of the form fields. flatpickr
@@ -204,8 +303,24 @@
     line-height: 38px;
     font-size: 14px;
   }
-  .flatpickr-time input {
-    font-size: 18px !important;
+  /* Roomier time slider on touch — taller track + tap target, bigger pill. */
+  .mp-time-slider {
+    padding: 16px 4px 10px;
+    gap: 10px;
+  }
+  .mp-time-slider-track,
+  .mp-time-range {
+    height: 46px;
+  }
+  .mp-time-range::-webkit-slider-thumb {
+    height: 46px;
+  }
+  .mp-time-range::-moz-range-thumb {
+    height: 46px;
+  }
+  .mp-time-slider-bubble {
+    font-size: 15px;
+    padding: 8px 8px;
   }
   /* On mobile the confirm button should feel like a primary CTA — a
    * little taller, more padding, larger tap target. */
