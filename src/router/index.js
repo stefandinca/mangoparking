@@ -23,6 +23,10 @@ export async function initRouter() {
     const href = link.getAttribute('href');
     // Skip external links, hash links, and special links
     if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+    // Let the browser handle file downloads natively. A `download` anchor (e.g.
+    // CSV export) or a blob: URL must not be routed — pushState to a blob: URL
+    // throws a SecurityError, and preventDefault would swallow the download.
+    if (link.hasAttribute('download') || href.startsWith('blob:')) return;
     // Honor target="_blank" / target="_new" — letting the browser do its
     // thing means legal-page links in the booking flow open in a new tab
     // instead of replacing the in-progress booking page.
