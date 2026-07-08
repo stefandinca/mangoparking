@@ -5,6 +5,7 @@ import { getAllSpots, updateSpotStatus, subscribeCapacity } from '../../services
 import { getCollection, where } from '../../firebase/db.js';
 import { TOTAL_CAPACITY } from '../../utils/constants.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
+import { openBookingDetail } from '../../components/admin/BookingDetailModal.js';
 
 const SPOT_STATES = ['available', 'occupied', 'reserved', 'maintenance'];
 const SPOT_COLORS = {
@@ -35,11 +36,22 @@ export default async function AdminCapacity(container) {
   ]);
 
   const plateBySpot = {};
+  const bookingById = {};
+  const bookingBySpot = {};       // spot → the reservation occupying / holding it
   for (const b of scheduledBookings) {
-    if (b.spotId) plateBySpot[b.spotId] = b.licensePlate || '';
+    bookingById[b.id] = b;
+    if (b.spotId) {
+      plateBySpot[b.spotId] = b.licensePlate || '';
+      bookingBySpot[b.spotId] = b;
+    }
   }
   for (const ck of activeCheckIns) {
     if (ck.spotId && !plateBySpot[ck.spotId]) plateBySpot[ck.spotId] = ck.licensePlate || '';
+    // A check-in whose booking doesn't carry a spotId still resolves to its
+    // booking via the check-in's bookingId, so that tile opens details too.
+    if (ck.spotId && !bookingBySpot[ck.spotId] && ck.bookingId && bookingById[ck.bookingId]) {
+      bookingBySpot[ck.spotId] = bookingById[ck.bookingId];
+    }
   }
 
   // Group by zone (extract zone letter from spot id like "A-01")
@@ -141,12 +153,18 @@ export default async function AdminCapacity(container) {
         </div>
   `);
 
-  // Click to toggle spot status + persist to Firestore (with rollback on failure)
+  // Click a spot: a booked tile (occupied / reserved by a real reservation)
+  // opens that reservation's details; any other tile cycles its manual status
+  // and persists to Firestore (with rollback on failure). Occupied/reserved
+  // tiles are booking-driven, so hand-cycling them would only desync.
   delegate(page, 'click', '[data-spot]', async (e, btn) => {
+    const spotId = btn.dataset.spot;
+    const booking = bookingBySpot[spotId];
+    if (booking) { openBookingDetail(booking); return; }
+
     const currentStatus = btn.dataset.spotStatus;
     const currentIdx = SPOT_STATES.indexOf(currentStatus);
     const nextStatus = SPOT_STATES[(currentIdx + 1) % SPOT_STATES.length];
-    const spotId = btn.dataset.spot;
 
     // Update UI immediately (optimistic)
     SPOT_STATES.forEach(s => {
