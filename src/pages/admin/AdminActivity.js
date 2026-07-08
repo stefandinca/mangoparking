@@ -17,6 +17,7 @@ import { subscribeCollection } from '../../firebase/db.js';
 import { navigate } from '../../router/index.js';
 import { openUserDetail } from '../../components/admin/UserDetailModal.js';
 import { openBookingDetail } from '../../components/admin/BookingDetailModal.js';
+import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
@@ -104,6 +105,19 @@ function nameSpan(name, customerId, email, cls) {
   return `<span data-user-link data-uid="${escapeHtml(customerId || '')}" data-email="${escapeHtml(email || '')}" class="${cls} hover:text-blueberry hover:underline cursor-pointer">${label}</span>`;
 }
 
+// Empty flight-warning slot for an upcoming booking event — the enhancer fills
+// it with a delayed/cancelled badge. Check-in watches the DEPARTURE flight,
+// check-out the ARRIVAL flight; the event's own timestamp is the flight day.
+function flightSlotEvent(e) {
+  if (e.kind !== 'checkin' && e.kind !== 'checkout') return '';
+  const isArrival = e.kind === 'checkout';
+  const flight = isArrival ? e.booking.flightNumberPickup : e.booking.flightNumberDropoff;
+  if (!flight) return '';
+  const day = flightDayKey(e.at);
+  if (!day) return '';
+  return `<span class="ml-auto shrink-0" data-flight-warn data-flight="${escapeHtml(flight)}" data-flight-date="${day}" data-flight-dir="${isArrival ? 'arrival' : 'departure'}"></span>`;
+}
+
 // ── Upcoming event rows (click → check-ins deep-link; name → profile) ─
 function eventRow(e, locale) {
   const time = fmtTime(e.at, locale);
@@ -118,6 +132,7 @@ function eventRow(e, locale) {
         <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls} shrink-0">${label}</span>
         <span class="font-mono text-[13px] text-charcoal shrink-0">${escapeHtml(b.licensePlate || '—')}</span>
         ${nameSpan(b.contact?.name || b.contact?.email, b.customerId, b.contact?.email, 'text-[13px] text-dim truncate')}
+        ${flightSlotEvent(e)}
       </button>`;
   }
   const tr = e.transfer;
@@ -305,6 +320,9 @@ export default function AdminActivity(container) {
         <div class="space-y-2">${g.items.map((e) => eventRow(e, locale)).join('')}</div>
       </div>
     `).join('');
+    // Flag delayed/cancelled flights on the rendered rows (dormant until a
+    // flight API key is configured; memoised across re-renders).
+    enhanceFlightWarnings(bodyEl);
   }
 
   // ── History (chosen date range, all statuses, expandable) ──

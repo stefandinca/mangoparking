@@ -1233,6 +1233,14 @@ export default {
     time: 'Time',
   },
 
+  // Flight-status warnings on the admin boards
+  flight: {
+    cancelled: 'Flight cancelled',
+    diverted: 'Flight diverted',
+    delayed: 'Delayed {min} min',
+    statusHint: 'Live flight status — verify with the customer.',
+  },
+
   seasonal: {
     title: 'Seasonal pricing',
     help: 'Special rates for defined periods (holidays, summer, etc.). Applied automatically when the pick-up date falls inside the range.',

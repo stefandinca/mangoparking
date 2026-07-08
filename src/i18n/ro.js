@@ -1234,6 +1234,14 @@ export default {
     time: 'Ora',
   },
 
+  // Flight-status warnings on the admin boards
+  flight: {
+    cancelled: 'Zbor anulat',
+    diverted: 'Zbor deviat',
+    delayed: 'Întârziat {min} min',
+    statusHint: 'Status zbor live — verifică cu clientul.',
+  },
+
   seasonal: {
     title: 'Tarife sezoniere',
     help: 'Tarife speciale pentru perioade definite (sărbători, vară etc.). Se aplică automat când data de plecare cade în interval.',

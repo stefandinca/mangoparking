@@ -56,6 +56,10 @@ export {
 // ANAF CUI lookup callable (Phase B4).
 export { lookupCui } from './cui.js';
 
+// Flight-status lookup — flags delayed/cancelled flights on the admin board.
+// Dormant until a flight API key is configured (see flightStatus.js).
+export { lookupFlightStatuses } from './flightStatus.js';
+
 // Scheduled jobs (Phase F).
 export { daily24hReminders, commuter7PMCheck, expireStaleHolds, markNoShows } from './scheduled.js';
 

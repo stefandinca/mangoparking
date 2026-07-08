@@ -38,6 +38,7 @@ import { hasPermission, PERM } from '../../utils/permissions.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
 import { setTransferStatus, deleteTransfer } from '../../services/transferService.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
+import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
@@ -323,6 +324,19 @@ function actionButton({ key, label, variant = 'neutral', dataAttrs = '' }) {
   return `<button type="button" data-action="${key}" ${dataAttrs} class="${styles[variant] || styles.neutral} font-semibold text-[12px] px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">${label}</button>`;
 }
 
+// Empty flight-warning slot for a row — the enhancer (flightStatusService)
+// fills it with a delayed/cancelled badge after render. Check-in / no-show
+// rows watch the DEPARTURE flight (drop-off day); check-out watches the
+// ARRIVAL flight (pick-up day). Renders nothing when no flight was recorded.
+function flightSlot(b, tab) {
+  const isArrival = tab === 'checkout';
+  const flight = isArrival ? b.flightNumberPickup : b.flightNumberDropoff;
+  if (!flight) return '';
+  const day = flightDayKey(isArrival ? (b.pickupAt || b.endDate) : (b.dropoffAt || b.startDate));
+  if (!day) return '';
+  return `<div class="mt-1" data-flight-warn data-flight="${escapeHtml(flight)}" data-flight-date="${day}" data-flight-dir="${isArrival ? 'arrival' : 'departure'}"></div>`;
+}
+
 function rowHtml(b, { tab, locale, canCancel }) {
   const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
   const dropoff = b.dropoffAt || b.startDate;
@@ -383,7 +397,7 @@ function rowHtml(b, { tab, locale, canCancel }) {
       </td>
       <td class="px-4 py-3 align-top text-[13px] font-mono">${escapeHtml(plate)}</td>
       <td class="px-4 py-3 align-top">${paymentStatusBadge(b)}</td>
-      <td class="px-4 py-3 align-top">${statusCell}</td>
+      <td class="px-4 py-3 align-top">${statusCell}${flightSlot(b, tab)}</td>
       <td class="px-4 py-3 align-top text-right">
         <div class="inline-flex flex-wrap gap-1.5 justify-end">${actions.join('')}</div>
       </td>
@@ -868,6 +882,10 @@ export default async function AdminCheckIns(container) {
     renderWindowBar();
     renderBody();
     maybeApplyFocus();
+    // Flag delayed/cancelled flights on the freshly-rendered rows (dormant
+    // until a flight API key is configured; results are memoised so this is
+    // cheap on the frequent live-subscription re-renders).
+    enhanceFlightWarnings(bodyEl);
   }
 
   // ── Subscriptions ──
