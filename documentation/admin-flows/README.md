@@ -27,9 +27,9 @@ They are mutually consistent — no privilege-escalation gap was found.
 
 | Role | Permissions | Sidebar links shown |
 |------|-------------|---------------------|
-| **admin** | all 13 | all 13 (incl. Users, Pricing, Legal, Vouchers, Promotions) |
-| **agent** (legacy `staff`) | dashboard, checkins, transactions, cashbook, capacity, shuttle, reviews, refunds | those 8 |
-| **driver** | dashboard, checkins, capacity, shuttle | those 4 |
+| **admin** | all 16 | every section (Users, Pricing, Legal, Vouchers, Promotions + the Website content hub) |
+| **agent** (legacy `staff`) | dashboard, activity, checkins, transactions, cashbook, capacity, shuttle, refunds, help | those 9 (**no** config, **no** reviews — reviews live under the admin-only Website hub) |
+| **driver** | dashboard, activity, checkins, capacity, shuttle, help | those 6 |
 | **customer** | none | no admin access |
 
 ## Cross-cutting issues (affect multiple pages)

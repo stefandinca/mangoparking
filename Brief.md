@@ -147,9 +147,9 @@ sidebar, and Firestore-rule logic — kept mutually consistent.
 
 | Role | Access |
 |------|--------|
-| **admin** | All 13 sections incl. config (pricing, users, legal, vouchers, promotions) |
-| **agent** (legacy `staff` alias) | Ops: dashboard, checkins, transactions, cashbook, capacity, shuttle, reviews, refunds |
-| **driver** | dashboard, checkins, capacity, shuttle |
+| **admin** | Every section — all 16 permissions, incl. config (pricing, users, legal, vouchers, promotions) and the Website content hub (gallery, hours, promotions, reviews, legal) |
+| **agent** (legacy `staff` alias) | Ops only: dashboard, activity, checkins, transactions, cashbook, capacity, shuttle, refunds, help — **no** config and **no** reviews |
+| **driver** | dashboard, activity, checkins, capacity, shuttle, help |
 | **customer** | No admin access |
 
 New users are always created `role: customer` (enforced by rules). Role changes go

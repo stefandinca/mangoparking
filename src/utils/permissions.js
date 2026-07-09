@@ -5,13 +5,14 @@
 //   admin    — full access. Sees and edits everything, including the
 //              configuration surfaces (pricing, users, legal, vouchers,
 //              promotions).
-//   agent    — backoffice operations (renamed from "staff"). Sees every
-//              day-to-day surface — dashboard, check-ins, transactions,
-//              cashbook, capacity, shuttle, reviews, refunds — but NOT
-//              the configuration surfaces. Cannot change prices.
-//   driver   — shuttle driver at the lot. Sees dashboard, check-ins
-//              (the reservations view, where they perform check-in /
-//              check-out), capacity, and shuttle.
+//   agent    — backoffice operations (renamed from "staff"). Sees the
+//              day-to-day surfaces — dashboard, activity, check-ins,
+//              transactions, cashbook, capacity, shuttle, refunds, help —
+//              but NOT the configuration surfaces, and NOT reviews (reviews
+//              moved under the admin-only Website hub). Cannot change prices.
+//   driver   — shuttle driver at the lot. Sees dashboard, activity,
+//              check-ins (the reservations view, where they perform
+//              check-in / check-out), capacity, shuttle, and help.
 //   customer — no admin access.
 //
 // Legacy `role: 'staff'` docs are treated as `agent` for backwards
