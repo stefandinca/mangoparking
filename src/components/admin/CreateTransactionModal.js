@@ -433,13 +433,24 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       <div data-err class="text-danger text-[13px] hidden"></div>
 
       <div class="flex gap-3 justify-end pt-2">
-        <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors">${t('common.cancel')}</button>
+        <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors disabled:opacity-50 disabled:cursor-not-allowed">${t('common.cancel')}</button>
         <button type="button" data-submit class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('transactions.createSubmit')}</button>
       </div>
     </div>
   `;
 
-  const { close, contentEl } = openModal(body);
+  const { close, contentEl, setDismissible } = openModal(body);
+
+  // While a create request is in flight the modal must not be cancellable:
+  // an HTTPS callable can't be aborted, so a backdrop tap / Cancel during
+  // the await would dismiss the form while the server still creates the
+  // booking — staff would believe they cancelled a reservation that in
+  // fact got saved (with whatever dates the form held at submit time).
+  const cancelBtn = qs('[data-cancel]', contentEl);
+  const lockModal = (locked) => {
+    if (cancelBtn) cancelBtn.disabled = locked;
+    setDismissible(!locked);
+  };
 
   // Attach the branded flatpickr to the two datetime inputs. Picker
   // overlays render against document.body via flatpickr's defaults, so
@@ -965,6 +976,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       };
       btn.disabled = true;
       btn.textContent = '…';
+      lockModal(true);
       try {
         if (editTransfer) {
           await updateTransfer(editTransfer.id, payload);
@@ -980,6 +992,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         showErr(err?.message || t('common.error'));
         btn.disabled = false;
         btn.textContent = editTransfer ? t('transfers.submitEdit') : t('transfers.submitCreate');
+        lockModal(false);
       }
       return;
     }
@@ -1010,6 +1023,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       const matchedCustomerId = mode === 'existing' ? resolveMatchedCustomerId() : null;
       btn.disabled = true;
       btn.textContent = '…';
+      lockModal(true);
       try {
         const result = await checkInWithCreditsFn({ plate, customerId: matchedCustomerId, credits });
         showToast(t('transactions.createCheckInSuccess', { n: credits }), 'success');
@@ -1021,6 +1035,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         errEl.classList.remove('hidden');
         btn.disabled = false;
         btn.textContent = t('transactions.createCheckInSubmit');
+        lockModal(false);
       }
       return;
     }
@@ -1086,6 +1101,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
 
     btn.disabled = true;
     btn.textContent = '…';
+    lockModal(true);
 
     try {
       let result;
@@ -1106,7 +1122,11 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         if (Date.parse(pickupAt) <= Date.parse(dropoffAt)) {
           throw new Error(t('transactions.errorPickupBeforeDropoff'));
         }
-        const days = Math.max(1, Math.ceil((Date.parse(pickupAt) - Date.parse(dropoffAt)) / 86_400_000));
+        // Same 2h-grace billing-days rule as the auto-filled price hint and
+        // the public booking flow — otherwise a 25h stay is priced as 1 day
+        // but stored as days=2, skewing the per-day rate that overstay and
+        // reprice math later derive from totalPrice / days.
+        const days = Math.max(1, walkInBillingDays(Date.parse(dropoffAt), Date.parse(pickupAt)));
         const brokerName = paidBy === 'broker'
           ? String(qs('[name="brokerName"]', contentEl)?.value || '').trim()
           : '';
@@ -1161,6 +1181,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       errEl.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = t('transactions.createSubmit');
+      lockModal(false);
     }
   });
 }

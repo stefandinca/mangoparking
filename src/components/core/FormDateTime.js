@@ -61,6 +61,9 @@ export function dateTimeFieldHtml({
   return `<input ${attrs}>`;
 }
 
+// Also referenced by Modal.js, which destroys any picker mounted inside a
+// closing modal via this key (flatpickr calendars live on document.body and
+// would otherwise outlive the modal). Keep the two in sync.
 const INSTANCE_KEY = '__fpInstance';
 
 function altFormatFor(locale, dateOnly) {

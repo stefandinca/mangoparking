@@ -143,3 +143,47 @@ headless smoke of both booking pages):
   is a non-atomic read, so two near-simultaneous Netopia confirmations could
   double-create a booking / double-grant credits. Fix: claim+fulfil inside a
   transaction or key the booking doc by order id.
+
+---
+
+## 2026-07 deep review — modal lifecycle / walk-in billing (applied this round)
+
+Triggered by a client report: a manual reservation "cancelled half-way" on a
+phone appeared to resurface its dates in a reservation created later on a
+laptop. Investigation conclusion: **no code path syncs unsaved form state
+across devices** (no drafts, no localStorage, `autocomplete="off"`, dates read
+from the DOM only at submit) — but a submit whose HTTPS callable was still in
+flight COULD be "cancelled": the modal's Cancel button, backdrop and Escape
+stayed active during the await, dismissing the form while the server went on
+to create the booking. The staff member then believes nothing was saved. The
+ghost booking (with the phone's dates) later shows up next to the genuinely new
+reservation and reads as "my new booking got the old dates". Check
+`bookings.createdBy` + `auditLog` for two `booking_created` entries by the same
+uid to confirm any specific incident.
+
+Fixed in this pass (verified: vite build + a Puppeteer runtime harness driving
+the real modal — 14/14 checks: lock while in flight, unlock on error, picker
+teardown, days payload):
+
+- **Modals stayed cancellable while a submit was in flight.** Create-transaction
+  (all three branches: long-term/credit-sale, credit check-in, transfer), the
+  edit-booking dialog, the collect-payment dialog and the overstay dialog now
+  disable Cancel and suspend backdrop/Escape dismissal (`setDismissible(false)`)
+  for the duration of the request, restoring them on error.
+  (`CreateTransactionModal.js`, `AdminCheckIns.js`, `Modal.js`)
+- **`openModal` leaked its Escape handler.** The document-level keydown listener
+  was only removed when Escape itself closed the modal; closing via button,
+  backdrop or code left it attached forever. `close()` now always removes it,
+  and is guarded against double-invocation. (`Modal.js`)
+- **flatpickr calendars outlived their modal.** The pickers' calendar overlays
+  live on `document.body`; closing a modal (esp. mid-pick on mobile) left them
+  orphaned — visibly stuck on screen if open, and swallowing taps aimed at a
+  later modal's picker. `close()` now destroys any `data-datetime` picker
+  mounted in the modal via its `__fpInstance`. (`Modal.js`, key documented in
+  `FormDateTime.js`)
+- **Admin walk-in `days` ignored the 2h grace.** The create-transaction submit
+  sent `ceil((pickup−dropoff)/24h)` while the auto-filled price used the graced
+  `walkInBillingDays` (and the public funnel + server reprice use the same
+  graced rule) — a 25h stay was priced as 1 day but stored `days: 2`, skewing
+  the `totalPrice/days` per-day rate that overstay and reprice math derive.
+  Now uses `walkInBillingDays`. (`CreateTransactionModal.js`)

@@ -1206,7 +1206,7 @@ function openEditBookingDialog({ booking }) {
       </div>
       <div data-edit-err class="hidden text-danger text-[13px]"></div>
       <div class="flex gap-3 justify-end pt-1">
-        <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors">${t('common.cancel')}</button>
+        <button type="button" data-cancel class="px-4 py-2.5 rounded-xl bg-frost text-charcoal/70 font-semibold text-[14px] hover:bg-frost-deep transition-colors disabled:opacity-50 disabled:cursor-not-allowed">${t('common.cancel')}</button>
         <button type="submit" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('common.save')}</button>
       </div>
     </form>`;
@@ -1304,8 +1304,13 @@ function openEditBookingDialog({ booking }) {
       }
 
       const submitBtn = form.querySelector('button[type="submit"]');
+      const cancelBtn = qs('[data-cancel]', form);
       submitBtn.disabled = true;
       submitBtn.textContent = t('common.loading');
+      // Lock the modal while the save / reprice runs — an aborted-looking
+      // cancel mid-flight would still settle money server-side.
+      if (cancelBtn) cancelBtn.disabled = true;
+      modal.setDismissible(false);
       try {
         await updateBookingDetails(booking.id, patch);
         // If a long-term booking's dates changed, re-price + settle server-side:
@@ -1342,6 +1347,8 @@ function openEditBookingDialog({ booking }) {
         showErr(err?.message || t('common.error'));
         submitBtn.disabled = false;
         submitBtn.textContent = t('common.save');
+        if (cancelBtn) cancelBtn.disabled = false;
+        modal.setDismissible(true);
       }
     });
   });
@@ -1494,6 +1501,9 @@ function openCollectPaymentDialog({ orderId, booking }) {
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.textContent = t('common.loading');
+      // Lock while the collection records — a backdrop tap mid-flight would
+      // dismiss the dialog while the server still marks the order paid.
+      modal.setDismissible(false);
       try {
         await adminMarkOrderPaidFn({
           orderId,
@@ -1508,6 +1518,7 @@ function openCollectPaymentDialog({ orderId, booking }) {
         showToast(err?.message || t('common.error'), 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = t('checkins.confirmPayment');
+        modal.setDismissible(true);
       }
     });
   });
@@ -1573,6 +1584,9 @@ function openOverstayDialog({ booking, perCredit = 0 }) {
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.textContent = t('common.loading');
+      // Lock while the charge records — a backdrop tap mid-flight would
+      // dismiss the dialog while the server still charges the overstay.
+      modal.setDismissible(false);
       try {
         await adminChargeOverstayFn({ bookingId: booking.id, amount, paidBy });
         showToast(t('checkins.toastOverstayCharged', { amount }), 'success');
@@ -1583,6 +1597,7 @@ function openOverstayDialog({ booking, perCredit = 0 }) {
         showToast(err?.message || t('common.error'), 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = t('checkins.overstayConfirm');
+        modal.setDismissible(true);
       }
     });
   });

@@ -20,26 +20,39 @@ export function openModal(content, { onClose, dismissible = true } = {}) {
     contentEl.appendChild(content);
   }
 
+  // Dismissal can be suspended mid-flight (setDismissible below) so a
+  // backdrop tap / Escape can't "cancel" a submit the server is already
+  // executing — the user would believe nothing was saved when it was.
+  let canDismiss = dismissible;
+  let closed = false;
+  let keyHandler = null;
+
   const close = () => {
+    if (closed) return;
+    closed = true;
+    // Tear down any date pickers mounted inside this modal. flatpickr
+    // appends its calendar overlay to document.body, so without an explicit
+    // destroy the calendar outlives the modal — staying visible if it was
+    // open and swallowing the taps meant for a later modal's picker.
+    // '__fpInstance' is FormDateTime's instance key (kept in sync there).
+    overlay.querySelectorAll('input[data-datetime]').forEach((input) => {
+      try { input.__fpInstance?.destroy(); } catch { /* noop */ }
+      input.__fpInstance = null;
+    });
+    if (keyHandler) document.removeEventListener('keydown', keyHandler);
     overlay.remove();
     onClose?.();
   };
 
   if (dismissible) {
-    qs('[data-modal-bg]', overlay).addEventListener('click', close);
-
-    const handleKey = (e) => {
-      if (e.key === 'Escape') {
-        close();
-        document.removeEventListener('keydown', handleKey);
-      }
-    };
-    document.addEventListener('keydown', handleKey);
+    qs('[data-modal-bg]', overlay).addEventListener('click', () => { if (canDismiss) close(); });
+    keyHandler = (e) => { if (e.key === 'Escape' && canDismiss) close(); };
+    document.addEventListener('keydown', keyHandler);
   }
 
   document.body.appendChild(overlay);
 
-  return { close, contentEl };
+  return { close, contentEl, setDismissible: (v) => { canDismiss = !!v; } };
 }
 
 /**
