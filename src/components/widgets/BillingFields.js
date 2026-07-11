@@ -16,13 +16,17 @@
 //   3. on submit: readBilling(formScope) → billing object OR { error }
 
 import { t } from '../../i18n/index.js';
-import { setFieldError, clearErrorOnInput } from '../../utils/dom.js';
+import { setFieldError, clearErrorOnInput, escapeHtml } from '../../utils/dom.js';
 import { isValidCui, isValidRegCom, required, isValidCnp } from '../../utils/validators.js';
 import { lookupCui } from '../../services/cuiService.js';
 
 export function billingFieldsHtml(initial = {}) {
   const type = initial.type === 'PJ' ? 'PJ' : 'PF';
   const isPJ = type === 'PJ';
+  // Stored billing is user-controlled text landing inside value="…" — it MUST
+  // be escaped, or a crafted companyName in a customer profile executes when
+  // an admin opens that customer (UserDetailModal renders this same block).
+  const esc = (v) => escapeHtml(v || '');
 
   return `
     <div class="card-solid rounded-2xl p-6" data-billing-block>
@@ -43,21 +47,21 @@ export function billingFieldsHtml(initial = {}) {
       <div class="space-y-3 ${isPJ ? 'hidden' : ''}" data-billing-pf-fields>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.name')} *</label>
-          <input type="text" name="billingName" value="${initial.name || [initial.firstName, initial.lastName].filter(Boolean).join(' ')}" autocomplete="name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+          <input type="text" name="billingName" value="${esc(initial.name || [initial.firstName, initial.lastName].filter(Boolean).join(' '))}" autocomplete="name" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         <div class="grid sm:grid-cols-2 gap-3">
           <div>
             <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.locality')} *</label>
-            <input type="text" name="billingLocality" value="${initial.locality || ''}" autocomplete="address-level2" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+            <input type="text" name="billingLocality" value="${esc(initial.locality)}" autocomplete="address-level2" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
           </div>
           <div>
             <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.cnpOptional')}</label>
-            <input type="text" name="billingCnp" value="${initial.cnp || ''}" autocomplete="off" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+            <input type="text" name="billingCnp" value="${esc(initial.cnp)}" autocomplete="off" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
           </div>
         </div>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.personalAddress')} *</label>
-          <input type="text" name="billingPersonalAddress" value="${initial.address || initial.personalAddress || ''}" autocomplete="street-address" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+          <input type="text" name="billingPersonalAddress" value="${esc(initial.address || initial.personalAddress)}" autocomplete="street-address" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
       </div>
 
@@ -66,22 +70,22 @@ export function billingFieldsHtml(initial = {}) {
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.cui')} *</label>
           <div class="relative">
-            <input type="text" name="billingCui" value="${initial.cui || ''}" placeholder="RO12345678" autocomplete="off" class="w-full px-4 py-3 pr-10 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry" data-billing-cui-input>
+            <input type="text" name="billingCui" value="${esc(initial.cui)}" placeholder="RO12345678" autocomplete="off" class="w-full px-4 py-3 pr-10 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry" data-billing-cui-input>
             <span class="hidden absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-blueberry/30 border-t-blueberry animate-spin" data-billing-cui-spinner></span>
           </div>
           <p class="hidden text-[12px] text-leaf mt-1" data-billing-cui-hint>${t('billing.cuiAutofilled')}</p>
         </div>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.companyName')} *</label>
-          <input type="text" name="billingCompanyName" value="${initial.companyName || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+          <input type="text" name="billingCompanyName" value="${esc(initial.companyName)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.regCom')}</label>
-          <input type="text" name="billingRegCom" value="${initial.regCom || ''}" placeholder="J40/123/2020" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+          <input type="text" name="billingRegCom" value="${esc(initial.regCom)}" placeholder="J40/123/2020" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.companyAddress')} *</label>
-          <input type="text" name="billingCompanyAddress" value="${initial.companyAddress || ''}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+          <input type="text" name="billingCompanyAddress" value="${esc(initial.companyAddress)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
       </div>
     </div>

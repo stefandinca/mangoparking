@@ -2,7 +2,7 @@ import { html, delegate } from '../../utils/dom.js';
 import { t, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getAllSpots, updateSpotStatus, subscribeCapacity } from '../../services/capacityService.js';
-import { getCollection, where } from '../../firebase/db.js';
+import { getCollection, subscribeCollection, where } from '../../firebase/db.js';
 import { TOTAL_CAPACITY } from '../../utils/constants.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { openBookingDetail } from '../../components/admin/BookingDetailModal.js';
@@ -38,21 +38,30 @@ export default async function AdminCapacity(container) {
   const plateBySpot = {};
   const bookingById = {};
   const bookingBySpot = {};       // spot → the reservation occupying / holding it
-  for (const b of scheduledBookings) {
-    bookingById[b.id] = b;
-    if (b.spotId) {
-      plateBySpot[b.spotId] = b.licensePlate || '';
-      bookingBySpot[b.spotId] = b;
+  // (Re)build the spot→plate/booking maps. Runs at mount and again on every
+  // live spots snapshot, so tiles keep resolving to the RIGHT reservation
+  // after another device checks a car in/out.
+  function rebuildMaps(bookings, checkIns) {
+    for (const k of Object.keys(plateBySpot)) delete plateBySpot[k];
+    for (const k of Object.keys(bookingById)) delete bookingById[k];
+    for (const k of Object.keys(bookingBySpot)) delete bookingBySpot[k];
+    for (const b of bookings) {
+      bookingById[b.id] = b;
+      if (b.spotId) {
+        plateBySpot[b.spotId] = b.licensePlate || '';
+        bookingBySpot[b.spotId] = b;
+      }
+    }
+    for (const ck of checkIns) {
+      if (ck.spotId && !plateBySpot[ck.spotId]) plateBySpot[ck.spotId] = ck.licensePlate || '';
+      // A check-in whose booking doesn't carry a spotId still resolves to its
+      // booking via the check-in's bookingId, so that tile opens details too.
+      if (ck.spotId && !bookingBySpot[ck.spotId] && ck.bookingId && bookingById[ck.bookingId]) {
+        bookingBySpot[ck.spotId] = bookingById[ck.bookingId];
+      }
     }
   }
-  for (const ck of activeCheckIns) {
-    if (ck.spotId && !plateBySpot[ck.spotId]) plateBySpot[ck.spotId] = ck.licensePlate || '';
-    // A check-in whose booking doesn't carry a spotId still resolves to its
-    // booking via the check-in's bookingId, so that tile opens details too.
-    if (ck.spotId && !bookingBySpot[ck.spotId] && ck.bookingId && bookingById[ck.bookingId]) {
-      bookingBySpot[ck.spotId] = bookingById[ck.bookingId];
-    }
-  }
+  rebuildMaps(scheduledBookings, activeCheckIns);
 
   // Group by zone (extract zone letter from spot id like "A-01")
   const spotData = {};
@@ -237,6 +246,33 @@ export default async function AdminCapacity(container) {
     setCount('[data-count-maintenance]', cap.maintenance);
   });
 
+  // Live tile sync — the headline/legend were already live, but the tiles
+  // were painted once at mount. Another device's check-in left a stale green
+  // tile that disagreed with the counters AND, when clicked, hand-cycled a
+  // real occupancy's status (bookingBySpot had no entry for it). Repaint the
+  // tiles and refresh the maps on every spots snapshot.
+  const unsubSpots = subscribeCollection('spots', async (spots) => {
+    const [bookings, checkIns] = await Promise.all([
+      getCollection('bookings', where('status', 'in', ['upcoming', 'active'])).catch(() => []),
+      getCollection('activeCheckIns').catch(() => []),
+    ]);
+    rebuildMaps(bookings, checkIns);
+    for (const spot of spots || []) {
+      const btn = page.querySelector(`[data-spot="${spot.id}"]`);
+      if (!btn) continue; // spot added after mount — needs a reload, as before
+      const status = spot.status || 'available';
+      const plate = plateBySpot[spot.id] || '';
+      SPOT_STATES.forEach((s) => SPOT_COLORS[s].split(' ').forEach((cls) => btn.classList.remove(cls)));
+      (SPOT_COLORS[status] || SPOT_COLORS.available).split(' ').forEach((cls) => btn.classList.add(cls));
+      btn.dataset.spotStatus = status;
+      btn.dataset.plate = plate;
+      btn.title = `${spot.id} — ${status}${plate ? ` — ${plate}` : ''}`;
+      btn.innerHTML = `
+        <span class="font-mono text-[9px] text-white/70 leading-none pointer-events-none">${spot.id}</span>
+        ${plate ? `<span class="font-mono font-bold text-[11px] sm:text-[12px] text-white leading-tight pointer-events-none mt-1 break-all text-center">${plate}</span>` : ''}`;
+    }
+  });
+
   // Wire mobile admin nav
   initAdminNav(page);
 
@@ -245,5 +281,6 @@ export default async function AdminCapacity(container) {
   // Return cleanup function
   return () => {
     if (unsubCapacity) unsubCapacity();
+    if (unsubSpots) unsubSpots();
   };
 }

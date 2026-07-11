@@ -23,7 +23,8 @@ import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js
 import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { subscribeCollection, getCollection, getDocument, where } from '../../firebase/db.js';
+import { subscribeCollection, getCollection, getDocument } from '../../firebase/db.js';
+import { bucharestLocalToIso, isoToBucharestLocal } from '../../utils/date.js';
 import { showToast } from '../../components/core/Toast.js';
 import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { checkInBooking, checkOutBooking, updateBookingDetails } from '../../services/bookingService.js';
@@ -58,9 +59,13 @@ function fmtDateTime(iso, locale) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
+    // Pinned to the lot's timezone (matches BookingDetailModal and the
+    // customer emails) so a staff device with a foreign/mis-set timezone
+    // still shows the times the customer was promised.
     return d.toLocaleString(locale === 'en' ? 'en-GB' : 'ro-RO', {
       day: '2-digit', month: '2-digit', year: '2-digit',
       hour: '2-digit', minute: '2-digit',
+      timeZone: 'Europe/Bucharest',
     });
   } catch { return iso; }
 }
@@ -597,6 +602,7 @@ export default async function AdminCheckIns(container) {
   const rawWindow = params.get('window') || 'today';
   let activeWindow = parseWindowParam(rawWindow);
   let searchQuery = (params.get('q') || '').trim().toLowerCase();
+  let rangeFp = null; // live custom-range flatpickr (destroyed before each window-bar rebuild)
   // Deep-link from the activity feed: scroll to + flash this reservation once
   // its row renders. Data loads async AND a later snapshot can rebuild the tab
   // (which would wipe a one-shot highlight), so we re-apply the flash on every
@@ -659,18 +665,24 @@ export default async function AdminCheckIns(container) {
     window.history.replaceState({}, '', url.toString());
   }
 
+  // A non-empty search bypasses the date window — the search box is a global
+  // finder. Otherwise a long-term customer arriving a day early is invisible
+  // on the Check-out tab even when the agent types their exact plate (the
+  // window AND the query both had to match).
+  const searchOrWindow = (q, iso, range) => (q ? true : isInWindow(iso, range));
+
   function counts() {
     const range = windowRange(activeWindow);
     const q = searchQuery;
-    const checkin = bookings.filter((b) => b.status === 'upcoming' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
-    const checkout = bookings.filter((b) => b.status === 'active' && (b.type === 'credit' || isInWindow(checkoutDate(b), range)) && matchesSearch(b, q)).length;
+    const checkin = bookings.filter((b) => b.status === 'upcoming' && searchOrWindow(q, b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
+    const checkout = bookings.filter((b) => b.status === 'active' && (b.type === 'credit' || searchOrWindow(q, checkoutDate(b), range)) && matchesSearch(b, q)).length;
     const overdue = bookings.filter((b) => isOverdue(b) && matchesSearch(b, q)).length;
-    const noshow = bookings.filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
+    const noshow = bookings.filter((b) => b.status === 'no-show' && searchOrWindow(q, b.dropoffAt || b.startDate, range) && matchesSearch(b, q)).length;
     // Count each in-window leg (a round-trip contributes its outbound and/or
     // its return depending on which fall in the range) to match the list.
     const transfersCount = transfers.reduce((n, tr) => (
       matchesTransferSearch(tr, q)
-        ? n + transferLegs(tr).filter((lg) => isInWindow(lg.at, range)).length
+        ? n + transferLegs(tr).filter((lg) => searchOrWindow(q, lg.at, range)).length
         : n
     ), 0);
     return { checkin, checkout, overdue, noshow, transfers: transfersCount };
@@ -688,6 +700,11 @@ export default async function AdminCheckIns(container) {
   }
 
   function renderWindowBar() {
+    // The previous render's flatpickr survives windowBarEl.innerHTML (its
+    // calendar hangs off document.body) — destroy it BEFORE the rebuild or
+    // every live bookings snapshot leaks one orphaned calendar. Tracked on
+    // the page closure because the input node itself is replaced each time.
+    if (rangeFp) { try { rangeFp.destroy(); } catch { /* noop */ } rangeFp = null; }
     if (activeTab === 'overdue') {
       windowBarEl.innerHTML = `<p class="text-[13px] text-dim">${t('checkins.overdueSubtitle')}</p>`;
       return;
@@ -719,7 +736,6 @@ export default async function AdminCheckIns(container) {
     // (Re-)mount flatpickr range picker.
     const rangeInput = windowBarEl.querySelector('[data-range-picker]');
     if (rangeInput) {
-      if (rangeInput._fp) { try { rangeInput._fp.destroy(); } catch {} }
       const fp = flatpickr(rangeInput, {
         mode: 'range',
         dateFormat: 'Y-m-d',
@@ -742,7 +758,7 @@ export default async function AdminCheckIns(container) {
           }
         },
       });
-      rangeInput._fp = fp;
+      rangeFp = fp;
     }
   }
 
@@ -776,7 +792,7 @@ export default async function AdminCheckIns(container) {
     if (activeTab === 'checkin') {
       const range = windowRange(activeWindow);
       const rows = bookings
-        .filter((b) => b.status === 'upcoming' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q))
+        .filter((b) => b.status === 'upcoming' && searchOrWindow(q, b.dropoffAt || b.startDate, range) && matchesSearch(b, q))
         .sort((a, b) => String(a.dropoffAt || a.startDate || '').localeCompare(String(b.dropoffAt || b.startDate || '')))
         .map((b) => rowHtml(b, { tab: 'checkin', locale, canCancel }));
       bodyEl.innerHTML = renderTable(rows);
@@ -790,7 +806,7 @@ export default async function AdminCheckIns(container) {
       // stranding it "checked in" forever. Always include active credit
       // bookings; keep the window for long-term.
       const rows = bookings
-        .filter((b) => b.status === 'active' && (b.type === 'credit' || isInWindow(checkoutDate(b), range)) && matchesSearch(b, q))
+        .filter((b) => b.status === 'active' && (b.type === 'credit' || searchOrWindow(q, checkoutDate(b), range)) && matchesSearch(b, q))
         .sort((a, b) => String(checkoutDate(a) || '').localeCompare(String(checkoutDate(b) || '')))
         .map((b) => rowHtml(b, { tab: 'checkout', locale, canCancel }));
       bodyEl.innerHTML = renderTable(rows);
@@ -799,7 +815,7 @@ export default async function AdminCheckIns(container) {
     if (activeTab === 'noshow') {
       const range = windowRange(activeWindow);
       const rows = bookings
-        .filter((b) => b.status === 'no-show' && isInWindow(b.dropoffAt || b.startDate, range) && matchesSearch(b, q))
+        .filter((b) => b.status === 'no-show' && searchOrWindow(q, b.dropoffAt || b.startDate, range) && matchesSearch(b, q))
         .sort((a, b) => String(b.dropoffAt || b.startDate || '').localeCompare(String(a.dropoffAt || a.startDate || '')))
         .map((b) => rowHtml(b, { tab: 'noshow', locale, canCancel }));
       if (!rows.length) {
@@ -817,7 +833,7 @@ export default async function AdminCheckIns(container) {
       for (const tr of transfers) {
         if (!matchesTransferSearch(tr, q)) continue;
         for (const lg of transferLegs(tr)) {
-          if (isInWindow(lg.at, range)) legRows.push({ tr, leg: lg.leg, at: lg.at });
+          if (searchOrWindow(q, lg.at, range)) legRows.push({ tr, leg: lg.leg, at: lg.at });
         }
       }
       legRows.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
@@ -1107,7 +1123,11 @@ export default async function AdminCheckIns(container) {
   // Tear down the bookings listener when the router navigates away (it calls
   // the returned cleanup before rendering the next route). Replaces the old
   // popstate-only teardown, which leaked on pushState/SPA-link navigation.
-  return () => { if (unsub) unsub(); if (unsubTransfers) unsubTransfers(); };
+  return () => {
+    if (unsub) unsub();
+    if (unsubTransfers) unsubTransfers();
+    if (rangeFp) { try { rangeFp.destroy(); } catch { /* noop */ } rangeFp = null; }
+  };
 }
 
 // ── Edit reservation (contact + logistics) ───────────────────────────────
@@ -1115,12 +1135,11 @@ export default async function AdminCheckIns(container) {
 // plate stays editable only while `upcoming` (it keys the activeCheckIns row).
 // Long-term drop-off / pick-up dates can be edited while upcoming OR active —
 // changing them re-prices the stay and settles the difference (see below).
+// Prefill value for the date pickers: Bucharest wall-clock, so an untouched
+// field round-trips to the same instant on any device. Handles both full ISO
+// timestamps and legacy date-only strings (taken as Bucharest midnight).
 function isoToFlatpickr(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return isoToBucharestLocal(iso);
 }
 
 function openEditBookingDialog({ booking }) {
@@ -1139,13 +1158,15 @@ function openEditBookingDialog({ booking }) {
     const inputCls = 'w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry';
     const labelCls = 'block text-[13px] font-medium text-charcoal/70 mb-1.5';
 
-    const toIso = (raw) => new Date(String(raw).replace(' ', 'T')).toISOString();
-    const currentDropoffIso = booking.dropoffAt
-      ? new Date(booking.dropoffAt).toISOString()
-      : (booking.startDate ? new Date(`${booking.startDate}T00:00:00`).toISOString() : null);
-    const currentPickupIso = booking.pickupAt
-      ? new Date(booking.pickupAt).toISOString()
-      : (booking.endDate ? new Date(`${booking.endDate}T00:00:00`).toISOString() : null);
+    const toIso = (raw) => bucharestLocalToIso(raw);
+    // "Current" dates are the round-trip of what the pickers are prefilled
+    // with — guaranteeing an untouched form compares equal (changed=false).
+    // Deriving them independently used to disagree for legacy date-only
+    // bookings (UTC-midnight prefill vs local-midnight baseline), so ANY
+    // save — even a phone-number fix — fired a spurious reprice that
+    // rewrote the booking's dates.
+    const currentDropoffIso = toIso(isoToFlatpickr(booking.dropoffAt || booking.startDate)) || null;
+    const currentPickupIso = toIso(isoToFlatpickr(booking.pickupAt || booking.endDate)) || null;
 
     const form = html`<form class="space-y-4" data-edit-form>
       <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.editTitle')}</h3>

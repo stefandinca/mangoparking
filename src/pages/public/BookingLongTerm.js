@@ -16,6 +16,7 @@ import { openModal } from '../../components/core/Modal.js';
 import { CONTACT_PHONE } from '../../utils/constants.js';
 import { getCurrentUser, getUserProfile } from '../../firebase/auth.js';
 import { isValidEmail, isValidLicensePlate, isValidPhone, required } from '../../utils/validators.js';
+import { bucharestLocalToIso, isoToBucharestLocal } from '../../utils/date.js';
 import { phoneField, phoneValue } from '../../components/core/PhoneField.js';
 import { showToast } from '../../components/core/Toast.js';
 import { isProfileComplete } from '../../utils/profileComplete.js';
@@ -42,21 +43,13 @@ function durationHours(dropoffMs, pickupMs) {
   return Math.round(ms / 3_600_000);
 }
 
-// Render a Date as "YYYY-MM-DD HH:MM" in local time. Matches the format
-// flatpickr writes into the hidden input via FormDateTime (dateFormat
-// 'Y-m-d H:i'), so values flow through `form.dropoffAt.value` unchanged.
-function toLocalDatetimeValue(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-// Convert flatpickr's "YYYY-MM-DD HH:MM" (local) → full ISO with offset.
-// Also tolerates the legacy "YYYY-MM-DDTHH:MM" shape for safety.
+// Convert flatpickr's "YYYY-MM-DD HH:MM" → full ISO instant. The picked
+// wall-clock always means Europe/Bucharest time (the lot's timezone) — going
+// through the device timezone would shift the stored instant for customers
+// booking from abroad. Also tolerates the legacy "YYYY-MM-DDTHH:MM" shape,
+// and is Safari-safe (WebKit rejects the space-separated form in new Date()).
 function localDatetimeToIso(localValue) {
-  if (!localValue) return null;
-  const normalized = String(localValue).replace(' ', 'T');
-  const d = new Date(normalized);
-  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+  return bucharestLocalToIso(localValue);
 }
 
 export default function BookingLongTerm(container) {
@@ -88,13 +81,18 @@ export default function BookingLongTerm(container) {
     return;
   }
 
-  // Default suggestion: drop-off tomorrow 10:00, pick-up the day after at 10:00.
-  // Stored as local-time-formatted strings for the datetime-local input.
-  const tomorrow10 = new Date();
-  tomorrow10.setDate(tomorrow10.getDate() + 1);
-  tomorrow10.setHours(10, 0, 0, 0);
-  const dayAfter10 = new Date(tomorrow10.getTime() + 86_400_000);
-  const minDropoff = new Date(); // can't drop off in the past
+  // Default suggestion: drop-off tomorrow 10:00, pick-up the day after at
+  // 10:00 — "tomorrow" and "10:00" in the LOT's timezone (Europe/Bucharest),
+  // not the device's, so the suggestion means the same instant everywhere.
+  const bucharestDayPlus = (days) => {
+    const day = isoToBucharestLocal(new Date().toISOString()).slice(0, 10);
+    const d = new Date(`${day}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const defaultDropoffValue = `${bucharestDayPlus(1)} 10:00`;
+  const defaultPickupValue = `${bucharestDayPlus(2)} 10:00`;
+  const minDropoffValue = isoToBucharestLocal(new Date().toISOString()); // can't drop off in the past
 
   let rates = null;
   let seasonalPeriods = [];
@@ -177,7 +175,7 @@ export default function BookingLongTerm(container) {
                     <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">1</span>
                     ${t('longTerm.dropoffAt')} *
                   </label>
-                  ${dateTimeFieldHtml({ name: 'dropoffAt', value: toLocalDatetimeValue(tomorrow10), min: toLocalDatetimeValue(minDropoff), required: true, stepToNext: 'pickupAt' })}
+                  ${dateTimeFieldHtml({ name: 'dropoffAt', value: defaultDropoffValue, min: minDropoffValue, required: true, stepToNext: 'pickupAt' })}
                   <p class="text-[12px] text-charcoal/70 mt-1.5 leading-snug">${t('longTerm.dropoffHint')}</p>
                   ${flightField('flightNumberDropoff')}
                 </div>
@@ -186,7 +184,7 @@ export default function BookingLongTerm(container) {
                     <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">2</span>
                     ${t('longTerm.pickupAt')} *
                   </label>
-                  ${dateTimeFieldHtml({ name: 'pickupAt', value: toLocalDatetimeValue(dayAfter10), min: toLocalDatetimeValue(tomorrow10), required: true })}
+                  ${dateTimeFieldHtml({ name: 'pickupAt', value: defaultPickupValue, min: defaultDropoffValue, required: true })}
                   <p class="text-[12px] text-charcoal/70 mt-1.5 leading-snug">${t('longTerm.pickupHint')}</p>
                   ${flightField('flightNumberPickup')}
                 </div>
@@ -430,8 +428,11 @@ export default function BookingLongTerm(container) {
 
   function recompute() {
     if (!rates) return;
-    const dropoffMs = new Date(form.dropoffAt.value).getTime();
-    const pickupMs = new Date(form.pickupAt.value).getTime();
+    // Parse via the shared helper — new Date('YYYY-MM-DD HH:MM') is Invalid
+    // Date on Safari/WebKit, which froze the quote at "—" and sent
+    // totalPrice: 0 to the server (hard booking failure on iOS).
+    const dropoffMs = Date.parse(localDatetimeToIso(form.dropoffAt.value) || '');
+    const pickupMs = Date.parse(localDatetimeToIso(form.pickupAt.value) || '');
     const days = billingDays(dropoffMs, pickupMs);
     const hours = durationHours(dropoffMs, pickupMs);
     // Re-derive the effective tier set on every recompute — drop-off
@@ -588,6 +589,11 @@ export default function BookingLongTerm(container) {
     if (form.pickupAt.value && form.pickupAt.value < form.dropoffAt.value) {
       pickupFp.clear();
     }
+    // set('minDate') may itself empty the pickup (earlier DAY than the new
+    // dropoff) without firing a native change — recompute unconditionally so
+    // the sticky summary can't keep showing a total for dates that no
+    // longer exist.
+    recompute();
   });
 
   // Clear red field-error state as the user edits.
@@ -927,7 +933,7 @@ export default function BookingLongTerm(container) {
   // Returns true when the gate fired (caller must stop). Reads the current
   // drop-off; fails OPEN when the date or the hours config isn't ready.
   function afterHoursGateBlocks() {
-    const dropoffMs = new Date(String(form.dropoffAt.value || '').replace(' ', 'T')).getTime();
+    const dropoffMs = Date.parse(localDatetimeToIso(form.dropoffAt.value) || '');
     if (!Number.isFinite(dropoffMs)) return false;
     if (dropoffMs - Date.now() >= LAST_MINUTE_MS) return false;   // not last-minute
     if (!isOutsideOpeningHoursNow(openingHours)) return false;    // desk is open now

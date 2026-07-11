@@ -1,4 +1,4 @@
-import { getDocument, subscribeDoc, subscribeCollection, updateDocument, getCollection, incrementField } from '../firebase/db.js';
+import { getDocument, subscribeDoc, subscribeCollection, updateDocument, getCollection } from '../firebase/db.js';
 import { TOTAL_CAPACITY } from '../utils/constants.js';
 import { auditLog } from './auditService.js';
 
@@ -56,13 +56,6 @@ export function subscribeCapacity(callback) {
 }
 
 /**
- * Update occupied spots count
- */
-export async function updateOccupied(count) {
-  await updateDocument('settings', 'global', { occupiedSpots: count });
-}
-
-/**
  * Get all spots
  */
 export async function getAllSpots() {
@@ -70,16 +63,14 @@ export async function getAllSpots() {
 }
 
 /**
- * Update a spot's status and recalculate global occupied count
+ * Update a spot's status. No counter maintenance: capacity is aggregated
+ * live from the spots collection (see aggregateSpots), and the legacy
+ * `settings/global.occupiedSpots` counter is admin-only writable — keeping
+ * the increment here made every agent/driver spot flip throw
+ * permission-denied AFTER the spot doc had already changed.
  */
 export async function updateSpotStatus(spotId, status) {
   const old = await getDocument('spots', spotId);
   await updateDocument('spots', spotId, { status });
   await auditLog('spot_updated', 'spot', spotId, { status: old?.status }, { status });
-  // Update occupied count with atomic increment
-  const wasOccupied = old?.status === 'occupied';
-  const nowOccupied = status === 'occupied';
-  if (wasOccupied !== nowOccupied) {
-    await incrementField('settings', 'global', 'occupiedSpots', nowOccupied ? 1 : -1);
-  }
 }

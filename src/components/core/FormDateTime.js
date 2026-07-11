@@ -139,6 +139,10 @@ export function wireDateTime(scope = document) {
           }
         : undefined,
     });
+    // If a preloaded value was filtered out by min/max, flatpickr leaves the
+    // raw string in the hidden input while showing an empty field — clear it
+    // so an invisible value can never be submitted.
+    if (!fp.selectedDates?.length && input.value) input.value = '';
     input[INSTANCE_KEY] = fp;
   });
 }
@@ -200,10 +204,13 @@ function injectTimeSlider(instance, dateOnly) {
 
   // Position the pill (and the blue fill) over the native thumb. The thumb's
   // centre travels between THUMB/2 and trackW − THUMB/2, so mirror that inset.
-  const paint = () => {
+  // `displayMins` lets the bubble show the TRUE committed time even when the
+  // native range value is snapped to the 15-min grid (e.g. a minDate clamp
+  // committed 14:37) — the pill must never disagree with the field.
+  const paint = (displayMins = Number(range.value)) => {
     const max = Number(range.max) || 1;
     const pct = Number(range.value) / max;
-    bubble.textContent = fmt(Number(range.value));
+    bubble.textContent = fmt(displayMins);
     const trackW = track.clientWidth || 0;
     const inset = TIME_THUMB_PX / 2;
     const x = inset + pct * Math.max(0, trackW - TIME_THUMB_PX);
@@ -211,27 +218,36 @@ function injectTimeSlider(instance, dateOnly) {
     fill.style.width = `${x}px`;
   };
 
-  // Pull the current time out of flatpickr into the slider (rounded to the
-  // 15-min grid). Runs on open + on every change so a minDate clamp or a day
-  // click keeps the pill honest.
+  // Pull the current time out of flatpickr into the slider. The range thumb
+  // snaps to the 15-min grid, but the bubble shows the committed minutes.
   const syncFromInstance = () => {
-    const d = instance.selectedDates?.[0] || instance.now || new Date();
-    let mins = d.getHours() * 60 + Math.round(d.getMinutes() / 15) * 15;
-    mins = Math.min(1425, Math.max(0, mins));
-    range.value = String(mins);
-    paint();
+    const d = instance.selectedDates?.[0] || new Date();
+    const trueMins = Math.min(1439, Math.max(0, d.getHours() * 60 + d.getMinutes()));
+    const snapped = Math.min(1425, Math.max(0, Math.round(trueMins / 15) * 15));
+    range.value = String(snapped);
+    paint(trueMins);
   };
   instance.__mpSyncTimeSlider = syncFromInstance;
 
   range.addEventListener('input', () => {
     const mins = Number(range.value);
+    // Fresh `new Date()` — instance.now is frozen at wire time, so a picker
+    // left mounted across midnight would back-date the day.
     const base = instance.selectedDates?.[0]
       ? new Date(instance.selectedDates[0])
-      : new Date(instance.now || Date.now());
+      : new Date();
     base.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
+    // flatpickr FILTERS out-of-range dates in setDate (clearing the whole
+    // selection) rather than clamping — dragging the slider below the min
+    // time on the min day used to silently wipe the picked date. Clamp here.
+    const min = instance.config?.minDate;
+    const max = instance.config?.maxDate;
+    let target = base;
+    if (min && target < min) target = new Date(min);
+    if (max && target > max) target = new Date(max);
     // triggerChange=true writes through to the hidden + alt input and fires
-    // onChange (which re-syncs, so any minDate clamp snaps the pill back).
-    instance.setDate(base, true);
+    // onChange (which re-syncs the pill to whatever actually committed).
+    instance.setDate(target, true);
     paint();
   });
 

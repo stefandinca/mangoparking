@@ -27,6 +27,18 @@ applied **once** across the whole booking. This is implemented identically on
 the client (`src/pages/public/BookingLongTerm.js:33`, `GRACE_MS`) and on the
 server guard (`functions/src/pricingValidate.js:38`, `billingDays`).
 
+### Timezone convention (Europe/Bucharest everywhere)
+
+A picked drop-off/pick-up wall-clock time **always means Europe/Bucharest**
+(the lot's timezone), regardless of the device's timezone. Every conversion
+between the picker's `Y-m-d H:i` value and the stored ISO instant goes through
+`bucharestLocalToIso` / `isoToBucharestLocal` (`src/utils/date.js`) — in the
+public funnel, the admin create-transaction modal, and the edit/reprice
+dialog. Displays (emails, admin boards, booking detail) render pinned to
+`Europe/Bucharest` for the same reason. Never convert picker values with a
+bare `new Date(...)` — it is device-TZ-dependent and, for the space-separated
+format, Invalid Date on Safari.
+
 ### Pricing (tiers + seasonal + online discount)
 
 - **Default tiers** live at `settings/longTermRates`

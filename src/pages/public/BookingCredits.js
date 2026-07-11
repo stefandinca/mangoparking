@@ -332,6 +332,32 @@ export default async function Booking(container) {
       const displayPrice = (!isPickup && online != null) ? online : onlinePrice;
       const showAnchor = !isPickup && online != null;
       const voucherActive = !isPickup && voucher && voucher.status === 'unused' && onlinePrice > voucher.amount && !promoVoucher;
+      // Re-derive the promo discount from the LIVE base on every refresh —
+      // the amount captured at apply-time goes stale the moment the customer
+      // switches pack or payment method, showing a total the server won't
+      // charge (createPayment re-resolves the code against the new base).
+      // Display-only; mirrors the server's per-type formula and
+      // BookingLongTerm.recompute().
+      if (promoVoucher) {
+        if (promoVoucher.type === 'percent') {
+          promoVoucher.discountAmount = Math.min(
+            Math.round((displayPrice * promoVoucher.value) / 100),
+            Math.max(0, displayPrice - 1),
+          );
+        } else if (promoVoucher.type === 'fixed') {
+          promoVoucher.discountAmount = Math.min(
+            promoVoucher.value,
+            Math.max(0, displayPrice - 1),
+          );
+        }
+        // Keep the applied-voucher box's "−N lei" detail in step.
+        const detailEl = pageEl.querySelector('[data-voucher-applied-detail]');
+        if (detailEl) {
+          detailEl.textContent = promoVoucher.type === 'percent'
+            ? t('voucher.appliedPercent', { value: promoVoucher.value, amount: promoVoucher.discountAmount })
+            : t('voucher.appliedFixed', { amount: promoVoucher.discountAmount });
+        }
+      }
       const promoActive = promoVoucher?.discountAmount > 0;
       // Headline must equal what the server charges: standard − online − promo.
       const finalPrice = promoActive ? Math.max(1, displayPrice - promoVoucher.discountAmount) : displayPrice;

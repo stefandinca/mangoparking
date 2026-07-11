@@ -87,12 +87,15 @@ export function delegate(parent, event, selector, handler) {
 /**
  * Toggle a "field is invalid" visual state on a form input.
  * Adds red border + light-red background, removes the default subtle border.
+ * flatpickr-enhanced inputs are `type=hidden` behind a visible altInput —
+ * style that one, or the error state is invisible to the user.
  */
 export function setFieldError(input, hasError) {
   if (!input) return;
-  input.classList.toggle('border-red-500', hasError);
-  input.classList.toggle('bg-red-50', hasError);
-  input.classList.toggle('border-frost-deep', !hasError);
+  const el = input._flatpickr?.altInput || input;
+  el.classList.toggle('border-red-500', hasError);
+  el.classList.toggle('bg-red-50', hasError);
+  el.classList.toggle('border-frost-deep', !hasError);
 }
 
 /**

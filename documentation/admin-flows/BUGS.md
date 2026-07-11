@@ -187,3 +187,75 @@ teardown, days payload):
   graced rule) — a 25h stay was priced as 1 day but stored `days: 2`, skewing
   the `totalPrice/days` per-day rate that overstay and reprice math derive.
   Now uses `walkInBillingDays`. (`CreateTransactionModal.js`)
+
+Second wave (from the same review, verified with a Puppeteer run emulating an
+America/New_York browser — 15/15 checks incl. TZ-pinned payloads):
+
+- **Stored booking instants depended on the DEVICE timezone.** Every picker
+  submit path converted the flatpickr wall-clock (`Y-m-d H:i`) to ISO via the
+  device's timezone, while emails/admin render pinned to Europe/Bucharest — a
+  customer abroad (or a staff device with a mis-set clock) silently created a
+  TZ-shifted booking. Picked times now ALWAYS mean Europe/Bucharest, via
+  `bucharestLocalToIso`/`isoToBucharestLocal` (`src/utils/date.js`), used by
+  the public funnel, the admin create modal (defaults + submit + transfer
+  prefill) and the edit/reprice dialog. This also makes the client's
+  seasonal-tier day match the server's Bucharest-day derivation near period
+  boundaries (was: possible hard "price mismatch" for out-of-TZ browsers).
+- **Editing a legacy date-only booking fired a spurious reprice.** The edit
+  dialog's "current dates" baseline (local midnight) disagreed with the picker
+  prefill (UTC midnight) for bookings without `dropoffAt`, so ANY save — even a
+  phone-number fix — reported changed dates and called `adminRepriceBooking`,
+  rewriting the booking's dates to 03:00. The baseline is now the round-trip of
+  the actual prefill, so untouched pickers always compare equal. (`AdminCheckIns.js`)
+- **Safari/iOS could not complete a long-term booking.** `recompute()` parsed
+  the space-separated picker value with `new Date()` (Invalid Date on WebKit) —
+  quote stuck at "—" and submit sent `totalPrice: 0`, which the server rejects.
+  Now parses via the shared helper. (`BookingLongTerm.js`)
+- **Time-slider could silently WIPE the picked date.** flatpickr's `setDate`
+  filters (clears) out-of-range dates instead of clamping — dragging the slider
+  below the min time on the min day emptied the field with no feedback. The
+  slider now clamps to minDate/maxDate; its bubble also shows the true
+  committed minutes (was: grid-rounded display disagreeing with the value), and
+  its no-selection base is a fresh `new Date()` (was: frozen `instance.now`,
+  which back-dated after midnight). Preloaded values filtered by min/max are
+  cleared from the hidden input (an empty-looking field could submit an
+  invisible date). (`FormDateTime.js`)
+- **Clearing the pick-up via a drop-off move left a stale quote.**
+  `set('minDate')` empties the pick-up without a native change event; the
+  summary kept showing the old days/total. The drop-off handler now recomputes
+  unconditionally. (`BookingLongTerm.js`)
+- **Validation errors on date fields were invisible** — `setFieldError` styled
+  the flatpickr-hidden original input; it now styles the visible altInput.
+  (`utils/dom.js`)
+- **Stored XSS via billing fields.** `billingFieldsHtml` interpolated
+  profile-stored billing values into `value="…"` unescaped; a crafted
+  companyName in a customer profile executed in the ADMIN's browser when
+  opening that customer (UserDetailModal renders the same block). All eight
+  attributes are now escaped. (`BillingFields.js`)
+- **Credits funnel showed a stale voucher discount.** A percent code's
+  `discountAmount` was computed once at apply time; switching packs (or payment
+  method) kept subtracting the old amount, so the shown total diverged from
+  what `createPayment` charges. The discount is now re-derived from the live
+  base on every summary refresh, mirroring the long-term page. (`BookingCredits.js`)
+- **Spot status flips threw permission-denied for agents/drivers.**
+  `updateSpotStatus` still incremented the legacy admin-only
+  `settings/global.occupiedSpots` counter (which nothing reads — capacity
+  aggregates the spots collection), failing AFTER the spot doc changed and
+  rolling back the capacity-map UI to a wrong state. Counter write removed.
+  (`capacityService.js`)
+- **Capacity-map tiles were painted once at mount.** Another device's check-in
+  updated the legend but not the tiles; the stale green tile also hand-cycled a
+  real occupancy's status when clicked. Tiles + spot→booking maps now refresh
+  on a live spots subscription. (`AdminCapacity.js`)
+- **Check-ins custom-range flatpickr leaked one calendar per live re-render**
+  (the destroy guard checked the NEW node), and mid-selection state was torn
+  down by every bookings snapshot. The instance is now tracked in the page
+  closure and destroyed before each window-bar rebuild + on route cleanup.
+  (`AdminCheckIns.js`)
+- **Searching couldn't find bookings outside the date window.** The check-in /
+  check-out / no-show / transfers filters ANDed the search with the window, so
+  an early-arriving long-term customer was unfindable by exact plate on the
+  Check-out tab. A non-empty search now bypasses the window (global finder).
+  (`AdminCheckIns.js`)
+- Check-in board timestamps now render pinned to Europe/Bucharest (matches
+  BookingDetailModal + emails). (`AdminCheckIns.js`)

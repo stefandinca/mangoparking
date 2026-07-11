@@ -66,8 +66,8 @@ export async function getAllBookings(limitCount = 200) {
 /**
  * Check in a booking. If spotId is not provided, the first available spot
  * is auto-picked (mirrors tokenService.useToken). The chosen spot is
- * flipped to `occupied` via updateSpotStatus so the global occupiedSpots
- * counter — read by AdminDashboard + AdminCapacity — stays in sync.
+ * flipped to `occupied` via updateSpotStatus — capacity displays aggregate
+ * the spots collection live, so no counter maintenance is needed.
  */
 export async function checkInBooking(bookingId, spotId = null) {
   const old = await getDocument('bookings', bookingId);
@@ -121,7 +121,6 @@ export async function checkOutBooking(bookingId) {
     completedAt: new Date().toISOString(),
   });
   if (old.spotId) {
-    // updateSpotStatus also decrements settings/global.occupiedSpots.
     await updateSpotStatus(old.spotId, 'available').catch((err) => {
       console.warn('checkOutBooking: spot status update failed', err?.message);
     });

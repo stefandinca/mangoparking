@@ -8,6 +8,7 @@ import { isValidEmail, isValidLicensePlate, isValidPhone, isValidCnp, isValidCui
 import { lookupCui } from '../../services/cuiService.js';
 import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
+import { bucharestLocalToIso, isoToBucharestLocal } from '../../utils/date.js';
 import { getBalance, lookupByPlate, getTokenPacks } from '../../services/tokenService.js';
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
 import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
@@ -71,35 +72,27 @@ function creditCheckInError(err) {
   return err?.message || t('common.error');
 }
 
-// Format a Date as flatpickr's `Y-m-d H:i` value (space separator, no
-// seconds, no timezone). Matches the convention used in BookingLongTerm
-// so the same submit-side conversion helpers work everywhere.
-function toFlatpickrValue(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, editTransfer = null } = {}) {
   const locale = getLocale();
   // Sensible defaults so a walk-in agent doesn't have to fill dates from
   // scratch. Drop-off = now (the customer is at the gate); pick-up = +1
   // day. Agent can change either, but the common case is one click away.
+  // Rendered as Bucharest wall-clock (the timezone all bookings live in) and
+  // rounded to the picker's 15-minute grid so the time-slider pill matches
+  // the committed value exactly.
   const now = new Date();
   now.setSeconds(0, 0);
-  const inOneDay = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const defaultDropoff = toFlatpickrValue(now);
-  const defaultPickup = toFlatpickrValue(inOneDay);
+  now.setMinutes(Math.round(now.getMinutes() / 15) * 15);
+  const defaultDropoff = isoToBucharestLocal(now.toISOString());
+  const defaultPickup = isoToBucharestLocal(new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString());
 
   // Door-to-airport transfer is a third reservation type. When `editTransfer`
   // is passed, the modal opens straight into transfer-edit mode (the type
   // toggle is hidden and the form is prefilled). `ed` holds the values to
-  // prefill; an ISO timestamp is converted back to flatpickr's `Y-m-d H:i`.
+  // prefill; an ISO timestamp is converted back to flatpickr's `Y-m-d H:i`
+  // (Bucharest wall-clock, so an untouched field round-trips unchanged).
   const ed = editTransfer || {};
-  const isoToFlatpickr = (iso) => {
-    if (!iso) return '';
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? '' : toFlatpickrValue(d);
-  };
+  const isoToFlatpickr = (iso) => isoToBucharestLocal(iso);
   const edRoundtrip = ed.transferType === 'roundtrip';
   const body = html`
     <div class="space-y-4">
@@ -489,8 +482,8 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     const dropoffRaw = qs('[name="dropoffAt"]', contentEl)?.value;
     const pickupRaw = qs('[name="pickupAt"]', contentEl)?.value;
     if (!dropoffRaw || !pickupRaw) return null;
-    const dropMs = new Date(String(dropoffRaw).replace(' ', 'T')).getTime();
-    const pickMs = new Date(String(pickupRaw).replace(' ', 'T')).getTime();
+    const dropMs = Date.parse(bucharestLocalToIso(dropoffRaw) || '');
+    const pickMs = Date.parse(bucharestLocalToIso(pickupRaw) || '');
     const days = walkInBillingDays(dropMs, pickMs);
     if (!days) return null;
     // Pick-up day drives the seasonal override (matches BookingLongTerm).
@@ -953,9 +946,9 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       if (!pickupRaw) return showErr(t('transfers.errorMissingPickupAt'));
       if (transferType === 'roundtrip' && !returnRaw) return showErr(t('transfers.errorMissingReturn'));
 
-      // flatpickr stores `YYYY-MM-DD HH:MM` (local); swap space→T so Date()
-      // parses as local, then store ISO — same convention as the long-term path.
-      const toIso = (raw) => (raw ? new Date(String(raw).replace(' ', 'T')).toISOString() : '');
+      // flatpickr stores `YYYY-MM-DD HH:MM` — Bucharest wall-clock, converted
+      // to an ISO instant by the shared helper (same convention everywhere).
+      const toIso = (raw) => (raw ? (bucharestLocalToIso(raw) || '') : '');
       const payload = {
         contactName, phone,
         email: val('transferEmail'),
@@ -1115,10 +1108,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         if (!totalRaw || !Number.isFinite(totalPrice) || totalPrice <= 0) {
           throw new Error(t('transactions.errorMissingTotal'));
         }
-        // flatpickr stores values as `YYYY-MM-DD HH:MM` (space, local
-        // time); swap the space for T so Date() reliably parses as local.
-        const dropoffAt = new Date(String(dropoffRaw).replace(' ', 'T')).toISOString();
-        const pickupAt = new Date(String(pickupRaw).replace(' ', 'T')).toISOString();
+        // flatpickr stores `YYYY-MM-DD HH:MM` — always Bucharest wall-clock,
+        // whatever timezone the staff device happens to be set to.
+        const dropoffAt = bucharestLocalToIso(dropoffRaw);
+        const pickupAt = bucharestLocalToIso(pickupRaw);
         if (Date.parse(pickupAt) <= Date.parse(dropoffAt)) {
           throw new Error(t('transactions.errorPickupBeforeDropoff'));
         }
