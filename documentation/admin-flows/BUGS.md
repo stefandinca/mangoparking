@@ -259,3 +259,59 @@ America/New_York browser — 15/15 checks incl. TZ-pinned payloads):
   (`AdminCheckIns.js`)
 - Check-in board timestamps now render pinned to Europe/Bucharest (matches
   BookingDetailModal + emails). (`AdminCheckIns.js`)
+
+Third wave — backend + rules hardening (needs `firebase deploy --only
+functions,firestore:rules` to take effect; verified `node --check` on every
+functions file + client/consumer field-read audit):
+
+- **createPayment spread the raw request body into `pendingOrders`.** A caller
+  could smuggle server-owned fields into the order — most severely `bookingId`:
+  the IPN honors `pending.bookingId` by patching that booking to `paid`, so a
+  cheap 1-day online charge could flip an arbitrary (e.g. 30-day pay-at-pickup)
+  booking to paid; injected `repayAmount` could also rewrite its stored price.
+  The order doc is now built from an explicit whitelist (with sanitized
+  customerData + billing and the server-authoritative day count), and the IPN
+  additionally refuses `pending.bookingId` on non-pay-at-pickup orders (covers
+  orders written before the hardening). (`functions/src/index.js`)
+- **Firestore rules let anyone mint credit balances / forge bookings.**
+  `tokenBalances` had `create: if true` and world-writable/readable `plate_*`
+  docs (mint a balance → staff plate-lookup deducts from it = free parking;
+  read guest PII); `bookings` had `create: isAuthenticated()` + owner update
+  (forge a paid/active booking, or flip your own pay-at-pickup booking to
+  `paid` and check in without paying). Both are now staff-write only — every
+  legitimate writer was audited: balances move exclusively server-side, and
+  customer self-cancel already used the callable. (`firestore.rules`)
+- **`mergeGuestData` trusted an unverified email.** Registering with a
+  victim's address (unverified) absorbed the victim's guest balances, bookings
+  and PII into the attacker's account. Merge now requires
+  `email_verified` — idempotent, so password signups merge on first login
+  after verification. (`functions/src/index.js`)
+- **`checkInWithCredits` could double-charge on concurrent submits.** The
+  ALREADY_CHECKED_IN guard was a plain read before the balance transaction;
+  two agents (or a double-tap) both passed it and both deducted. The plate is
+  now claimed via `tx.create` on `activeCheckIns/{plate}` inside the same
+  transaction as the deduction. (`functions/src/index.js`)
+- **Check-out reminder e-mailed before drop-off.** The 24h-before-pickup
+  branch had no status gate, so a short booking created ~24h before its
+  pick-up got "your car is ready" before the customer even arrived. Now
+  `active`-only. (`functions/src/scheduled.js`)
+- `lookupCui` no longer fails a successful ANAF lookup when the cache write
+  blips (best-effort `.catch`). (`functions/src/cui.js`)
+
+### Known — reviewed 2026-07, deliberately not fixed yet
+
+- **Non-atomic money accumulators** (`adminChargeOverstay`, `adminRepriceBooking`
+  extension branch, `grantCreditsForCash` walk-in): the booking/balance
+  mutation, the ledger row and the cashbook entry are separate awaits — a
+  mid-sequence failure + retry can double-add `latePrice`/`extensionPrice`.
+  Needs an idempotency-key design; same family as the deferred transactional
+  IPN work.
+- **`adminMarkOrderUnpaid` cash-row deletion is post-transaction best-effort** —
+  a failure leaves the reversal recorded but the drawer overstating cash
+  (reversal-path sibling of open bug #3).
+- **Expired pay-later orders leave a phantom `upcoming` booking** —
+  `expireStaleHolds` flips only the order; a far-future pay-later booking
+  whose order expired lingers until manually cancelled.
+- **Reprice across a seasonal boundary bills the whole stay at the pickup-day
+  period's rate** (consistent with original pricing, but the settle difference
+  can surprise) — product decision needed, not a code fix.

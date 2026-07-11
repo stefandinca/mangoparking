@@ -156,9 +156,11 @@ export const daily24hReminders = onSchedule(
         }
       }
 
-      // E9 — 24h before pickup (only meaningful for active bookings;
-      // upcoming bookings will get this on the day-of-checkin email run)
-      if (inWindow(pickup)) {
+      // E9 — 24h before pickup. Active bookings only — the top query also
+      // returns `upcoming` ones, and a short booking created ~24h before its
+      // pick-up would get a "your car is ready for pickup" email before the
+      // customer even dropped the car off.
+      if (b.status === 'active' && inWindow(pickup)) {
         if (!b.reminderCheckoutSentAt) {
           const recipient = await recipientPromise;
           if (recipient) {

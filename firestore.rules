@@ -97,11 +97,17 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Token balances - owner/guest read+write, staff full access
+    // Token balances — all balance movement is server-side (creditTokens,
+    // checkInWithCredits, adminGrantCredits/adminDeductCredits, guest merge).
+    // Owner reads their own uid-keyed doc; staff read anything (plate lookup
+    // at the desk). No client writes: the old rules left plate_* docs
+    // world-creatable/updatable/readable, so anyone could mint a guest
+    // balance (staff plate-lookup would then happily deduct from it — free
+    // parking) or read guest contact PII. The only client writer was the
+    // dead legacy tokenService.purchaseTokens path.
     match /tokenBalances/{docId} {
-      allow read: if isStaff() || (isAuthenticated() && docId == request.auth.uid) || docId.matches('plate_.*');
-      allow create: if true;
-      allow update: if isStaff() || (isAuthenticated() && docId == request.auth.uid) || docId.matches('plate_.*');
+      allow read: if isStaff() || (isAuthenticated() && docId == request.auth.uid);
+      allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
@@ -150,11 +156,17 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Bookings - customer reads own, staff reads all
+    // Bookings — customer reads own, staff reads all. Creation/mutation is
+    // server-side (createBookingFromOrder, adminCreateLongtermBooking, …) or
+    // staff client flows (check-in/out, edit details). Customers get NO
+    // direct writes: self-cancel goes through the cancelBookingWithRefund
+    // callable. The old `create: isAuthenticated()` + owner-update rules let
+    // any account forge a paid/active booking (occupying a spot for free) or
+    // flip its own pay-at-pickup booking to 'paid' without paying and then
+    // check in.
     match /bookings/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
-      allow create: if isAuthenticated();
-      allow update: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 

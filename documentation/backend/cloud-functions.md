@@ -36,7 +36,10 @@ otherwise public.
 - **Does:** the payment entrypoint. **Server-authoritatively re-prices** the order
   (`computeAuthoritativeLongTermTotal` / `computeAuthoritativePackPrice`) and rejects any
   tampered `totalPrice`/`packPrice` (0-RON tolerance). Applies the online-discount, then
-  resolves + atomically redeems a voucher (`resolveVoucher`), writes `pendingOrders/{orderId}`.
+  resolves + atomically redeems a voucher (`resolveVoucher`), writes `pendingOrders/{orderId}`
+  from an **explicit field whitelist** (sanitized `customerData`/billing, authoritative day
+  count) — the raw body is never spread into the order, so server-owned fields like
+  `bookingId`/`repayAmount` cannot be injected by the caller.
   Branches: **online** → returns an encrypted Netopia handoff envelope; **pay-at-pickup**
   → creates the longTerm booking now (unpaid) and returns a `redirectUrl`; **free order**
   (days voucher covers 100%) → fulfils immediately (`paidBy:'voucher'`) and returns `{ free:true }`.
@@ -84,7 +87,7 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 ### Orders & fulfilment
 | Fn | Line | Auth | Does / side effects |
 |---|---|---|---|
-| `mergeGuestData` | 889 | authed | On signup/first login, merges guest `plate_*` balances, transactions, and email-matched bookings into the user's uid; patches `users` vehicles/contact. Idempotent, email-scoped. |
+| `mergeGuestData` | 889 | authed + **verified email** | On signup/first login, merges guest `plate_*` balances, transactions, and email-matched bookings into the user's uid; patches `users` vehicles/contact. Idempotent, email-scoped. Returns zero counts until `email_verified` (unverified password accounts merge on first login after verification). |
 | `adminMarkOrderPaid` | 1118 | `assertStaff` | Flips a pay-at-pickup `pendingOrders` doc to paid; credits tokens (credits) or creates/patches + spot-reserves the booking (longTerm); records a **cash** `cashEntries` row (cash only); audit-logs. Idempotent. Requires `paidBy ∈ {cash,card}` + `payerDetails`. |
 | `adminMarkOrderUnpaid` | 1246 | `assertStaff` | Misclick reversal of an admin cash/card mark-paid (refuses Netopia-paid). Releases the spot / claws back tokens (only if unused), deletes the **open** cash entry, audit-logs. |
 | `cancelPendingCreditOrder` | 1386 | authed (owner or staff) | Customer self-cancel of an **unpaid** pay-at-pickup credit order. Refuses paid orders. |

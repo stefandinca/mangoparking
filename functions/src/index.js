@@ -487,9 +487,39 @@ export const createPayment = onRequest(
 
     // Persist pending order. The IPN callback replays it for online
     // orders; adminMarkOrderPaid replays it for pay-at-pickup orders.
+    //
+    // WHITELISTED fields only — this endpoint is public, and spreading the
+    // raw body let a caller smuggle server-owned fields into the order
+    // (`bookingId` → the IPN would flip an ARBITRARY booking to paid off a
+    // cheap 1-day charge; `repayAmount` → overwrite its stored price).
+    const cdClean = {
+      customerId: cd.customerId || null,
+      licensePlate: String(cd.licensePlate),
+      name: String(cd.name || '').slice(0, 200),
+      email: String(cd.email || '').slice(0, 200),
+      phone: String(cd.phone || '').slice(0, 40),
+      billing: sanitizeBilling(cd.billing),
+      passengers: cd.passengers ?? null,
+      flightNumberDropoff: cd.flightNumberDropoff || null,
+      flightNumberPickup: cd.flightNumberPickup || null,
+    };
     const pendingDoc = {
       orderType,
-      ...body,
+      ...(orderType === 'longTerm' ? {
+        startDate: body.startDate || String(body.dropoffAt || '').slice(0, 10) || null,
+        endDate: body.endDate || String(body.pickupAt || '').slice(0, 10) || null,
+        dropoffAt: body.dropoffAt || null,
+        pickupAt: body.pickupAt || null,
+        // Authoritative day count from the server recompute — the client's
+        // `days` is unvalidated and can disagree with the validated dates.
+        days: authoritativeDays ?? (Number(body.days) || null),
+        totalPrice: Number(body.totalPrice) || null,
+      } : {
+        packId: body.packId,
+        quantity: Number(body.quantity) || 0,
+        totalPrice: Number(body.packPrice || body.totalPrice) || null,
+      }),
+      customerData: cdClean,
       amount,
       voucherId,                 // legacy signup voucher; null otherwise
       voucherAmount,             // RON discount, regardless of which voucher path
@@ -609,7 +639,7 @@ export const createPayment = onRequest(
       }
       const nowIso = new Date().toISOString();
       const bookingId = await createBookingFromOrder(orderId, {
-        ...body,
+        ...pendingDoc,
         paymentMethod: 'online',
         paidBy: 'voucher',
         amount: 0, // fully covered by the days voucher — nothing charged
@@ -645,7 +675,7 @@ export const createPayment = onRequest(
     if (paymentMethod === 'pay-at-pickup' && orderType === 'longTerm') {
       // `amount` here is the standard price (pay-at-pickup gets no discount) —
       // that's what the customer will owe at the lot.
-      const bookingId = await createBookingFromOrder(orderId, { ...body, paymentMethod, amount });
+      const bookingId = await createBookingFromOrder(orderId, { ...pendingDoc, paymentMethod, amount });
       pendingDoc.bookingId = bookingId;
     }
 
@@ -756,7 +786,10 @@ export const netopiaCallback = onRequest(
           // Repay path: a pay-at-pickup booking was already created at
           // order time; this IPN is the online repay coming through.
           // Update the existing booking instead of creating a duplicate.
-          let bookingId = pending.bookingId;
+          // Only pay-at-pickup orders carry a server-set bookingId — never
+          // honor one on an online order (createPayment now whitelists its
+          // fields, but orders written before that hardening still exist).
+          let bookingId = pending.paymentMethod === 'pay-at-pickup' ? pending.bookingId : null;
           if (bookingId) {
             // Reserve a spot now that the booking is paid (it had none
             // because pay-at-pickup bookings don't reserve until paid).
@@ -894,7 +927,12 @@ export const mergeGuestData = onCall(
     }
     const uid = request.auth.uid;
     const email = (request.auth.token?.email || '').toLowerCase();
-    if (!email) {
+    // Only merge for VERIFIED emails — an attacker could otherwise register
+    // (or re-point their profile) with a victim's address unverified and
+    // absorb the victim's guest balances, bookings and PII. Google sign-ins
+    // arrive verified; password accounts merge on first login after
+    // verification (the call is idempotent, so nothing is lost by waiting).
+    if (!email || request.auth.token?.email_verified !== true) {
       return { mergedBalance: 0, mergedTransactions: 0, mergedBookings: 0 };
     }
 
@@ -2856,22 +2894,6 @@ export const checkInWithCredits = onCall(
     }
     if (!docId) throw new HttpsError('not-found', 'NO_BALANCE');
 
-    // Already on the lot — refuse rather than double-charge.
-    const existingActive = await db.collection('activeCheckIns').doc(normPlate).get();
-    if (existingActive.exists) {
-      throw new HttpsError('failed-precondition', 'ALREADY_CHECKED_IN');
-    }
-
-    // Deduct atomically so two agents can't overdraw the same balance.
-    const ref = db.collection('tokenBalances').doc(docId);
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists) throw new HttpsError('not-found', 'NO_BALANCE');
-      const bal = Number(snap.data().balance || 0);
-      if (bal < qty) throw new HttpsError('failed-precondition', 'INSUFFICIENT_CREDITS');
-      tx.update(ref, { balance: FieldValue.increment(-qty) });
-    });
-
     // Find the first free spot (best-effort — no spot still allows check-in).
     let assignedSpotId = null;
     try {
@@ -2886,6 +2908,33 @@ export const checkInWithCredits = onCall(
 
     const checkinIso = new Date().toISOString();
     const bookingCustomerId = customerId || (docId.startsWith('plate_') ? null : docId);
+
+    // Deduct + claim the plate in ONE transaction. The ALREADY_CHECKED_IN
+    // guard used to be a plain read before the deduction, so two agents (or a
+    // double-tap) submitting the same plate in the same second both passed it
+    // and both deducted — two credits burned for one check-in. tx.create on
+    // the plate-keyed activeCheckIns row makes the second caller abort BEFORE
+    // its deduction commits.
+    const ref = db.collection('tokenBalances').doc(docId);
+    const activeRef = db.collection('activeCheckIns').doc(normPlate);
+    await db.runTransaction(async (tx) => {
+      const [snap, activeSnap] = await Promise.all([tx.get(ref), tx.get(activeRef)]);
+      if (activeSnap.exists) throw new HttpsError('failed-precondition', 'ALREADY_CHECKED_IN');
+      if (!snap.exists) throw new HttpsError('not-found', 'NO_BALANCE');
+      const bal = Number(snap.data().balance || 0);
+      if (bal < qty) throw new HttpsError('failed-precondition', 'INSUFFICIENT_CREDITS');
+      tx.update(ref, { balance: FieldValue.increment(-qty) });
+      tx.create(activeRef, {
+        balanceDocId: docId,
+        bookingId: null, // stamped below once the booking doc exists
+        licensePlate: normPlate,
+        customerId: bookingCustomerId,
+        spotId: assignedSpotId,
+        checkinTime: checkinIso,
+        source: 'manual',
+      });
+    });
+
     // Contact from the balance doc (best-effort) for a friendlier check-out row.
     let contact = {};
     try {
@@ -2904,15 +2953,8 @@ export const checkInWithCredits = onCall(
       } catch (err) { console.warn('checkInWithCredits spot occupy failed:', err?.message); }
     }
 
-    await db.collection('activeCheckIns').doc(normPlate).set({
-      balanceDocId: docId,
-      bookingId,
-      licensePlate: normPlate,
-      customerId: bookingCustomerId,
-      spotId: assignedSpotId,
-      checkinTime: checkinIso,
-      source: 'manual',
-    });
+    await activeRef.update({ bookingId })
+      .catch((err) => console.warn('checkInWithCredits bookingId stamp failed:', err?.message));
 
     await db.collection('tokenTransactions').add({
       customerId: bookingCustomerId,

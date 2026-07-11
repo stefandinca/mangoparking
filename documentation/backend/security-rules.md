@@ -38,8 +38,8 @@ broad on-lot gate (drivers can check cars in/out); `isAgent()` excludes drivers 
 anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
 
 > Note: `userRole()` costs one `get()` per evaluation. Because the public read
-> branches are written **first** in `promoVouchers` and `tokenBalances`, an anonymous
-> read resolves without ever calling `userRole()`.
+> branch is written **first** in `promoVouchers`, an anonymous read resolves
+> without ever calling `userRole()`.
 
 ## Per-collection access
 
@@ -58,12 +58,14 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
   list queries pass without touching the authed branches.
 
 ### tokenBalances (line 101)
-- **read/update:** `isStaff()` **or** the owning uid (`docId == request.auth.uid`) **or**
-  any `plate_*` doc (`docId.matches('plate_.*')`).
-- **create:** `if true` (guest checkout must create a `plate_*` balance).
-- **delete:** `isAdmin()`.
-- The `plate_*` allowance is the deliberate guest-checkout escape hatch — a guest with no
-  account can read/write their plate-keyed balance.
+- **read:** `isStaff()` **or** the owning uid (`docId == request.auth.uid`).
+- **create/update:** `isStaff()`. **delete:** `isAdmin()`.
+- All balance movement is server-side (`creditTokens`, `checkInWithCredits`,
+  `adminGrantCredits`/`adminDeductCredits`, guest merge — admin SDK bypasses rules), so
+  clients never need to write. *2026-07 hardening:* the old rules allowed the world to
+  create/update/read `plate_*` docs (the pre-Cloud-Functions guest-checkout escape hatch);
+  that let anyone mint a guest balance the staff plate-lookup would deduct from, and leak
+  guest contact PII.
 
 ### tokenTransactions (line 113) — append-only
 - **read:** `isStaff()` or the owning customer (`resource.data.customerId == uid`).
@@ -74,9 +76,12 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
 
 ### bookings (line 154)
 - **read:** `isStaff()` or the owning customer (`resource.data.customerId == uid`).
-- **create:** any authenticated user. **update:** staff or owner. **delete:** `isAdmin()`.
-- Note: staff/owner client-updates cover contact/plate/date edits and check-in/out;
-  paid-state transitions and refunds go through callables, not client writes.
+- **create/update:** `isStaff()`. **delete:** `isAdmin()`.
+- Staff client-updates cover contact/plate/date edits and check-in/out; creation and all
+  paid-state transitions go through Cloud Functions. Customers have **no** direct writes —
+  self-cancel uses the `cancelBookingWithRefund` callable. *2026-07 hardening:* the old
+  `create: isAuthenticated()` + owner-update rules let any account forge a paid/active
+  booking or flip its own pay-at-pickup booking to `paid` without paying.
 
 ### activeCheckIns (line 120)
 - `read/write: if isStaff()` — on-lot tracker, staff only.

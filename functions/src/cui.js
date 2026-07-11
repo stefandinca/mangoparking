@@ -138,11 +138,13 @@ export const lookupCui = onCall(
       cui,
     };
 
+    // Best-effort cache — a Firestore blip must not fail a lookup that
+    // already succeeded against ANAF.
     await cacheRef.set({
       payload,
       cachedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + CACHE_TTL_MS).toISOString(),
-    });
+    }).catch((err) => console.warn('lookupCui cache write failed:', err?.message));
 
     return payload;
   }
