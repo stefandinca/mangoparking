@@ -1050,7 +1050,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         || (u.displayName || '').toLowerCase() === search
       );
       if (matched) {
-        payerEmail = matched.email || '';
+        payerEmail = String(matched.email || '').toLowerCase();
         payerName = matched.displayName || '';
         payerPhone = matched.phone || '';
         customerId = matched.id;
@@ -1063,7 +1063,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       }
     } else {
       const newName = String(qs('[name="newName"]', contentEl).value || '').trim();
-      const newEmail = String(qs('[name="newEmail"]', contentEl).value || '').trim();
+      const newEmail = String(qs('[name="newEmail"]', contentEl).value || '').trim().toLowerCase();
       const newPhone = phoneValue(qs('[name="newPhone"]', contentEl));
       if (!isValidEmail(newEmail)) {
         errEl.textContent = t('admin.usersError');

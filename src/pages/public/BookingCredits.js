@@ -753,7 +753,9 @@ export default async function Booking(container) {
       const fd = new FormData(form);
       const name = fd.get('name');
       const phone = phoneValue(form.elements.phone);
-      const email = fd.get('email');
+      // Lowercased — the guest-merge links data to accounts by exact email
+      // equality, and phone keyboards auto-capitalize. Server normalizes too.
+      const email = String(fd.get('email') || '').trim().toLowerCase();
 
       // Resolve license plate from saved vehicle or new input
       const licensePlate = resolveCreditPlate();

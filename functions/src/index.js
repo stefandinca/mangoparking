@@ -25,7 +25,7 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { defineSecret } from 'firebase-functions/params';
 import {
@@ -82,6 +82,14 @@ const CALLBACK_URL =
 
 function normalizePlate(plate) {
   return String(plate || '').toUpperCase().replace(/[\s-]/g, '');
+}
+
+// Lowercased, trimmed email — the canonical stored form. mergeGuestData links
+// guest data to accounts by email equality and Firestore equality is
+// case-sensitive: a booking saved with a phone-auto-capitalized "Roxana@…"
+// would otherwise never link to the roxana@… account.
+function normalizeEmail(v) {
+  return String(v || '').trim().toLowerCase();
 }
 
 // `hour`:00 Europe/Bucharest on the local calendar day of `iso`, as an ISO
@@ -145,7 +153,7 @@ async function creditTokens({ packId, quantity, amount = 0, customerData, source
         totalPurchased: FieldValue.increment(quantity),
         plates,
       };
-      if (!data.email && customerData.email) patch.email = customerData.email;
+      if (!data.email && customerData.email) patch.email = normalizeEmail(customerData.email);
       if (!data.displayName && customerData.name) patch.displayName = customerData.name;
       if (!data.phone && customerData.phone) patch.phone = customerData.phone;
       tx.update(ref, patch);
@@ -154,7 +162,7 @@ async function creditTokens({ packId, quantity, amount = 0, customerData, source
         balance: quantity,
         totalPurchased: quantity,
         plates: plate ? [plate] : [],
-        email: customerData.email || '',
+        email: normalizeEmail(customerData.email),
         displayName: customerData.name || '',
         phone: customerData.phone || '',
       });
@@ -259,7 +267,7 @@ async function createBookingFromOrder(orderId, order) {
     status: 'upcoming',
     contact: {
       name: order.customerData.name || '',
-      email: order.customerData.email || '',
+      email: normalizeEmail(order.customerData.email),
       phone: order.customerData.phone || '',
     },
     billing: order.customerData.billing || { type: 'PF' },
@@ -496,7 +504,7 @@ export const createPayment = onRequest(
       customerId: cd.customerId || null,
       licensePlate: String(cd.licensePlate),
       name: String(cd.name || '').slice(0, 200),
-      email: String(cd.email || '').slice(0, 200),
+      email: normalizeEmail(cd.email).slice(0, 200),
       phone: String(cd.phone || '').slice(0, 40),
       billing: sanitizeBilling(cd.billing),
       passengers: cd.passengers ?? null,
@@ -938,11 +946,18 @@ export const mergeGuestData = onCall(
 
     const db = getFirestore();
 
-    // 1. Plate-keyed balances belonging to this email
+    // 1. Plate-keyed balances belonging to this email. New docs store the
+    // email lowercased, but legacy guest docs carry it as typed (often
+    // phone-auto-capitalized) and Firestore equality is case-sensitive — so
+    // scan the plate_* id range and compare lowercased in memory. The range
+    // is bounded by the number of unmerged guest balances (small).
     const balanceSnap = await db.collection('tokenBalances')
-      .where('email', '==', email)
+      .where(FieldPath.documentId(), '>=', 'plate_')
+      .where(FieldPath.documentId(), '<', 'plate_')
       .get();
-    const guestDocs = balanceSnap.docs.filter((d) => d.id.startsWith('plate_'));
+    const guestDocs = balanceSnap.docs.filter(
+      (d) => normalizeEmail(d.data().email) === email,
+    );
 
     let totalBalance = 0;
     let totalPurchased = 0;
@@ -1006,10 +1021,17 @@ export const mergeGuestData = onCall(
     // 4. Stamp customerId on guest bookings whose contact.email matches.
     //    Also pull phone/name out of the most recent guest booking as a
     //    fallback if the plate-keyed balances didn't carry them.
+    //    Query by customerId == null (the exact set of unlinked bookings —
+    //    small and shrinking) and match the email lowercased in memory:
+    //    legacy bookings stored the email as typed, and an exact-equality
+    //    query silently missed e.g. "Roxana@…" vs "roxana@…" (the LT-D96ZN
+    //    incident — the reservation never appeared in the customer profile).
     const bookingsSnap = await db.collection('bookings')
-      .where('contact.email', '==', email)
+      .where('customerId', '==', null)
       .get();
-    const guestBookings = bookingsSnap.docs.filter((d) => !d.data().customerId);
+    const guestBookings = bookingsSnap.docs.filter(
+      (d) => normalizeEmail(d.data().contact?.email) === email,
+    );
     let mergedBookings = 0;
     if (guestBookings.length > 0) {
       const batch = db.batch();
@@ -2346,6 +2368,19 @@ export const adminCreateLongtermBooking = onCall(
       throw new HttpsError('invalid-argument', 'paidBy must be cash, card, broker or later');
     }
     const billingClean = sanitizeBilling(billing);
+    const payerEmailNorm = normalizeEmail(payerEmail);
+    // Server-side account linking: when the UI didn't match a customer (its
+    // picker only links on an EXACT datalist match — staff often just type
+    // the email) but the payer email belongs to a registered account, stamp
+    // that uid. An unlinked booking never shows in the customer's profile:
+    // both the profile query and the security rules key on customerId.
+    let linkedCustomerId = customerId || null;
+    if (!linkedCustomerId && payerEmailNorm) {
+      try {
+        const userRec = await getAuth().getUserByEmail(payerEmailNorm);
+        linkedCustomerId = userRec?.uid || null;
+      } catch (_) { /* no account with this email — stays a guest booking */ }
+    }
     // 'later' = an unpaid reservation the customer pays afterwards (online via
     // the confirmation-email link, or at the lot). It rides the same rails as
     // a customer pay-at-pickup booking — see the pendingOrder created below.
@@ -2371,7 +2406,7 @@ export const adminCreateLongtermBooking = onCall(
     const bookingRef = await db.collection('bookings').add({
       code: generateBookingCode('longTerm'),
       type: 'longTerm',
-      customerId: customerId || null,
+      customerId: linkedCustomerId,
       licensePlate: normalizePlate(plate),
       startDate: dropoffAt,
       endDate: pickupAt,
@@ -2387,7 +2422,7 @@ export const adminCreateLongtermBooking = onCall(
       status: 'upcoming',
       contact: {
         name: payerName || '',
-        email: payerEmail || '',
+        email: payerEmailNorm,
         phone: payerPhone || '',
       },
       billing: billingClean,
@@ -2430,10 +2465,10 @@ export const adminCreateLongtermBooking = onCall(
         pickupAt,
         bookingId: bookingRef.id,
         customerData: {
-          customerId: customerId || null,
+          customerId: linkedCustomerId,
           licensePlate: normalizePlate(plate),
           name: payerName || '',
-          email: payerEmail || '',
+          email: payerEmailNorm,
           phone: payerPhone || '',
           billing: billingClean,
         },
@@ -2453,8 +2488,8 @@ export const adminCreateLongtermBooking = onCall(
 
     // Cache billing on the customer profile for future pre-fill (mirrors the
     // online-purchase path in creditTokens). Only for a registered account.
-    if (customerId) {
-      await db.collection('users').doc(customerId)
+    if (linkedCustomerId) {
+      await db.collection('users').doc(linkedCustomerId)
         .set({ billing: billingClean }, { merge: true })
         .catch((err) => console.warn('billing profile cache failed:', err?.message));
     }
@@ -2495,7 +2530,7 @@ export const adminCreateLongtermBooking = onCall(
           plate: normalizePlate(plate),
           bookingId: bookingRef.id,
           type: 'longTerm',
-          customerId: customerId || null,
+          customerId: linkedCustomerId,
           checkinTime: checkinIso,
           checkinTimestamp: checkinIso,
           source: 'walk-in',

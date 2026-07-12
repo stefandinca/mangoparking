@@ -151,7 +151,9 @@ export async function updateBookingDetails(bookingId, patch = {}) {
     update.contact = {
       ...(old.contact || {}),
       name: String(patch.contact.name ?? old.contact?.name ?? '').trim(),
-      email: String(patch.contact.email ?? old.contact?.email ?? '').trim(),
+      // Lowercased — the guest-merge matches bookings to accounts by exact
+      // email equality, so staff edits must store the canonical form too.
+      email: String(patch.contact.email ?? old.contact?.email ?? '').trim().toLowerCase(),
       phone: String(patch.contact.phone ?? old.contact?.phone ?? '').trim(),
     };
   }

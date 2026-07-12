@@ -27,6 +27,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { navigate } from '../../router/index.js';
+import { mergeGuestDataForCurrentUser } from '../../services/userMergeService.js';
 
 const finishInviteSignupFn = httpsCallable(functions, 'finishInviteSignup');
 
@@ -99,6 +100,13 @@ async function run(shell) {
   } catch (err) {
     console.warn('finishInviteSignup:', err?.message);
   }
+
+  // Link any guest data made before the account existed — plate balances and
+  // bookings matching this email. Login/Register already do this; without it
+  // an invited customer (the usual follow-up to a staff-created reservation)
+  // never sees their earlier reservations in the profile. Email-link sign-in
+  // counts as verified, so the merge's email_verified gate passes.
+  await mergeGuestDataForCurrentUser();
 
   renderPasswordForm(shell);
 }

@@ -298,6 +298,36 @@ functions file + client/consumer field-read audit):
 - `lookupCui` no longer fails a successful ANAF lookup when the cache write
   blips (best-effort `.catch`). (`functions/src/cui.js`)
 
+Fourth wave — orphaned guest bookings (client incident LT-D96ZN: a web
+reservation with `customerId: null` never appeared in the customer's profile,
+which lists — and rules-wise may only read — bookings keyed to the uid):
+
+- **The guest-merge never ran on invite completion.** `mergeGuestData` was
+  called only from Login/Register, so a customer whose account was created via
+  a staff invite (the usual follow-up to a manual reservation), or who booked
+  as a guest during an already-signed-in session, never got earlier bookings
+  linked. FinishSignup now runs the merge after the email-link sign-in (which
+  counts as verified, so the merge's email_verified gate passes).
+  (`FinishSignup.js`)
+- **Email matching was case-sensitive.** Bookings/balances stored the email as
+  typed (phone keyboards auto-capitalize) while the merge compared against the
+  lowercased auth email with Firestore exact-equality — `Roxana@…` never
+  matched `roxana@…`. Emails are now stored lowercased at every write point
+  (both funnels, admin modal, staff edit dialog, `createPayment`,
+  `createBookingFromOrder`, `adminCreateLongtermBooking`, `creditTokens`), and
+  `mergeGuestData` matches legacy mixed-case docs in memory (bookings via a
+  `customerId == null` scan, plate balances via a `plate_*` doc-id range scan)
+  — so no backfill is needed. (`functions/src/index.js` + client funnels)
+- **Manual reservations only linked to an account on an exact picker match.**
+  Staff typing a customer's email free-text created the booking with
+  `customerId: null` even when that email belongs to a registered account.
+  `adminCreateLongtermBooking` now resolves the payer email against Firebase
+  Auth and stamps the uid when an account exists (booking, pay-later order,
+  billing cache and walk-in check-in row all use the linked id).
+  (`functions/src/index.js`) — note: `grantCreditsForCash` has the same
+  pattern for credit sales (balance keyed by plate unless the picker matched);
+  left unchanged for now since re-keying balances changes money routing.
+
 ### Known — reviewed 2026-07, deliberately not fixed yet
 
 - **Non-atomic money accumulators** (`adminChargeOverstay`, `adminRepriceBooking`

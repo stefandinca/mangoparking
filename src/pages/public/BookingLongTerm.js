@@ -1030,7 +1030,9 @@ export default function BookingLongTerm(container) {
 
     const licensePlate = resolvePlate();
     const name = form.name.value.trim();
-    const email = form.email.value.trim();
+    // Lowercased — the guest-merge links bookings to accounts by exact email
+    // equality, and phone keyboards auto-capitalize. Server normalizes too.
+    const email = form.email.value.trim().toLowerCase();
     const phone = phoneValue(form.phone);
     // Number of travellers (1–10) so the shuttle knows the party size.
     const passengers = Math.min(10, Math.max(1, parseInt(form.passengers?.value, 10) || 1));
