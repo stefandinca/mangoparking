@@ -4,6 +4,7 @@ import { updateMeta } from '../../utils/seo.js';
 import { getAllTokenPacks, createTokenPack, updateTokenPack, deleteTokenPack } from '../../services/tokenService.js';
 import { getLongTermRates, saveLongTermRates, getCommuterPolicy, saveCommuterPolicy } from '../../services/longTermService.js';
 import { getOnlineDiscountPercent, saveOnlineDiscountPercent } from '../../services/discountService.js';
+import { smartbillHealthcheck } from '../../services/invoiceService.js';
 import {
   listSeasonalPeriods,
   createSeasonalPeriod,
@@ -155,7 +156,42 @@ export default async function AdminPricing(container) {
         <div class="flex justify-end">
           <button data-save-rates class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[15px] px-8 py-3 rounded-xl shadow-md transition-colors">${t('rates.saveChanges')}</button>
         </div>
+
+        <section class="glass rounded-2xl p-6 mt-8">
+          <h2 class="font-heading text-xl font-bold text-blueberry-deep mb-1">${t('smartbill.title')}</h2>
+          <p class="text-dim text-[14px] mb-5">${t('smartbill.hint')}</p>
+          <button type="button" data-smartbill-check class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('smartbill.checkBtn')}</button>
+          <div data-smartbill-result class="mt-4 text-[14px]"></div>
+        </section>
   `);
+
+  // SmartBill connection healthcheck (Phase 1 diagnostic).
+  delegate(page, 'click', '[data-smartbill-check]', async (e, btn) => {
+    const out = page.querySelector('[data-smartbill-result]');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = t('common.loading');
+    out.innerHTML = '';
+    try {
+      const r = await smartbillHealthcheck();
+      const seriesNames = (r.series || []).map((s) => escapeHtml(s.name || s.series || '?')).join(', ') || '—';
+      const vatList = (r.taxes || []).map((x) => `${escapeHtml(String(x.name || 'VAT'))} ${escapeHtml(String(x.percentage))}%`).join(', ') || '—';
+      const readyBadge = r.ready
+        ? `<span class="text-leaf font-semibold">${t('smartbill.ready')}</span>`
+        : `<span class="text-mango font-semibold">${t('smartbill.notReady')}</span>`;
+      out.innerHTML = `
+        <div class="rounded-xl border border-frost-deep bg-white p-4 space-y-1.5">
+          <div>${t('smartbill.status')}: ${readyBadge}</div>
+          <div class="text-charcoal/80">${t('smartbill.series')}: <span class="font-mono">${seriesNames}</span></div>
+          <div class="text-charcoal/80">${t('smartbill.vat')}: <span class="font-mono">${vatList}</span> ${r.hasExpectedVat ? '✓' : `<span class="text-mango">(${t('smartbill.vatMissing', { pct: r.expectedVatPercent })})</span>`}</div>
+        </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">${escapeHtml(err?.message || t('common.error'))}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
 
   let newPackIdx = packs.length;
 

@@ -1405,6 +1405,17 @@ export default {
   },
 
   // Admin: rates + booking records
+  smartbill: {
+    title: 'SmartBill (facturare)',
+    hint: 'Verifică conexiunea la contul SmartBill. Nu emite nicio factură — doar citește seriile și cotele de TVA configurate.',
+    checkBtn: 'Verifică conexiunea SmartBill',
+    status: 'Stare',
+    ready: 'Gata de facturare',
+    notReady: 'Necesită configurare',
+    series: 'Serii facturi',
+    vat: 'Cote TVA',
+    vatMissing: 'lipsește {pct}%',
+  },
   rates: {
     pageTitle: 'Tarife & Politici',
     pageSubtitle: 'Tarife pe termen lung pe tranșe și penalități commuter.',

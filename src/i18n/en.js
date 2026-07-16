@@ -1404,6 +1404,17 @@ export default {
   },
 
   // Admin: rates + booking records
+  smartbill: {
+    title: 'SmartBill (invoicing)',
+    hint: 'Check the connection to the SmartBill account. Issues no invoice — only reads the configured series and VAT rates.',
+    checkBtn: 'Check SmartBill connection',
+    status: 'Status',
+    ready: 'Ready to invoice',
+    notReady: 'Needs configuration',
+    series: 'Invoice series',
+    vat: 'VAT rates',
+    vatMissing: '{pct}% missing',
+  },
   rates: {
     pageTitle: 'Rates & Policies',
     pageSubtitle: 'Long-term tiered rates and commuter late-pickup fee.',
