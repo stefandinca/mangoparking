@@ -26,7 +26,7 @@ Documentation: <https://api.smartbill.ro/>
 
 ## What SmartBill gives us
 
-- REST API at `api.smartbill.ro/SBORO/api` — HTTP Basic auth (username = SmartBill account email, password = API token from SmartBill admin → "Configurări → Token API").
+- REST API at `https://ws.smartbill.ro/SBORO/api` — HTTP Basic auth (username = SmartBill account email, password = API token from SmartBill admin → My Account → Integrations → API Information). **Note:** the host is `ws.smartbill.ro`, not `api.smartbill.ro` (that's the docs site); an earlier draft of this doc had it wrong in one place. The code sample in §1.2 already uses the correct host.
 - Endpoints used:
   - `POST /invoice` — issue factura. Returns `{ series, number, url }` (public PDF link).
   - `POST /invoice/cancel` — clean cancel (same fiscal day only, no VAT impact).
@@ -338,6 +338,29 @@ Run after each phase, not just at the end.
 Phases 1 → 2 → 3 are linear (each builds on the SmartBill wrapper). Phases 4–8 can interleave or run in parallel once the wrapper exists.
 
 ---
+
+## Reconciliation against the live API (checked 2026-07-16)
+
+Spot-checked the plan against the official docs (<https://ws.smartbill.ro/SBORO/api>,
+SmartBill help, and community SDKs). Confirmed: base URL `ws.smartbill.ro/SBORO/api`,
+HTTP Basic auth (email + token), and the `POST /invoice` → `{ series, number, url }`
+issue flow with the HTTP-200-plus-`errorText` failure convention. **Still to verify
+against the sandbox in Phase 1 before writing the storno branch** — SmartBill exposes
+invoice invalidation as four distinct operations that don't map one-to-one onto this
+plan's "same-day cancel vs prior-day credit note":
+
+- **cancel** — marks an *already-issued* invoice as cancelled (anulare) without deleting
+  it; works for any past invoice, keeps the number in the fiscal trail.
+- **delete** — removes only the *last* issued invoice from the database.
+- **reverse** (stornare) — issues a reversing invoice against any active past invoice.
+  This, not a `/invoice/creditnote` path, is SmartBill's storno primitive; §Phase 4's
+  endpoint name is provisional.
+- **restore** — un-cancels.
+
+Phase 1 (the "hand-write a payload via Node REPL" checkpoint) should pin the exact
+paths, HTTP methods, and query-vs-body parameter passing for cancel/delete/reverse
+before Phase 4 is coded — the fiscal correctness of cancellations depends on picking
+the right one.
 
 ## Caveats and follow-ups
 
