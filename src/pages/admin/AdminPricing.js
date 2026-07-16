@@ -222,7 +222,8 @@ export default async function AdminPricing(container) {
       out.innerHTML = `
         <div class="rounded-xl border border-frost-deep bg-white p-4 space-y-1.5">
           <div>${t('smartbill.status')}: ${okBadge}</div>
-          ${line(t('smartbill.testIssueProforma'), r.proforma || {})}
+          ${line(`${t('smartbill.testIssueProforma')} (PF)`, r.proforma || {})}
+          ${line(`${t('smartbill.testIssueProforma')} (PJ)`, r.proformaCompany || {})}
           ${line(t('smartbill.testIssueInvoice'), r.invoice || {})}
         </div>`;
     } catch (err) {

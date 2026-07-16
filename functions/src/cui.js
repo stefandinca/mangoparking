@@ -133,6 +133,10 @@ export const lookupCui = onCall(
     const payload = {
       companyName: g.denumire || '',
       address: g.adresa || seatAddress || '',
+      // Locality + county surfaced separately: SmartBill requires localitate as
+      // its own mandatory field for PJ invoices (the full address isn't enough).
+      locality: seat.sdenumire_Localitate || '',
+      county: seat.sdenumire_Judet || '',
       regCom: g.nrRegCom || '',
       vatPayer: Boolean(vat.scpTVA),
       cui,

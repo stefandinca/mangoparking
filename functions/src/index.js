@@ -46,6 +46,7 @@ import {
   listTaxes,
   DEFAULT_VAT_PERCENT,
   buildInvoicePayload,
+  checkBillingComplete,
   issueInvoice,
   deleteInvoice,
   issueEstimate,
@@ -3542,45 +3543,63 @@ export const smartbillTestIssue = onCall(
     report.proforma.series = proformaSeries;
     report.invoice.series = invoiceSeries;
 
-    // A minimal, clearly-labelled sample. PF client, one 1-RON service line.
-    const sampleBilling = {
+    const sampleItems = [{ name: 'TEST — verificare payload SmartBill (a se ignora)', quantity: 1, price: 1, code: 'TEST' }];
+    // A PF and a PJ sample so the proforma pass validates BOTH client mappings —
+    // in particular the PJ regCom + locality fields that SmartBill made mandatory.
+    const sampleBillingPF = {
       type: 'PF',
       name: 'TEST Verificare Payload',
       address: 'Str. Test 1',
       locality: 'Otopeni',
       county: 'Ilfov',
-      email: '',
     };
-    const sampleItems = [{ name: 'TEST — verificare payload SmartBill (a se ignora)', quantity: 1, price: 1, code: 'TEST' }];
+    const sampleBillingPJ = {
+      type: 'PJ',
+      companyName: 'TEST SRL (verificare payload)',
+      cui: 'RO12345678',
+      regCom: 'J40/123/2020',
+      locality: 'București',
+      county: 'București',
+      companyAddress: 'Str. Test 1',
+      isVatPayer: true,
+    };
 
-    // ── Proforma: issue for real, then delete ──────────────────────────────
-    if (proformaSeries) {
+    // Issue a proforma for a sample billing, then delete it (proformas are
+    // non-fiscal — clean delete). Records completeness + outcome under report[key].
+    async function runProforma(billing, key) {
+      const slot = report[key] = report[key] || {};
+      slot.series = proformaSeries;
+      slot.complete = checkBillingComplete(billing);
+      if (!proformaSeries) return;
       try {
-        const payload = buildInvoicePayload({
-          billing: sampleBilling,
-          items: sampleItems,
-          seriesName: proformaSeries,
-          issueDate,
-        });
-        const res = await issueEstimate(payload);
-        report.proforma.issued = true;
-        report.proforma.number = res?.number ?? null;
-        report.proforma.raw = res;
+        const res = await issueEstimate(buildInvoicePayload({
+          billing, items: sampleItems, seriesName: proformaSeries, issueDate,
+        }));
+        slot.issued = true;
+        slot.number = res?.number ?? null;
+        slot.raw = res;
         if (res?.number != null) {
           try {
             await deleteEstimate(proformaSeries, res.number);
-            report.proforma.deleted = true;
+            slot.deleted = true;
           } catch (delErr) {
-            report.proforma.deleted = false;
-            report.proforma.deleteError = delErr?.message || 'unknown';
-            report.proforma.STRAY = `Proforma ${proformaSeries} ${res.number} left on account — delete manually`;
+            slot.deleted = false;
+            slot.deleteError = delErr?.message || 'unknown';
+            slot.STRAY = `Proforma ${proformaSeries} ${res.number} left on account — delete manually`;
           }
         }
       } catch (err) {
-        report.proforma.issued = false;
-        report.proforma.error = err?.message || 'unknown';
+        slot.issued = false;
+        slot.error = err?.message || 'unknown';
       }
     }
+
+    // ── Proforma: PF then PJ (each issued for real, then deleted) ───────────
+    await runProforma(sampleBillingPF, 'proforma');
+    await runProforma(sampleBillingPJ, 'proformaCompany');
+
+    // The fiscal-invoice draft smoke test reuses the PF sample.
+    const sampleBilling = sampleBillingPF;
 
     // ── Fiscal invoice: issue as a DRAFT (not fiscalized), then delete ──────
     if (invoiceSeries) {
@@ -3613,7 +3632,9 @@ export const smartbillTestIssue = onCall(
       }
     }
 
-    report.ok = report.proforma.issued === true && report.invoice.issued === true;
+    report.ok = report.proforma.issued === true
+      && report.proformaCompany.issued === true
+      && report.invoice.issued === true;
     return report;
   }
 );

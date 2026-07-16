@@ -80,8 +80,12 @@ export function billingFieldsHtml(initial = {}) {
           <input type="text" name="billingCompanyName" value="${esc(initial.companyName)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         <div>
-          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.regCom')}</label>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.regCom')} *</label>
           <input type="text" name="billingRegCom" value="${esc(initial.regCom)}" placeholder="J40/123/2020" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+        </div>
+        <div>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.locality')} *</label>
+          <input type="text" name="billingCompanyLocality" value="${esc(initial.locality)}" autocomplete="address-level2" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.companyAddress')} *</label>
@@ -138,6 +142,7 @@ export function wireBillingToggle(scope) {
         };
         set('billingCompanyName', result.companyName);
         set('billingCompanyAddress', result.address);
+        set('billingCompanyLocality', result.locality);
         set('billingRegCom', result.regCom);
         hint?.classList.remove('hidden');
       }, 600);
@@ -148,7 +153,7 @@ export function wireBillingToggle(scope) {
   [
     'billingName', 'billingLocality', 'billingCnp',
     'billingPersonalAddress',
-    'billingCompanyName', 'billingCui', 'billingRegCom', 'billingCompanyAddress',
+    'billingCompanyName', 'billingCui', 'billingRegCom', 'billingCompanyLocality', 'billingCompanyAddress',
   ].forEach((n) => {
     clearErrorOnInput(block.querySelector(`[name="${n}"]`));
   });
@@ -160,7 +165,7 @@ export function wireBillingToggle(scope) {
 //
 // PF returns: { type:'PF', name, firstName, lastName, locality, address, cnp? }
 //   (firstName/lastName are derived from `name` for backward compatibility.)
-// PJ returns: { type:'PJ', companyName, cui, regCom, companyAddress }
+// PJ returns: { type:'PJ', companyName, cui, regCom, locality, companyAddress }
 export function readBilling(scope) {
   const block = scope.querySelector('[data-billing-block]');
   if (!block) return { error: 'Missing billing block' };
@@ -212,12 +217,16 @@ export function readBilling(scope) {
   const companyName = valueOf('billingCompanyName');
   const cui = valueOf('billingCui');
   const regCom = valueOf('billingRegCom');
+  const locality = valueOf('billingCompanyLocality');
   const companyAddress = valueOf('billingCompanyAddress');
 
   checks.push(
     [get('billingCompanyName'), required(companyName), 'billing.errors.companyName'],
     [get('billingCui'), isValidCui(cui), 'billing.errors.cui'],
-    [get('billingRegCom'), isValidRegCom(regCom), 'billing.errors.regCom'],
+    // regCom is now mandatory for PJ (SmartBill requires it) — must be present
+    // AND well-formed (J40/123/2020).
+    [get('billingRegCom'), required(regCom) && isValidRegCom(regCom), 'billing.errors.regCom'],
+    [get('billingCompanyLocality'), required(locality), 'billing.errors.locality'],
     [get('billingCompanyAddress'), required(companyAddress), 'billing.errors.companyAddress'],
   );
 
@@ -227,5 +236,5 @@ export function readBilling(scope) {
   }
   if (errors.length) return { error: errors[0] };
 
-  return { type, companyName, cui, regCom, companyAddress };
+  return { type, companyName, cui, regCom, locality, companyAddress };
 }

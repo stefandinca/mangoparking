@@ -172,6 +172,27 @@ export async function deleteInvoice(seriesName, number) {
 //   billing: { type:'PF'|'PJ', firstName,lastName,name, cnp?, address, locality,
 //              companyName?, cui?, regCom?, companyAddress?, isVatPayer? }
 //   items:   [{ name, quantity, price, code? }]   // price = per-unit RON, VAT-inclusive
+// Enforce SmartBill's mandatory invoice fields BEFORE calling the API, so a
+// missing field surfaces as a precise, actionable error instead of a cryptic
+// SmartBill rejection deep in a paid flow.
+//   PF: name (nume + prenume), locality
+//   PJ: cui, company name, locality, regCom (trade-registry "J...")
+// Returns { ok:true } or { ok:false, missing:[...] }.
+export function checkBillingComplete(billing = {}) {
+  const missing = [];
+  if (billing.type === 'PJ') {
+    if (!String(billing.cui || '').trim()) missing.push('cui');
+    if (!String(billing.companyName || '').trim()) missing.push('companyName');
+    if (!String(billing.locality || '').trim()) missing.push('locality');
+    if (!String(billing.regCom || '').trim()) missing.push('regCom');
+  } else {
+    const name = String(billing.name || `${billing.firstName || ''} ${billing.lastName || ''}`).trim();
+    if (!name) missing.push('name');
+    if (!String(billing.locality || '').trim()) missing.push('locality');
+  }
+  return { ok: missing.length === 0, missing };
+}
+
 export function buildInvoicePayload({
   billing = {},
   items = [],
@@ -189,8 +210,12 @@ export function buildInvoicePayload({
   const isPJ = billing.type === 'PJ';
   const client = isPJ
     ? {
+        // PJ mandatory (per SmartBill account config): CUI, company name,
+        // locality, trade-registry number (regCom, "J..."). regCom was missing
+        // before — SmartBill rejects PJ invoices without it now.
         name: billing.companyName || '',
         vatCode: billing.cui || '',
+        regCom: billing.regCom || '',
         isTaxPayer: billing.isVatPayer === true,
         address: billing.companyAddress || '',
         city: billing.locality || '',
@@ -200,11 +225,13 @@ export function buildInvoicePayload({
         saveToDb: false,
       }
     : {
+        // PF mandatory: name (nume + prenume), locality. Address + CNP optional.
         name: billing.name || [billing.firstName, billing.lastName].filter(Boolean).join(' '),
         vatCode: billing.cnp || '',
         isTaxPayer: false,
         address: billing.address || '',
         city: billing.locality || '',
+        county: billing.county || '',
         country: 'Romania',
         email: billing.email || '',
         saveToDb: false,
