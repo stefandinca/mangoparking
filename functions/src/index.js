@@ -118,6 +118,39 @@ function balanceDocId({ customerId, licensePlate }) {
   return customerId || `plate_${normalizePlate(licensePlate)}`;
 }
 
+// Record a plate on the customer's profile (users/{uid}.vehicles) unless it is
+// already listed. Guests book without an account, so the plate they actually
+// parked with only reaches a profile once one exists — without this the
+// Vehicles list stays empty for anyone who never saved a vehicle by hand.
+//
+// Read-modify-write inside a transaction rather than arrayUnion: arrayUnion
+// matches whole objects, so a {plate,make:'',model:''} entry would not dedupe
+// against an existing {plate,make:'VW',model:'Golf'} for the same plate and the
+// list would end up with the plate twice.
+//
+// Best-effort by design — a booking must never fail over a profile nicety.
+async function addPlateToProfile(uid, rawPlate) {
+  const plate = normalizePlate(rawPlate);
+  if (!uid || !plate) return;
+  const db = getFirestore();
+  const ref = db.collection('users').doc(uid);
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return;
+      // Legacy entries are bare plate strings; current ones are objects.
+      const vehicles = Array.isArray(snap.data().vehicles) ? snap.data().vehicles : [];
+      const known = vehicles.some(
+        (v) => normalizePlate(typeof v === 'string' ? v : v?.plate) === plate,
+      );
+      if (known) return;
+      tx.update(ref, { vehicles: [...vehicles, { plate, make: '', model: '' }] });
+    });
+  } catch (err) {
+    console.warn('vehicle profile cache failed:', err?.message);
+  }
+}
+
 // Reservation codes — mirror of src/utils/bookingCode.js. Kept inline so
 // the function bundle doesn't depend on the client tree. Ambiguous chars
 // I/O/0/1 removed so the code reads cleanly over the phone.
@@ -304,6 +337,10 @@ async function createBookingFromOrder(orderId, order) {
       .set({ billing: order.customerData.billing }, { merge: true })
       .catch((err) => console.warn('billing profile cache failed:', err?.message));
   }
+
+  // Same idea for the plate — no-ops for guests (no uid to write to); they pick
+  // it up instead when mergeGuestData links this booking to a new account.
+  await addPlateToProfile(order.customerData.customerId, order.customerData.licensePlate);
 
   return bookingRef.id;
 }
@@ -1033,16 +1070,33 @@ export const mergeGuestData = onCall(
       (d) => normalizeEmail(d.data().contact?.email) === email,
     );
     let mergedBookings = 0;
+    // Plates seen on reservations. Only credit purchases write a plate_* balance
+    // doc, so without this a customer who only ever booked a long-term stay
+    // contributes no plate to their profile at all.
+    const bookingPlates = [];
     if (guestBookings.length > 0) {
       const batch = db.batch();
       for (const b of guestBookings) {
         batch.update(b.ref, { customerId: uid });
         const c = b.data().contact || {};
+        if (b.data().licensePlate) bookingPlates.push(normalizePlate(b.data().licensePlate));
         if (!guestPhone && c.phone) guestPhone = c.phone;
         if (!guestDisplayName && c.name) guestDisplayName = c.name;
       }
       await batch.commit();
       mergedBookings = guestBookings.length;
+    }
+
+    // 4b. Bookings already linked to this uid — from an earlier merge, a
+    //     logged-in booking, or a desk reservation the agent linked by email.
+    //     Their plates may predate this code, so harvest them too: the merge
+    //     runs on every login, which lets existing profiles heal themselves
+    //     without a migration.
+    const ownBookingsSnap = await db.collection('bookings')
+      .where('customerId', '==', uid)
+      .get();
+    for (const d of ownBookingsSnap.docs) {
+      if (d.data().licensePlate) bookingPlates.push(normalizePlate(d.data().licensePlate));
     }
 
     // 5. Patch users/{uid} with merged plates as vehicles + fill in any
@@ -1055,11 +1109,13 @@ export const mergeGuestData = onCall(
       const existing = userSnap.exists ? userSnap.data() : {};
       const existingVehicles = Array.isArray(existing.vehicles) ? existing.vehicles : [];
       const existingPlates = new Set(
-        existingVehicles
-          .map((v) => String(v.plate || '').toUpperCase().replace(/[\s-]/g, ''))
+        // Legacy entries are bare plate strings; current ones are objects.
+        existingVehicles.map((v) => normalizePlate(typeof v === 'string' ? v : v?.plate))
       );
-      const newVehicles = uniquePlates
-        .filter((p) => !existingPlates.has(String(p).toUpperCase().replace(/[\s-]/g, '')))
+      // Credit balances (plate_* docs) + every plate seen on a reservation.
+      const profilePlates = [...new Set([...uniquePlates, ...bookingPlates])].filter(Boolean);
+      const newVehicles = profilePlates
+        .filter((p) => !existingPlates.has(normalizePlate(p)))
         .map((p) => ({ plate: p, make: '', model: '' }));
 
       const patch = {};
@@ -2493,6 +2549,10 @@ export const adminCreateLongtermBooking = onCall(
         .set({ billing: billingClean }, { merge: true })
         .catch((err) => console.warn('billing profile cache failed:', err?.message));
     }
+
+    // Desk-created reservations carry a plate too — put it on the profile when
+    // the payer resolved to a real account.
+    await addPlateToProfile(linkedCustomerId, plate);
 
     // Cash drawer only for physically-collected cash. Card is reconciled by
     // the terminal; broker/prepaid money never touches the lot.

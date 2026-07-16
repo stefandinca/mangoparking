@@ -418,6 +418,7 @@ function bookingsHtml(bookings) {
       <tr class="border-t border-frost-deep">
         <td class="px-2 py-2 font-mono text-[12px] text-charcoal">${escapeHtml(b.code || '—')}</td>
         <td class="px-2 py-2 text-[12px] text-dim">${escapeHtml(b.type || '—')}</td>
+        <td class="px-2 py-2 font-mono text-[12px] text-charcoal">${escapeHtml(b.licensePlate || '—')}</td>
         <td class="px-2 py-2 text-[12px] text-charcoal whitespace-nowrap">${escapeHtml(dates)}</td>
         <td class="px-2 py-2">${badge(b.status)}</td>
         <td class="px-2 py-2">${badge(b.paymentStatus)}</td>
@@ -431,6 +432,7 @@ function bookingsHtml(bookings) {
           <tr>
             <th class="px-2 py-1 font-semibold">${d.bookingCol.code}</th>
             <th class="px-2 py-1 font-semibold">${d.bookingCol.type}</th>
+            <th class="px-2 py-1 font-semibold">${d.bookingCol.plate}</th>
             <th class="px-2 py-1 font-semibold">${d.bookingCol.dates}</th>
             <th class="px-2 py-1 font-semibold">${d.bookingCol.status}</th>
             <th class="px-2 py-1 font-semibold">${d.bookingCol.payment}</th>

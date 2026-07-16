@@ -738,7 +738,7 @@ export default {
       voucherNonePrivate: 'No private vouchers available to assign.',
       grantErrorQty: 'Enter a whole number of credits.',
       bookings: 'Bookings',
-      bookingCol: { code: 'Code', type: 'Type', dates: 'Period', status: 'Status', payment: 'Payment', price: 'Price' },
+      bookingCol: { code: 'Code', type: 'Type', plate: 'Plate', dates: 'Period', status: 'Status', payment: 'Payment', price: 'Price' },
       transactions: 'Credit transactions',
       txnCol: { date: 'Date', type: 'Type', qty: 'Qty', plate: 'Plate' },
       export: 'Export',

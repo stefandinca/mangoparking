@@ -35,7 +35,12 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
   - `email` string · `displayName` string · `phone` string
   - `role` `'customer' | 'agent' | 'driver' | 'admin'` (legacy `'staff'` == agent)
   - `locale` `'ro' | 'en'`
-  - `vehicles` array of `{ plate, make, model }`
+  - `vehicles` array of `{ plate, make, model }` — saved by the customer (`/account/vehicles`,
+    profile-completion modal) or by an admin edit, **and auto-appended from reservations**:
+    `createBookingFromOrder` / `adminCreateLongtermBooking` add the booked plate via
+    `addPlateToProfile` when the booking resolves to an account, and `mergeGuestData` folds in
+    plates from credit balances + every booking on the uid. Auto-added entries carry an empty
+    `make`/`model`. Dedupe is on the normalized plate, so legacy bare-string entries still match.
   - `billing` object — cached PF/PJ invoice identity (see BillingFields), pre-filled on next checkout
   - `loyaltyPoints` number · `loyaltyTier` `'bronze'|'silver'|'gold'` (loyalty is a hidden feature)
   - `createdAt` ISO · `createdBy` uid|null (set for admin-created accounts)

@@ -739,7 +739,7 @@ export default {
       voucherNonePrivate: 'Nu există vouchere private disponibile pentru atribuire.',
       grantErrorQty: 'Introdu un număr întreg de credite.',
       bookings: 'Rezervări',
-      bookingCol: { code: 'Cod', type: 'Tip', dates: 'Perioadă', status: 'Status', payment: 'Plată', price: 'Preț' },
+      bookingCol: { code: 'Cod', type: 'Tip', plate: 'Plăcuță', dates: 'Perioadă', status: 'Status', payment: 'Plată', price: 'Preț' },
       transactions: 'Tranzacții credite',
       txnCol: { date: 'Dată', type: 'Tip', qty: 'Cant.', plate: 'Plăcuță' },
       export: 'Export',

@@ -89,7 +89,10 @@ Delete.
      index).
    - **Bookings** — `bookings` where `customerId == uid` **and** where
      `contact.email == email`, merged + deduped by id (catches guest bookings not
-     yet reconciled to the account).
+     yet reconciled to the account). The table shows the booked **plate** per row,
+     so a guest reservation's plate is visible even before the plate reaches
+     `vehicles` (see `addPlateToProfile` / `mergeGuestData` in
+     [../backend/cloud-functions.md](../backend/cloud-functions.md)).
    - **Vouchers** — `promoVouchers` assigned to the uid + `voucherRedemptions`
      (to flag spent codes) + legacy `vouchers/{uid}` (now admin-readable, see
      rules note).
