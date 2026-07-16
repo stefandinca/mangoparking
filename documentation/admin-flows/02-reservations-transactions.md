@@ -32,6 +32,11 @@ while three parallel reads resolve: `getAllRecentTransactions(500)`,
    Credit-type and traveler bookings are skipped (`:87`).
 2. Table sorted newest-first (string compare on timestamp), columns: Date · Type ·
    Status · Sumă · Plate · Email · Code. Free-text search + Type/Status selects.
+   On long-term rows the **Code is a clickable link** (`reservationCodeHtml` /
+   `wireReservationLinks`): a live reservation jumps to the check-in page on the
+   right tab, scoped to its day, and flashes the row; a completed/cancelled one
+   opens the read-only booking-detail modal instead. Credit-transaction rows have
+   no reservation, so their code stays plain text.
 3. Search filters client-side across `email + plate + code` only (`:171`). The
    selects filter on the row's `type`/`status` string.
 4. **Creează tranzacție** opens the shared `CreateTransactionModal` (same modal as

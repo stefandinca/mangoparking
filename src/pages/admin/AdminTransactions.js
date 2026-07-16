@@ -6,6 +6,7 @@ import { getCollection } from '../../firebase/db.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
+import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
 
 // /admin/transactions — unified ledger.
 //
@@ -102,6 +103,13 @@ export default async function AdminTransactions(container) {
       customerId: b.customerId || null,
       email: b.contact?.email || (b.customerId && emailByUid.get(b.customerId)) || '',
       code: b.code || '',
+      // Kept so the code can deep-link to the reservation (reservationCodeHtml
+      // / liveTarget). Only longTerm booking rows carry a bookingId.
+      bookingId: b.id,
+      dropoffAt: b.dropoffAt || null,
+      startDate: b.startDate || null,
+      pickupAt: b.pickupAt || null,
+      endDate: b.endDate || null,
     });
   }
 
@@ -166,6 +174,9 @@ export default async function AdminTransactions(container) {
 
   initAdminNav(page);
   wireUserLinks(page);
+  // Ledger rows are thin projections, not full bookings — let the handler fetch
+  // the booking by id so a historical row opens a complete detail modal.
+  wireReservationLinks(page);
   container.appendChild(page);
 
   const tbody = qs('[data-rows]', page);
@@ -199,7 +210,9 @@ export default async function AdminTransactions(container) {
         <td class="px-4 py-3 text-right font-mono font-semibold">${escapeHtml(r.sum)}</td>
         <td class="px-4 py-3 font-mono">${escapeHtml(r.plate || '—')}</td>
         <td class="px-4 py-3 font-mono text-[13px] text-dim">${userNameButton({ customerId: r.customerId, email: r.email, name: r.email })}</td>
-        <td class="px-4 py-3 font-mono text-[13px]">${escapeHtml(r.code || '—')}</td>
+        <td class="px-4 py-3 text-[13px]">${r.bookingId
+          ? reservationCodeHtml({ id: r.bookingId, code: r.code, status: r.status, type: 'longTerm', dropoffAt: r.dropoffAt, startDate: r.startDate, pickupAt: r.pickupAt, endDate: r.endDate })
+          : `<span class="font-mono">${escapeHtml(r.code || '—')}</span>`}</td>
       </tr>
     `).join('');
   }

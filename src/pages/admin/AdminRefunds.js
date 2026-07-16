@@ -8,6 +8,7 @@ import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
+import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
 
 const adminMarkRefundedFn = httpsCallable(functions, 'adminMarkRefunded');
 const adminResendRefundEmailFn = httpsCallable(functions, 'adminResendRefundEmail');
@@ -100,7 +101,7 @@ function rowHtml(b, locale) {
   const isNetopia = paidBy === 'netopia';
   return `
     <tr class="border-t border-frost-deep">
-      <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(code)}</td>
+      <td class="px-4 py-3 text-[13px]">${reservationCodeHtml(b)}</td>
       <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(b.licensePlate || '—')}</td>
       <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
       <td class="px-4 py-3 text-[13px] text-dim">${fmtDate(b.cancelledAt, locale)}</td>
@@ -157,7 +158,7 @@ export default async function AdminRefunds(container) {
     const failed = b.refundEmail?.status === 'failed';
     return `
       <tr class="border-t border-frost-deep">
-        <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(code)}</td>
+        <td class="px-4 py-3 text-[13px]">${reservationCodeHtml(b)}</td>
         <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(b.licensePlate || '—')}</td>
         <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
         <td class="px-4 py-3 text-[13px] text-dim">${fmtDateTime(b.refundedAt, locale)}</td>
@@ -207,7 +208,7 @@ export default async function AdminRefunds(container) {
     const amt = Number(b.pendingRefundAmount || 0);
     return `
       <tr class="border-t border-frost-deep">
-        <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(code)}</td>
+        <td class="px-4 py-3 text-[13px]">${reservationCodeHtml(b)}</td>
         <td class="px-4 py-3 text-[13px] font-mono">${escapeHtml(b.licensePlate || '—')}</td>
         <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
         <td class="px-4 py-3 text-[13px] text-dim">${escapeHtml(paidByLabel(b.paidBy))}</td>
@@ -298,6 +299,10 @@ export default async function AdminRefunds(container) {
   const page = AdminLayout('/admin/refunds', content);
   initAdminNav(page);
   wireUserLinks(page);
+  // Refund rows are all historical (cancelled / refund-pending / refunded), so
+  // the reservation code opens the read-only detail modal rather than the
+  // check-in page (which has no row for them).
+  wireReservationLinks(page, (id) => [...pending, ...partial, ...history].find((b) => b.id === id));
   container.appendChild(page);
 
   page.addEventListener('click', async (e) => {

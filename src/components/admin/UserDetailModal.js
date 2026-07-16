@@ -28,6 +28,7 @@ import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { listVouchers } from '../../services/promoVoucherService.js';
 import { buildSingleUserExport } from '../../services/userExportService.js';
 import { buildCsv, downloadCsv, todayStamp, slugify } from '../../utils/csv.js';
+import { reservationCodeHtml, wireReservationLinks } from './reservationLink.js';
 
 const adminUpdateUserProfileFn = httpsCallable(functions, 'adminUpdateUserProfile');
 const adminGrantCreditsFn = httpsCallable(functions, 'adminGrantCredits');
@@ -437,7 +438,7 @@ function bookingsHtml(bookings) {
     const dates = start ? `${fmtDate(start)}${end ? ' → ' + fmtDate(end) : ''}` : '—';
     return `
       <tr class="border-t border-frost-deep">
-        <td class="px-2 py-2 font-mono text-[12px] text-charcoal">${escapeHtml(b.code || '—')}</td>
+        <td class="px-2 py-2 text-[12px]">${reservationCodeHtml(b)}</td>
         <td class="px-2 py-2 text-[12px] text-dim">${escapeHtml(b.type || '—')}</td>
         <td class="px-2 py-2 font-mono text-[12px] text-charcoal">${escapeHtml(b.licensePlate || '—')}</td>
         <td class="px-2 py-2 text-[12px] text-charcoal whitespace-nowrap">${escapeHtml(dates)}</td>
@@ -572,6 +573,11 @@ export function openUserDetailModal(user) {
     });
   }
   loadAndRender(user, body);
+  // Reservation codes in the Bookings section: a live one navigates to the
+  // check-in page (close this modal first so it doesn't linger over it); a
+  // historical one opens the read-only detail modal. No resolver — the handler
+  // fetches the booking by id, so the detail modal gets the full record.
+  wireReservationLinks(body, null, close);
   return { close };
 }
 
