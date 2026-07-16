@@ -1,15 +1,31 @@
 # Mango Parking v1.2 — SmartBill Integration
 
-> **Status: 🟡 PHASE 1 SCAFFOLDED, rest PLANNED** (updated 2026-07-16). The REST
-> wrapper `functions/src/smartbill.js` and the admin-only `smartbillHealthcheck`
-> callable now exist, but are **inert until the three secrets are set** — nothing
-> issues an invoice yet. No `smartbill` field is written to any Firestore doc, and
-> no paid flow calls SmartBill. Billing identity (PF/PJ, CUI via ANAF `lookupCui`)
-> is captured at checkout as before. See "Phase 1" below for exactly what shipped.
+> **Status: 🟡 PHASE 1 DONE + PHASE 2 PRE-FLIGHT (payload checkpoint), rest PLANNED**
+> (updated 2026-07-16). The three secrets are set in Secret Manager, and the
+> admin-only `smartbillHealthcheck` ran **green** (invoice series present, 21% VAT
+> found → account is a VAT payer). No paid flow issues an invoice yet — billing
+> identity (PF/PJ, CUI via ANAF `lookupCui`) is captured at checkout as before.
 >
-> **Deploy note:** `smartbillHealthcheck` binds `SMARTBILL_USERNAME` / `SMARTBILL_TOKEN`
-> / `SMARTBILL_CIF`, so `firebase deploy --only functions` will fail until those
-> three secrets exist in Secret Manager. Set them first (Phase 1.1).
+> **New in this pass — the Phase 2 pre-flight checkpoint.** Before wiring
+> SmartBill into the money path, `smartbillTestIssue` (admin callable, button on
+> `/admin/pricing`) verifies the exact payload shape SmartBill accepts: it issues
+> a **real proforma** (`POST /estimate`, non-fiscal) and a **draft fiscal invoice**
+> (`POST /invoice` with `isDraft:true`, so it is NOT fiscalized / e-Factura-reported)
+> from a sample, then deletes both. A `STRAY` marker on the result means a test
+> document was left behind and needs manual cleanup. Once this reads OK, Phase 2
+> flips `isDraft:false` and wires issuance into the paid flows.
+>
+> **Document model (decided 2026-07-16):** every order gets a **proforma** up
+> front. Online-paid orders additionally get a **fiscal invoice** once payment is
+> confirmed. Pay-at-location orders get **proforma only** — the fiscal invoice is
+> issued manually after cash is collected. This means TWO series (a proforma
+> series, type `p`, and an invoice series, type `f`), superseding the earlier
+> "one series for everything" decision.
+>
+> **Deploy note:** `smartbillHealthcheck` and `smartbillTestIssue` bind
+> `SMARTBILL_USERNAME` / `SMARTBILL_TOKEN` / `SMARTBILL_CIF`, so
+> `firebase deploy --only functions` will fail until those three secrets exist in
+> Secret Manager (they now do — versions 1).
 
 ## Goal
 
@@ -21,7 +37,8 @@ Documentation: <https://api.smartbill.ro/>
 
 ## Locked decisions
 
-1. **Series strategy** — one series for everything (e.g. `MNG`). Simpler reconciliation; clients don't care which product line a row came from.
+1. **Series strategy** — ~~one series for everything~~ **superseded 2026-07-16**: two series are required — a **proforma** series (type `p`) and a **fiscal invoice** series (type `f`) — because every order issues a proforma and only paid orders issue a fiscal invoice. Within each type, one series covers both product lines (parking + credits).
+1a. **Proforma vs fiscal split** — **online-paid**: proforma at order creation + fiscal invoice once Netopia/voucher confirms payment. **Pay-at-location**: proforma only; the fiscal invoice is created manually after cash is collected. Credit-pack purchases follow the same rule by payment method.
 2. **Cash flows** — emit **factură + chitanță** automatically (SmartBill auto-pairs when `paymentBase` is set). No bon fiscal route.
 3. **PF without CNP** — factură for everyone, PF or PJ, CNP or no CNP. Romanian fiscal law accepts name + address as identifier for PF.
 4. **e-Factura** — auto-submit to ANAF SPV for any invoice where the client is a VAT payer (PJ with CUI returned `isTaxPayer: true` from ANAF). Skip for PF.

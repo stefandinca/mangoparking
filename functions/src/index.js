@@ -40,7 +40,17 @@ import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
 import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail } from './emails.js';
 import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
-import { SMARTBILL_SECRETS, listSeries, listTaxes, DEFAULT_VAT_PERCENT } from './smartbill.js';
+import {
+  SMARTBILL_SECRETS,
+  listSeries,
+  listTaxes,
+  DEFAULT_VAT_PERCENT,
+  buildInvoicePayload,
+  issueInvoice,
+  deleteInvoice,
+  issueEstimate,
+  deleteEstimate,
+} from './smartbill.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
 export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated, onPromoVoucherAssigned } from './emails.js';
@@ -3487,6 +3497,124 @@ export const smartbillHealthcheck = onCall(
       // documented response keys aren't fully pinned until we see the sandbox.
       raw: { series, taxes },
     };
+  }
+);
+
+// ── smartbillTestIssue (callable) ───────────────────────────────────────
+// Phase 2 pre-flight: verify that the DRAFTED SmartBill payload shape is
+// actually accepted by the live account, WITHOUT leaving fiscal artefacts.
+//   - Proforma (estimate): issued for real (non-fiscal, not reported to ANAF)
+//     then deleted — so we confirm the exact proforma payload end-to-end.
+//   - Fiscal invoice: issued with isDraft:true so it is NOT fiscalized /
+//     e-Factura-reported, then the draft is deleted. This validates the
+//     invoice payload shape without minting a real reported invoice.
+// Every step is best-effort and its raw result is returned, so a stray
+// document (e.g. a delete that failed) is surfaced loudly for manual cleanup
+// rather than swallowed. Admin-only. Remove or lock down once Phase 2 ships.
+function firstSeriesName(seriesResp) {
+  const list = Array.isArray(seriesResp?.list) ? seriesResp.list
+    : Array.isArray(seriesResp?.series) ? seriesResp.series
+    : [];
+  const first = list.find((s) => s?.name) || list[0] || null;
+  return first?.name || null;
+}
+
+export const smartbillTestIssue = onCall(
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
+  async (request) => {
+    await assertAdmin(request);
+    const issueDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC ok for a test)
+    const report = { issueDate, proforma: {}, invoice: {} };
+
+    // Resolve the target series for each document type.
+    let proformaSeries = null;
+    let invoiceSeries = null;
+    try {
+      proformaSeries = firstSeriesName(await listSeries('p'));
+    } catch (err) {
+      report.proforma.seriesError = err?.message || 'unknown';
+    }
+    try {
+      invoiceSeries = firstSeriesName(await listSeries('f'));
+    } catch (err) {
+      report.invoice.seriesError = err?.message || 'unknown';
+    }
+    report.proforma.series = proformaSeries;
+    report.invoice.series = invoiceSeries;
+
+    // A minimal, clearly-labelled sample. PF client, one 1-RON service line.
+    const sampleBilling = {
+      type: 'PF',
+      name: 'TEST Verificare Payload',
+      address: 'Str. Test 1',
+      locality: 'Otopeni',
+      county: 'Ilfov',
+      email: '',
+    };
+    const sampleItems = [{ name: 'TEST — verificare payload SmartBill (a se ignora)', quantity: 1, price: 1, code: 'TEST' }];
+
+    // ── Proforma: issue for real, then delete ──────────────────────────────
+    if (proformaSeries) {
+      try {
+        const payload = buildInvoicePayload({
+          billing: sampleBilling,
+          items: sampleItems,
+          seriesName: proformaSeries,
+          issueDate,
+        });
+        const res = await issueEstimate(payload);
+        report.proforma.issued = true;
+        report.proforma.number = res?.number ?? null;
+        report.proforma.raw = res;
+        if (res?.number != null) {
+          try {
+            await deleteEstimate(proformaSeries, res.number);
+            report.proforma.deleted = true;
+          } catch (delErr) {
+            report.proforma.deleted = false;
+            report.proforma.deleteError = delErr?.message || 'unknown';
+            report.proforma.STRAY = `Proforma ${proformaSeries} ${res.number} left on account — delete manually`;
+          }
+        }
+      } catch (err) {
+        report.proforma.issued = false;
+        report.proforma.error = err?.message || 'unknown';
+      }
+    }
+
+    // ── Fiscal invoice: issue as a DRAFT (not fiscalized), then delete ──────
+    if (invoiceSeries) {
+      try {
+        const payload = buildInvoicePayload({
+          billing: sampleBilling,
+          items: sampleItems,
+          seriesName: invoiceSeries,
+          issueDate,
+          isDraft: true,
+        });
+        const res = await issueInvoice(payload);
+        report.invoice.issued = true;
+        report.invoice.draft = true;
+        report.invoice.number = res?.number ?? null;
+        report.invoice.raw = res;
+        if (res?.number != null) {
+          try {
+            await deleteInvoice(invoiceSeries, res.number);
+            report.invoice.deleted = true;
+          } catch (delErr) {
+            report.invoice.deleted = false;
+            report.invoice.deleteError = delErr?.message || 'unknown';
+            report.invoice.STRAY = `Draft invoice ${invoiceSeries} ${res.number} left on account — delete in SmartBill UI`;
+          }
+        }
+      } catch (err) {
+        report.invoice.issued = false;
+        report.invoice.error = err?.message || 'unknown';
+      }
+    }
+
+    report.ok = report.proforma.issued === true && report.invoice.issued === true;
+    return report;
   }
 );
 

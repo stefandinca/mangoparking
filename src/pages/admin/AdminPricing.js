@@ -4,7 +4,7 @@ import { updateMeta } from '../../utils/seo.js';
 import { getAllTokenPacks, createTokenPack, updateTokenPack, deleteTokenPack } from '../../services/tokenService.js';
 import { getLongTermRates, saveLongTermRates, getCommuterPolicy, saveCommuterPolicy } from '../../services/longTermService.js';
 import { getOnlineDiscountPercent, saveOnlineDiscountPercent } from '../../services/discountService.js';
-import { smartbillHealthcheck } from '../../services/invoiceService.js';
+import { smartbillHealthcheck, smartbillTestIssue } from '../../services/invoiceService.js';
 import {
   listSeasonalPeriods,
   createSeasonalPeriod,
@@ -160,7 +160,11 @@ export default async function AdminPricing(container) {
         <section class="glass rounded-2xl p-6 mt-8">
           <h2 class="font-heading text-xl font-bold text-blueberry-deep mb-1">${t('smartbill.title')}</h2>
           <p class="text-dim text-[14px] mb-5">${t('smartbill.hint')}</p>
-          <button type="button" data-smartbill-check class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('smartbill.checkBtn')}</button>
+          <div class="flex flex-wrap gap-3">
+            <button type="button" data-smartbill-check class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('smartbill.checkBtn')}</button>
+            <button type="button" data-smartbill-testissue class="bg-white hover:bg-frost text-blueberry border border-blueberry font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('smartbill.testIssueBtn')}</button>
+          </div>
+          <p class="text-dim text-[12px] mt-2">${t('smartbill.testIssueHint')}</p>
           <div data-smartbill-result class="mt-4 text-[14px]"></div>
         </section>
   `);
@@ -184,6 +188,42 @@ export default async function AdminPricing(container) {
           <div>${t('smartbill.status')}: ${readyBadge}</div>
           <div class="text-charcoal/80">${t('smartbill.series')}: <span class="font-mono">${seriesNames}</span></div>
           <div class="text-charcoal/80">${t('smartbill.vat')}: <span class="font-mono">${vatList}</span> ${r.hasExpectedVat ? '✓' : `<span class="text-mango">(${t('smartbill.vatMissing', { pct: r.expectedVatPercent })})</span>`}</div>
+        </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">${escapeHtml(err?.message || t('common.error'))}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  // SmartBill payload-shape checkpoint (Phase 2 pre-flight): issues a real
+  // proforma + a draft fiscal invoice from a sample, then deletes both.
+  delegate(page, 'click', '[data-smartbill-testissue]', async (e, btn) => {
+    const out = page.querySelector('[data-smartbill-result]');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = t('common.loading');
+    out.innerHTML = '';
+    try {
+      const r = await smartbillTestIssue();
+      const line = (label, d) => {
+        if (d.error) return `<div class="text-red-600">${escapeHtml(label)}: ✗ ${escapeHtml(d.error)}</div>`;
+        if (!d.series) return `<div class="text-mango">${escapeHtml(label)}: ${escapeHtml(t('smartbill.testIssueNoSeries'))}</div>`;
+        const cleaned = d.deleted === false
+          ? `<span class="text-red-600 font-semibold"> — ${escapeHtml(d.STRAY || t('smartbill.testIssueStray'))}</span>`
+          : `<span class="text-charcoal/60"> — ${escapeHtml(t('smartbill.testIssueCleaned'))}</span>`;
+        const num = d.number != null ? ` <span class="font-mono">${escapeHtml(d.series)} ${escapeHtml(String(d.number))}</span>` : '';
+        return `<div class="text-leaf font-semibold">${escapeHtml(label)}: ✓${num}${cleaned}</div>`;
+      };
+      const okBadge = r.ok
+        ? `<span class="text-leaf font-semibold">${t('smartbill.testIssueOk')}</span>`
+        : `<span class="text-mango font-semibold">${t('smartbill.testIssueFail')}</span>`;
+      out.innerHTML = `
+        <div class="rounded-xl border border-frost-deep bg-white p-4 space-y-1.5">
+          <div>${t('smartbill.status')}: ${okBadge}</div>
+          ${line(t('smartbill.testIssueProforma'), r.proforma || {})}
+          ${line(t('smartbill.testIssueInvoice'), r.invoice || {})}
         </div>`;
     } catch (err) {
       out.innerHTML = `<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">${escapeHtml(err?.message || t('common.error'))}</div>`;

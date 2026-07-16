@@ -102,6 +102,32 @@ export async function issueInvoice(payload) {
   return smartbillFetch('/invoice', { method: 'POST', body: payload });
 }
 
+// ── Proforma (SmartBill "estimate") — same payload shape, different endpoint ─
+//
+// A proforma is a NON-fiscal payment request: it is NOT reported to ANAF /
+// RO e-Factura and can be deleted cleanly. That's the document we issue up
+// front (online AND pay-at-location); the fiscal /invoice only follows once
+// payment is confirmed. Series `type` for proformas is 'p' (vs 'f' for
+// invoices) — see listSeries('p').
+
+// POST /estimate → { series, number, message, errorText? }
+export async function issueEstimate(payload) {
+  return smartbillFetch('/estimate', { method: 'POST', body: payload });
+}
+
+// DELETE /estimate?cif=..&seriesname=..&number=..  (proformas delete cleanly;
+// no fiscal trail, unlike invoices).
+export async function deleteEstimate(seriesName, number) {
+  const q = new URLSearchParams({ cif: sellerCif(), seriesname: seriesName, number: String(number) });
+  return smartbillFetch(`/estimate?${q.toString()}`, { method: 'DELETE' });
+}
+
+// Authenticated proforma PDF URL (Basic auth required to fetch — not public).
+export function estimatePdfUrl(seriesName, number) {
+  const q = new URLSearchParams({ cif: sellerCif(), seriesname: seriesName, number: String(number) });
+  return `${BASE}/estimate/pdf?${q.toString()}`;
+}
+
 // Authenticated PDF URL — requires Basic auth to fetch, so it is NOT safe to
 // hand to a customer as-is (the plan's Phase 6 assumes a public URL; that's the
 // V2 variant, to confirm).
@@ -154,6 +180,11 @@ export function buildInvoicePayload({
   dueDate,
   paymentMethod,
   vatPercent = DEFAULT_VAT_PERCENT,
+  // isDraft:true asks SmartBill NOT to fiscalize/report the document. Used by
+  // the payload-verification checkpoint so a throwaway fiscal invoice never
+  // reaches ANAF; real Phase 2 invoices leave this false. Ignored by /estimate
+  // (proformas are non-fiscal regardless).
+  isDraft = false,
 }) {
   const isPJ = billing.type === 'PJ';
   const client = isPJ
@@ -185,7 +216,7 @@ export function buildInvoicePayload({
     seriesName,
     issueDate,
     ...(dueDate ? { dueDate } : {}),
-    isDraft: false,
+    isDraft: isDraft === true,
     ...(paymentMethod ? { paymentBase: paymentMethod } : {}),
     products: items.map((it) => ({
       name: it.name,
