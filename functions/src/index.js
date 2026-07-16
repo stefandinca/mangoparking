@@ -45,6 +45,8 @@ import {
   listSeries,
   listTaxes,
   DEFAULT_VAT_PERCENT,
+  PROFORMA_SERIES,
+  INVOICE_SERIES,
   buildInvoicePayload,
   checkBillingComplete,
   issueInvoice,
@@ -3460,43 +3462,58 @@ async function assertAdmin(request) {
 
 // ── smartbillHealthcheck (callable) ─────────────────────────────────────
 // Phase 1 of the SmartBill integration (see documentation/roadmap/v.1.2_smartbill.md).
-// Admin-only. Exercises the two read-only SmartBill endpoints to confirm the
+// Admin-only. Exercises the read-only SmartBill endpoints to confirm the
 // account is wired before any invoice is ever issued:
-//   - the configured invoice series exist (so `MNG`, or whatever we settle on,
-//     is present)
+//   - the pinned fiscal-invoice series ('MANGO', type f) and proforma series
+//     ('Mango', type p) both exist on the account
 //   - the expected VAT rate (21%) is available
 // Returns what SmartBill reports plus a `ready` flag. Throws a clear
 // permission/precondition error if the secrets aren't set, so a failed call
 // distinguishes "not configured yet" from "misconfigured account".
+function seriesNames(seriesResp) {
+  const list = Array.isArray(seriesResp?.list) ? seriesResp.list
+    : Array.isArray(seriesResp?.series) ? seriesResp.series
+    : [];
+  return list.map((s) => s?.name).filter(Boolean);
+}
+
 export const smartbillHealthcheck = onCall(
   { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     await assertAdmin(request);
     let series;
+    let proformaSeries;
     let taxes;
     try {
-      // Type 'f' = invoice series (fatura).
+      // Type 'f' = invoice series (factura), 'p' = proforma (estimate) series.
       series = await listSeries('f');
+      proformaSeries = await listSeries('p');
       taxes = await listTaxes();
     } catch (err) {
       throw new HttpsError('failed-precondition', `SmartBill: ${err?.message || 'unknown error'}`);
     }
-    const seriesList = Array.isArray(series?.list) ? series.list
-      : Array.isArray(series?.series) ? series.series
-      : [];
+    const invoiceSeriesNames = seriesNames(series);
+    const proformaSeriesNames = seriesNames(proformaSeries);
     const taxList = Array.isArray(taxes?.taxes) ? taxes.taxes
       : Array.isArray(taxes?.list) ? taxes.list
       : [];
     const hasExpectedVat = taxList.some((t) => Number(t?.percentage) === DEFAULT_VAT_PERCENT);
+    const hasInvoiceSeries = invoiceSeriesNames.includes(INVOICE_SERIES);
+    const hasProformaSeries = proformaSeriesNames.includes(PROFORMA_SERIES);
     return {
-      ready: seriesList.length > 0 && hasExpectedVat,
+      ready: hasInvoiceSeries && hasProformaSeries && hasExpectedVat,
       expectedVatPercent: DEFAULT_VAT_PERCENT,
       hasExpectedVat,
-      series: seriesList,
+      expectedInvoiceSeries: INVOICE_SERIES,
+      hasInvoiceSeries,
+      expectedProformaSeries: PROFORMA_SERIES,
+      hasProformaSeries,
+      series: invoiceSeriesNames,
+      proformaSeries: proformaSeriesNames,
       taxes: taxList,
       // Raw payloads kept so the admin can eyeball unexpected shapes — the
       // documented response keys aren't fully pinned until we see the sandbox.
-      raw: { series, taxes },
+      raw: { series, proformaSeries, taxes },
     };
   }
 );
@@ -3512,14 +3529,6 @@ export const smartbillHealthcheck = onCall(
 // Every step is best-effort and its raw result is returned, so a stray
 // document (e.g. a delete that failed) is surfaced loudly for manual cleanup
 // rather than swallowed. Admin-only. Remove or lock down once Phase 2 ships.
-function firstSeriesName(seriesResp) {
-  const list = Array.isArray(seriesResp?.list) ? seriesResp.list
-    : Array.isArray(seriesResp?.series) ? seriesResp.series
-    : [];
-  const first = list.find((s) => s?.name) || list[0] || null;
-  return first?.name || null;
-}
-
 export const smartbillTestIssue = onCall(
   { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
@@ -3527,16 +3536,22 @@ export const smartbillTestIssue = onCall(
     const issueDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC ok for a test)
     const report = { issueDate, proforma: {}, invoice: {} };
 
-    // Resolve the target series for each document type.
+    // Resolve the pinned series for each document type. Issuing into whatever
+    // series happens to exist would pollute a real numbering sequence, so a
+    // missing pinned series is a hard per-slot error, not a fallback.
     let proformaSeries = null;
     let invoiceSeries = null;
     try {
-      proformaSeries = firstSeriesName(await listSeries('p'));
+      const names = seriesNames(await listSeries('p'));
+      if (names.includes(PROFORMA_SERIES)) proformaSeries = PROFORMA_SERIES;
+      else report.proforma.seriesError = `Proforma series '${PROFORMA_SERIES}' not on account — has: ${names.join(', ') || '(none)'}`;
     } catch (err) {
       report.proforma.seriesError = err?.message || 'unknown';
     }
     try {
-      invoiceSeries = firstSeriesName(await listSeries('f'));
+      const names = seriesNames(await listSeries('f'));
+      if (names.includes(INVOICE_SERIES)) invoiceSeries = INVOICE_SERIES;
+      else report.invoice.seriesError = `Invoice series '${INVOICE_SERIES}' not on account — has: ${names.join(', ') || '(none)'}`;
     } catch (err) {
       report.invoice.seriesError = err?.message || 'unknown';
     }

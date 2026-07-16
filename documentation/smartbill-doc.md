@@ -5,35 +5,53 @@
 > [roadmap/v.1.2_smartbill.md](roadmap/v.1.2_smartbill.md); credential handling is
 > in [smartbill-demo.md](smartbill-demo.md).
 >
-> Last updated: 2026-07-16. Latest relevant commit: `a6b36e6` (on `origin/main`).
+> Last updated: 2026-07-16 (second pass — new credentials + pinned series).
 
 ---
 
 ## TL;DR — where we are
 
 - **Phase 1 (foundations): DONE.** REST wrapper + admin healthcheck built, three
-  secrets set in Secret Manager, healthcheck ran **green** (invoice series present,
-  21% VAT found → account is a VAT payer).
-- **Phase 2 pre-flight (payload checkpoint): BUILT, partially verified.** An
-  admin-only `smartbillTestIssue` callable issues sample documents and deletes
-  them, to confirm SmartBill accepts our payload shape before wiring the money path.
-- **BLOCKED on a SmartBill account-side permission**, not on our code: the API
-  token's user lacks proforma rights. Fiscal-invoice payload was **accepted**
-  (as a draft); proforma failed with a permissions error.
+  secrets set in Secret Manager, healthcheck ran **green**.
+- **Credentials swapped 2026-07-16** (secret versions **2**) to a full-rights
+  user — this was the fix for the earlier proforma-rights blocker
+  (`Lipsesc drepturile de: emitere proforma, acces serii`). Both functions
+  redeployed to bind the new versions.
+- **Series pinned in code** (`functions/src/smartbill.js`): proforma series
+  **`Mango`** (type `p`), fiscal-invoice series **`MANGO`** (type `f`). Both
+  already started on the account; names are case-sensitive. The healthcheck
+  verifies both exist; `smartbillTestIssue` issues ONLY into these (missing
+  pinned series = hard error, no fallback to "first series found").
+- **Phase 2 pre-flight (payload checkpoint): BUILT.** An admin-only
+  `smartbillTestIssue` callable issues sample documents and deletes them, to
+  confirm SmartBill accepts our payload shape before wiring the money path.
+  Last full run was under the old (rights-limited) token: draft invoice
+  **accepted**, proforma blocked → needs a re-run with the new credentials.
 - **Phase 2 real wiring (issue on payment): NOT STARTED.** Waiting on the
   checkpoint going fully green.
 
 ## Last checkpoint result (`Test document issue`)
 
+> Run under the OLD rights-limited token — superseded by the 2026-07-16
+> credential swap; re-run to refresh.
+
 - **Invoice (draft): ✓** — SmartBill accepted the fiscal-invoice payload (issued
-  with `isDraft:true`, so NOT fiscalized / not e-Factura-reported). A draft named
+  with `isDraft:true`, so NOT fiscalized / not e-Factura-reported). A draft on
   series **"Mango"** was left on the account (draft invoices return no fiscal
   number to delete against) → **delete it manually** in SmartBill (Facturi → Ciorne).
 - **Proforma: ✗** — `Nu poti emite proforma. Lipsesc drepturile de: emitere
-  proforma, acces serii (ACR).` → the API **user** is missing rights. Fix in
-  SmartBill (Setări → Utilizatori/Drepturi): enable **emitere proformă** +
-  **acces serii**, and ensure a proforma (estimate) series exists. Or swap the
-  secrets to a full-rights user (same company/CIF) — see smartbill-demo.md.
+  proforma, acces serii (ACR).` → resolved by swapping the secrets to a
+  full-rights user (2026-07-16, secret versions 2).
+
+## Account series (pinned 2026-07-16)
+
+| Document | Series name | SmartBill type | Code constant (`smartbill.js`) |
+|---|---|---|---|
+| Proforma (estimate) | **`Mango`** | `p` | `PROFORMA_SERIES` |
+| Fiscal invoice | **`MANGO`** | `f` | `INVOICE_SERIES` |
+
+Both series were already started on the account — numbering continues, never
+reset. Names are case-sensitive and differ only by case: watch for typos.
 
 ## Document model (decided 2026-07-16)
 
@@ -81,10 +99,13 @@ missing fields).
     both send `city` (locality) + `county`. `isDraft:true` = non-fiscalized draft.
   - `checkBillingComplete(billing)` → `{ ok, missing:[...] }` mandatory-field guard.
 - **`index.js`** — two admin-only callables (both `europe-west1`, bind `SMARTBILL_SECRETS`):
-  - `smartbillHealthcheck` — read-only: lists invoice series + taxes, returns
-    `{ ready, series, taxes, hasExpectedVat, expectedVatPercent }`.
+  - `smartbillHealthcheck` — read-only: lists invoice + proforma series and taxes,
+    returns `{ ready, hasInvoiceSeries, hasProformaSeries, hasExpectedVat, series,
+    proformaSeries, taxes, ... }`. `ready` requires the pinned `MANGO` (f) and
+    `Mango` (p) series to both exist plus 21% VAT.
   - `smartbillTestIssue` — the checkpoint. Issues + deletes a **PF proforma**, a
-    **PJ proforma** (validates regCom+locality mapping), and a **PF fiscal draft**.
+    **PJ proforma** (validates regCom+locality mapping), and a **PF fiscal draft** —
+    strictly into the pinned series (missing series = per-slot error, no fallback).
     Returns `{ ok, proforma, proformaCompany, invoice }`; a `STRAY` field on any
     slot means a test doc was left behind (needs manual cleanup).
 - **`cui.js`** — `lookupCui` (ANAF) now also returns `locality` + `county` from
@@ -103,8 +124,11 @@ missing fields).
 
 ### Secrets (Google Secret Manager, project `mango-parking`)
 
-`SMARTBILL_USERNAME`, `SMARTBILL_TOKEN`, `SMARTBILL_CIF` — all set (version 1).
-Bound per-function via `secrets: SMARTBILL_SECRETS`.
+`SMARTBILL_USERNAME`, `SMARTBILL_TOKEN`, `SMARTBILL_CIF` — all at **version 2**
+(2026-07-16: swapped to a full-rights user to unblock proforma issuing). Bound
+per-function via `secrets: SMARTBILL_SECRETS`; both callables redeployed after
+the swap. Local scratch copy of the values lives in
+`documentation/smartbill-creds.md` — **gitignored**, never commit it.
 
 ---
 
@@ -121,11 +145,12 @@ The two callables are deployed and live. The frontend buttons are on `origin/mai
 
 ## Next steps (resume here)
 
-1. **Unblock proforma** — grant the API user *emitere proformă* + *acces serii* in
-   SmartBill, OR swap secrets to a full-rights user (same company/CIF) per
-   `smartbill-demo.md`, then redeploy `smartbillHealthcheck` + `smartbillTestIssue`.
-2. **Delete the stray "Mango" draft** invoice from the earlier checkpoint run.
-3. **Re-run Test document issue** → expect Proforma (PF) ✓, Proforma (PJ) ✓,
+1. ~~Unblock proforma~~ **done 2026-07-16** — secrets swapped to a full-rights
+   user (versions 2), both callables redeployed, series pinned in code.
+2. **Delete the stray "Mango" draft** invoice from the earlier checkpoint run
+   (SmartBill UI → Facturi → Ciorne).
+3. **Re-run Check connection + Test document issue** (`/admin/pricing`) → expect
+   `ready` (both series + VAT) and Proforma (PF) ✓, Proforma (PJ) ✓,
    Invoice (draft) ✓.
 4. **Phase 2 — wire issuance into the paid flows** (`createBookingFromOrder`,
    `adminMarkOrderPaid`, credit path): proforma up front everywhere; fiscal invoice

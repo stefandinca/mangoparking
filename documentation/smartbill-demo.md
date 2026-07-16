@@ -54,9 +54,12 @@ Admin → **`/admin/pricing`** → SmartBill card:
 2. **Test document issue** → expect three green rows: Proforma (PF), Proforma
    (PJ), Invoice (draft). Any red row's text tells you exactly what's missing.
 
-## Current blocker (as of last run)
+## Current status (2026-07-16)
 
-The token in use lacked proforma rights:
-`Nu poti emite proforma. Lipsesc drepturile de: emitere proforma, acces serii (ACR).`
-→ Swap to a **full-rights** user's email + token (same company / CIF), or grant
-those rights to the current user in SmartBill. See `smartbill-doc.md`.
+Secrets are at **version 2** — swapped to a full-rights user, which resolved the
+earlier proforma-rights blocker (`Nu poti emite proforma. Lipsesc drepturile
+de: emitere proforma, acces serii (ACR).`). Account series are pinned in code:
+proforma **`Mango`** (type `p`), fiscal invoice **`MANGO`** (type `f`).
+
+> Scratch file for real values: `documentation/smartbill-creds.md` — gitignored,
+> never commit it. See `smartbill-doc.md` for the full state snapshot.

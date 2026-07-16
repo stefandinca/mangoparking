@@ -29,6 +29,13 @@ const BASE = 'https://ws.smartbill.ro/SBORO/api';
 // at build time (see the plan's "locked decisions").
 export const DEFAULT_VAT_PERCENT = 21;
 
+// Series configured on the SmartBill account (both already started, numbering
+// continues from where they are). Names are case-sensitive: 'Mango' is the
+// proforma (estimate, type 'p') series, 'MANGO' the fiscal-invoice (type 'f')
+// series. The healthcheck verifies both exist before any document is issued.
+export const PROFORMA_SERIES = 'Mango';
+export const INVOICE_SERIES = 'MANGO';
+
 function requireSecret(param, name) {
   const v = param.value();
   if (!v) throw new Error(`SmartBill not configured: ${name} secret is empty`);

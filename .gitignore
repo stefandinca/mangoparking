@@ -13,6 +13,7 @@ src/seed.js
 # Local-only credential / secret material — never commit
 netopia*keys*.md
 netopia*keys*.txt
+documentation/smartbill-creds.md
 *.pem
 *.key
 *.cer

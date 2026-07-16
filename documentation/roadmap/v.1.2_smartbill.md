@@ -25,7 +25,13 @@
 > **Deploy note:** `smartbillHealthcheck` and `smartbillTestIssue` bind
 > `SMARTBILL_USERNAME` / `SMARTBILL_TOKEN` / `SMARTBILL_CIF`, so
 > `firebase deploy --only functions` will fail until those three secrets exist in
-> Secret Manager (they now do — versions 1).
+> Secret Manager (they now do — versions **2**, swapped 2026-07-16 to a
+> full-rights user after the first token lacked proforma rights).
+>
+> **Series (pinned 2026-07-16):** proforma series **`Mango`** (type `p`), fiscal
+> invoice series **`MANGO`** (type `f`) — constants `PROFORMA_SERIES` /
+> `INVOICE_SERIES` in `functions/src/smartbill.js`. Both already started on the
+> account; case-sensitive.
 
 ## Goal
 
@@ -57,8 +63,8 @@ Documentation: <https://api.smartbill.ro/>
   - `POST /einvoice` — submit invoice to ANAF SPV (e-Factura, B2B mandate).
   - `GET /einvoice/status/{uploadId}` — poll e-Factura status (`OK` | `NOK` | `IN_PROGRESS`).
   - `GET /tax` — list VAT rates available in the account (called once at boot to verify 21% exists).
-  - `GET /series` — list invoice series. Called once at boot to verify our `MNG` series is configured.
-- Series prefix is configured in SmartBill's admin UI; we pass `seriesName: 'MNG'` (or whatever the account uses) in every request body.
+  - `GET /series` — list series by type (`f` invoices, `p` proformas). The healthcheck verifies both pinned series exist.
+- Series are configured in SmartBill's admin UI; we pass `seriesName: 'MANGO'` (invoices) or `seriesName: 'Mango'` (proformas) in every request body — pinned as constants in `smartbill.js`.
 - SmartBill returns **HTTP 200** with `{ errorText: "...", number: 0 }` on validation failures. Don't trust HTTP status alone — always check `errorText`.
 
 ---
@@ -314,7 +320,7 @@ This phase is **mandatory for compliance** since 2024 — RO B2B e-Factura is en
 Run after each phase, not just at the end.
 
 ### Phase 1
-- `smartbillHealthcheck` returns `{ series: ['MNG'], taxes: [..., { name: 'TVA', percentage: 21 }] }`.
+- `smartbillHealthcheck` returns `ready: true` — `MANGO` in the invoice series, `Mango` in the proforma series, and a 21% VAT rate present.
 - Hand-write a payload via Node REPL → invoice appears in SmartBill dashboard with expected client + product lines.
 
 ### Phase 2
