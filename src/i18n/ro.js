@@ -1064,7 +1064,7 @@ export default {
     companyName: 'Denumire firmă',
     cui: 'CUI',
     cuiAutofilled: 'Datele firmei au fost completate automat din registrul ANAF.',
-    regCom: 'Nr. Reg. Com. (opțional)',
+    regCom: 'Nr. Reg. Com.',
     companyAddress: 'Adresa firmei',
     errors: {
       name: 'Introdu numele complet.',

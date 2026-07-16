@@ -1063,7 +1063,7 @@ export default {
     companyName: 'Company name',
     cui: 'CUI / VAT',
     cuiAutofilled: 'Company details auto-filled from the ANAF registry.',
-    regCom: 'Trade reg. nr. (optional)',
+    regCom: 'Trade reg. nr.',
     companyAddress: 'Company address',
     errors: {
       name: 'Enter the full name.',

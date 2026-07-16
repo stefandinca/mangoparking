@@ -4,7 +4,7 @@ import { openModal } from '../../components/core/Modal.js';
 import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
-import { isValidEmail, isValidLicensePlate, isValidPhone, isValidCnp, isValidCui } from '../../utils/validators.js';
+import { isValidEmail, isValidLicensePlate, isValidPhone, isValidCnp, isValidCui, isValidRegCom, required } from '../../utils/validators.js';
 import { lookupCui } from '../../services/cuiService.js';
 import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { dateTimeFieldHtml, wireDateTime } from '../../components/core/FormDateTime.js';
@@ -369,7 +369,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           </label>
         </div>
 
-        <!-- PF: person -->
+        <!-- PF: person. Mandatory: Nume, Prenume, Localitate. Optional: Adresă, CNP. -->
         <div data-billing-pf class="space-y-2">
           <div class="grid grid-cols-2 gap-2">
             <input type="text" name="ctBillNume" placeholder="${escapeHtml(t('transactions.billNume'))} *"
@@ -377,22 +377,28 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
             <input type="text" name="ctBillPrenume" placeholder="${escapeHtml(t('transactions.billPrenume'))} *"
               class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           </div>
-          <input type="text" name="ctBillAddress" placeholder="${escapeHtml(t('transactions.billAddress'))} *"
+          <input type="text" name="ctBillLocality" placeholder="${escapeHtml(t('billing.locality'))} *"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          <input type="text" name="ctBillAddress" placeholder="${escapeHtml(t('transactions.billAddress'))}"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <input type="text" name="ctBillCnp" placeholder="${escapeHtml(t('transactions.billCnpOptional'))}"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40">
         </div>
 
-        <!-- PJ: company -->
+        <!-- PJ: company. Mandatory: CUI, Nume companie, Localitate, Nr. reg. com. -->
         <div data-billing-pj class="hidden space-y-2">
           <input type="text" name="ctBillCompany" placeholder="${escapeHtml(t('transactions.billCompany'))} *"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <div class="relative">
-            <input type="text" name="ctBillCui" placeholder="${escapeHtml(t('transactions.billCuiOptional'))}"
+            <input type="text" name="ctBillCui" placeholder="${escapeHtml(t('billing.cui'))} *"
               class="w-full px-4 py-2.5 pr-10 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40" data-ct-cui>
             <span class="hidden absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-blueberry/30 border-t-blueberry animate-spin" data-ct-cui-spinner></span>
           </div>
-          <input type="text" name="ctBillCompanyAddress" placeholder="${escapeHtml(t('transactions.billCompanyAddress'))} *"
+          <input type="text" name="ctBillRegCom" placeholder="${escapeHtml(t('billing.regCom'))} * (J40/123/2020)"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          <input type="text" name="ctBillCompanyLocality" placeholder="${escapeHtml(t('billing.locality'))} *"
+            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          <input type="text" name="ctBillCompanyAddress" placeholder="${escapeHtml(t('transactions.billCompanyAddress'))}"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
         </div>
       </div>
@@ -567,9 +573,6 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
   const billingTypeToggle = qs('[data-billing-type-toggle]', contentEl);
   const ctCuiInput = qs('[data-ct-cui]', contentEl);
   const ctCuiSpinner = qs('[data-ct-cui-spinner]', contentEl);
-  // Reg. Com. isn't shown as a field — it's captured only when the CUI lookup
-  // (ANAF) returns one, so it still lands on the stored billing record.
-  let cuiRegCom = '';
   let lastBillingUserId = null; // guards prefill from re-clobbering on each keystroke
 
   // State readers — the DOM is the single source of truth.
@@ -709,7 +712,8 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         };
         fill('ctBillCompany', result.companyName);
         fill('ctBillCompanyAddress', result.address);
-        if (result.regCom) cuiRegCom = result.regCom;
+        fill('ctBillCompanyLocality', result.locality);
+        fill('ctBillRegCom', result.regCom);
       }, 600);
     });
   }
@@ -727,8 +731,9 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     if (type === 'PJ') {
       set('ctBillCompany', b.companyName);
       set('ctBillCui', b.cui);
+      set('ctBillRegCom', b.regCom);
+      set('ctBillCompanyLocality', b.locality);
       set('ctBillCompanyAddress', b.companyAddress);
-      cuiRegCom = b.regCom || '';
     } else {
       let nume = b.lastName || '';
       let prenume = b.firstName || '';
@@ -739,6 +744,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       }
       set('ctBillNume', nume);
       set('ctBillPrenume', prenume);
+      set('ctBillLocality', b.locality);
       set('ctBillAddress', b.address || b.personalAddress || '');
       set('ctBillCnp', b.cnp);
     }
@@ -753,8 +759,8 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
   }
 
   // Read + validate the billing block. Returns { billing } or { error }.
-  // PF requires Nume/Prenume/Adresă (CNP optional, checksum-validated if given);
-  // PJ requires company name + address (CUI optional, validated if given).
+  // Mandatory fields per SmartBill: PF → Nume, Prenume, Localitate (Adresă + CNP
+  // optional); PJ → CUI, Nume companie, Localitate, Nr. reg. com. (address optional).
   function readCtBilling() {
     const type = qs('input[name="ctBillingType"]:checked', contentEl)?.value === 'PJ' ? 'PJ' : 'PF';
     const val = (name) => String(qs(`[name="${name}"]`, contentEl)?.value || '').trim();
@@ -766,21 +772,28 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     if (type === 'PJ') {
       const companyName = val('ctBillCompany');
       const cui = val('ctBillCui');
+      const regCom = val('ctBillRegCom');
+      const locality = val('ctBillCompanyLocality');
       const companyAddress = val('ctBillCompanyAddress');
       if (!companyName) return fail('ctBillCompany', 'billing.errors.companyName');
-      if (cui && !isValidCui(cui)) return fail('ctBillCui', 'billing.errors.cui');
-      if (!companyAddress) return fail('ctBillCompanyAddress', 'billing.errors.companyAddress');
-      return { billing: { type: 'PJ', companyName, cui, regCom: cuiRegCom, companyAddress } };
+      if (!isValidCui(cui)) return fail('ctBillCui', 'billing.errors.cui');
+      if (!required(regCom) || !isValidRegCom(regCom)) return fail('ctBillRegCom', 'billing.errors.regCom');
+      if (!locality) return fail('ctBillCompanyLocality', 'billing.errors.locality');
+      const billing = { type: 'PJ', companyName, cui, regCom, locality };
+      if (companyAddress) billing.companyAddress = companyAddress;
+      return { billing };
     }
     const nume = val('ctBillNume');
     const prenume = val('ctBillPrenume');
+    const locality = val('ctBillLocality');
     const address = val('ctBillAddress');
     const cnp = val('ctBillCnp');
     if (!nume) return fail('ctBillNume', 'transactions.billErrorNume');
     if (!prenume) return fail('ctBillPrenume', 'transactions.billErrorPrenume');
-    if (!address) return fail('ctBillAddress', 'transactions.billErrorAddress');
+    if (!locality) return fail('ctBillLocality', 'billing.errors.locality');
     if (cnp && !isValidCnp(cnp)) return fail('ctBillCnp', 'billing.errors.cnp');
-    const billing = { type: 'PF', name: `${nume} ${prenume}`.trim(), firstName: prenume, lastName: nume, address };
+    const billing = { type: 'PF', name: `${nume} ${prenume}`.trim(), firstName: prenume, lastName: nume, locality };
+    if (address) billing.address = address;
     if (cnp) billing.cnp = cnp;
     return { billing };
   }

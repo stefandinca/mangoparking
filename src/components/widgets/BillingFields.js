@@ -60,7 +60,7 @@ export function billingFieldsHtml(initial = {}) {
           </div>
         </div>
         <div>
-          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.personalAddress')} *</label>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.personalAddress')}</label>
           <input type="text" name="billingPersonalAddress" value="${esc(initial.address || initial.personalAddress)}" autocomplete="street-address" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
       </div>
@@ -88,7 +88,7 @@ export function billingFieldsHtml(initial = {}) {
           <input type="text" name="billingCompanyLocality" value="${esc(initial.locality)}" autocomplete="address-level2" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         <div>
-          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.companyAddress')} *</label>
+          <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.companyAddress')}</label>
           <input type="text" name="billingCompanyAddress" value="${esc(initial.companyAddress)}" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
       </div>
@@ -188,7 +188,6 @@ export function readBilling(scope) {
     checks.push(
       [get('billingName'), required(name), 'billing.errors.name'],
       [get('billingLocality'), required(locality), 'billing.errors.locality'],
-      [get('billingPersonalAddress'), required(address), 'billing.errors.personalAddress'],
     );
     // CNP is optional — but if filled, it must pass the checksum.
     if (cnp) {
@@ -227,7 +226,6 @@ export function readBilling(scope) {
     // AND well-formed (J40/123/2020).
     [get('billingRegCom'), required(regCom) && isValidRegCom(regCom), 'billing.errors.regCom'],
     [get('billingCompanyLocality'), required(locality), 'billing.errors.locality'],
-    [get('billingCompanyAddress'), required(companyAddress), 'billing.errors.companyAddress'],
   );
 
   for (const [input, ok, errKey] of checks) {
