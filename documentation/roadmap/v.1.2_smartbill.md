@@ -238,6 +238,29 @@ if (!existing || existing.status === 'failed') {
 
 If the original was e-Factura, the storno/cancel also needs to submit to ANAF. Same `submitEinvoice` call, marked with `isCancellation: true` flag in our doc to distinguish.
 
+### 4b. Reprice (date/hour edits) → invoice adjustment (client-flagged 2026-07-16)
+
+The client flagged: a paid booking whose dates/hours are edited changes total, and
+the customer owes (or is owed) a difference. The **money side already exists**
+server-side — `adminRepriceBooking` (admin edit modal on `/admin/checkins`)
+re-derives the price authoritatively, then: unpaid → re-quote (booking +
+pending-order amount rewritten); paid + extension → difference collected at the
+desk (cash → cashbook, card → terminal) into `extensionPrice` + an `extension`
+ledger row; paid + shortened → difference queued in Refunds
+(`pendingRefundAmount`). What SmartBill adds on top once Phase 2/3 issue documents:
+
+| Case | Document state | Action |
+|---|---|---|
+| Unpaid (pay-at-location) reprice | proforma only | delete old proforma + issue new one at the new total (proformas delete cleanly) |
+| Paid + extension (difference > 0) | fiscal invoice issued | issue a **second fiscal invoice for the difference** (line: "Extindere rezervare {code}"), paired chitanță if cash — do NOT storno+reissue (keeps trail simple, mirrors the existing `extension` ledger row) |
+| Paid + shortened (difference < 0) | fiscal invoice issued | **partial storno** for the difference — needs API verification: SmartBill's `/invoice/reverse` reverses a whole invoice; the partial variant is issuing an invoice with negative quantities/amounts (community convention, VERIFY in sandbox) |
+
+Wire-up point: `adminRepriceBooking` (and `adminChargeOverstay`, same shape —
+an overstay is an extension collected at checkout). Both already write ledger
+rows; the invoice call rides the same branch. Customer-initiated online payment
+of a difference (a `repayOrder`-style Netopia link for the delta) does **not
+exist** and is out of scope for v1.2 — differences are settled at the desk.
+
 ---
 
 ## Phase 5 — Customer + admin PDF access (~0.5 day)
