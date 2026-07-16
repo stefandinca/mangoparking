@@ -168,10 +168,25 @@ The two callables are deployed and live. The frontend buttons are on `origin/mai
    `type: factura|proforma`), storno on refund/cancel (`reverseInvoice`), e-Factura
    for B2B VAT payers.
 
+## Numbering semantics (verified on the live account 2026-07-16)
+
+- **Drafts (ciorne) have no number.** SmartBill assigns a fiscal number at
+  validation/fiscalization, not at draft creation — a ciornă shows as just
+  "Mango" in the UI and does **not** consume a number (`nextNumber` for the
+  `Mango` f-series stayed at 60 after the draft test). The first real Phase 2
+  invoice (`isDraft:false`) will be **Mango 0060**, continuing the client's
+  existing sequence.
+- **Deleting the last document frees its number.** The checkpoint's PF and PJ
+  test proformas both show as MANGO 0001 because each was deleted right after
+  issue, rolling the counter back — nothing is burned (`nextNumber` stayed 1).
+  The proforma series `MANGO` is brand new, so the first real proforma will be
+  **MANGO 0001**; there is no earlier proforma sequence to continue.
+
 ## Known caveats
 
-- **Draft invoices can't be auto-deleted** via API (no fiscal number returned) →
-  the checkpoint may leave draft strays; delete them in the SmartBill UI.
+- **Draft invoices can't be auto-deleted** via API (no fiscal number to delete
+  against) → each checkpoint run leaves one draft stray; the report's `STRAY`
+  field now says so explicitly. Delete them in SmartBill → Facturi → Ciorne.
 - A **real** (`isDraft:false`) fiscal invoice in RO is legally binding and
   auto-reported to ANAF via e-Factura. Phase 2 mints real invoices on every
   online payment — factor this into refund/storno handling.

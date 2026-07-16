@@ -3633,17 +3633,25 @@ export const smartbillTestIssue = onCall(
         const res = await issueInvoice(payload);
         report.invoice.issued = true;
         report.invoice.draft = true;
-        report.invoice.number = res?.number ?? null;
+        // Drafts (ciorne) get a fiscal number only at validation — SmartBill
+        // returns an empty number here, so there is nothing to delete against
+        // via the API. Confirmed on the live account: nextNumber does not move.
+        const num = res?.number;
+        const hasNumber = num !== null && num !== undefined && String(num).trim() !== '' && Number(num) !== 0;
+        report.invoice.number = hasNumber ? num : null;
         report.invoice.raw = res;
-        if (res?.number != null) {
+        if (hasNumber) {
           try {
-            await deleteInvoice(invoiceSeries, res.number);
+            await deleteInvoice(invoiceSeries, num);
             report.invoice.deleted = true;
           } catch (delErr) {
             report.invoice.deleted = false;
             report.invoice.deleteError = delErr?.message || 'unknown';
-            report.invoice.STRAY = `Draft invoice ${invoiceSeries} ${res.number} left on account — delete in SmartBill UI`;
+            report.invoice.STRAY = `Draft invoice ${invoiceSeries} ${num} left on account — delete in SmartBill UI`;
           }
+        } else {
+          report.invoice.deleted = false;
+          report.invoice.STRAY = `Draft (ciornă) ${invoiceSeries} has no number — delete manually in SmartBill (Facturi → Ciorne)`;
         }
       } catch (err) {
         report.invoice.issued = false;
