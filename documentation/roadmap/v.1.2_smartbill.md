@@ -28,10 +28,11 @@
 > Secret Manager (they now do — versions **2**, swapped 2026-07-16 to a
 > full-rights user after the first token lacked proforma rights).
 >
-> **Series (pinned 2026-07-16):** proforma series **`Mango`** (type `p`), fiscal
-> invoice series **`MANGO`** (type `f`) — constants `PROFORMA_SERIES` /
-> `INVOICE_SERIES` in `functions/src/smartbill.js`. Both already started on the
-> account; case-sensitive.
+> **Series (pinned 2026-07-16, from GET /series):** fiscal-invoice series
+> **`Mango`** (type `f`), proforma series **`MANGO`** (type `p`) — constants
+> `INVOICE_SERIES` / `PROFORMA_SERIES` in `functions/src/smartbill.js`. The
+> names differ only by case; `matchSeries()` resolves case-insensitively within
+> each type and issues under the account's exact spelling.
 
 ## Goal
 
@@ -64,7 +65,7 @@ Documentation: <https://api.smartbill.ro/>
   - `GET /einvoice/status/{uploadId}` — poll e-Factura status (`OK` | `NOK` | `IN_PROGRESS`).
   - `GET /tax` — list VAT rates available in the account (called once at boot to verify 21% exists).
   - `GET /series` — list series by type (`f` invoices, `p` proformas). The healthcheck verifies both pinned series exist.
-- Series are configured in SmartBill's admin UI; we pass `seriesName: 'MANGO'` (invoices) or `seriesName: 'Mango'` (proformas) in every request body — pinned as constants in `smartbill.js`.
+- Series are configured in SmartBill's admin UI; we pass `seriesName: 'Mango'` (invoices, type `f`) or `seriesName: 'MANGO'` (proformas, type `p`) in every request body — pinned as constants in `smartbill.js`, resolved case-insensitively against the account.
 - SmartBill returns **HTTP 200** with `{ errorText: "...", number: 0 }` on validation failures. Don't trust HTTP status alone — always check `errorText`.
 
 ---
@@ -320,7 +321,7 @@ This phase is **mandatory for compliance** since 2024 — RO B2B e-Factura is en
 Run after each phase, not just at the end.
 
 ### Phase 1
-- `smartbillHealthcheck` returns `ready: true` — `MANGO` in the invoice series, `Mango` in the proforma series, and a 21% VAT rate present.
+- `smartbillHealthcheck` returns `ready: true` — `Mango` resolves among the invoice (`f`) series, `MANGO` among the proforma (`p`) series, and a 21% VAT rate is present.
 - Hand-write a payload via Node REPL → invoice appears in SmartBill dashboard with expected client + product lines.
 
 ### Phase 2

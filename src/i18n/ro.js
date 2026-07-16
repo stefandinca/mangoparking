@@ -1413,6 +1413,7 @@ export default {
     ready: 'Gata de facturare',
     notReady: 'Necesită configurare',
     series: 'Serii facturi',
+    seriesProforma: 'Serii proforme',
     vat: 'Cote TVA',
     vatMissing: 'lipsește {pct}%',
     testIssueBtn: 'Test emitere document',

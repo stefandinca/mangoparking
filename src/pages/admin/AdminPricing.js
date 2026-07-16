@@ -178,7 +178,16 @@ export default async function AdminPricing(container) {
     out.innerHTML = '';
     try {
       const r = await smartbillHealthcheck();
-      const seriesNames = (r.series || []).map((s) => escapeHtml(s.name || s.series || '?')).join(', ') || '—';
+      // Series come back as name strings; the ✓ marks the one our documents
+      // are issued into (resolved case-insensitively server-side).
+      const fmtSeries = (names, resolved) => (names || [])
+        .map((s) => {
+          const n = typeof s === 'string' ? s : (s?.name || '?');
+          return n === resolved ? `<b>${escapeHtml(n)} ✓</b>` : escapeHtml(n);
+        })
+        .join(', ') || '—';
+      const invoiceSeriesList = fmtSeries(r.series, r.resolvedInvoiceSeries);
+      const proformaSeriesList = fmtSeries(r.proformaSeries, r.resolvedProformaSeries);
       const vatList = (r.taxes || []).map((x) => `${escapeHtml(String(x.name || 'VAT'))} ${escapeHtml(String(x.percentage))}%`).join(', ') || '—';
       const readyBadge = r.ready
         ? `<span class="text-leaf font-semibold">${t('smartbill.ready')}</span>`
@@ -186,7 +195,8 @@ export default async function AdminPricing(container) {
       out.innerHTML = `
         <div class="rounded-xl border border-frost-deep bg-white p-4 space-y-1.5">
           <div>${t('smartbill.status')}: ${readyBadge}</div>
-          <div class="text-charcoal/80">${t('smartbill.series')}: <span class="font-mono">${seriesNames}</span></div>
+          <div class="text-charcoal/80">${t('smartbill.series')}: <span class="font-mono">${invoiceSeriesList}</span></div>
+          <div class="text-charcoal/80">${t('smartbill.seriesProforma')}: <span class="font-mono">${proformaSeriesList}</span></div>
           <div class="text-charcoal/80">${t('smartbill.vat')}: <span class="font-mono">${vatList}</span> ${r.hasExpectedVat ? '✓' : `<span class="text-mango">(${t('smartbill.vatMissing', { pct: r.expectedVatPercent })})</span>`}</div>
         </div>`;
     } catch (err) {
@@ -209,7 +219,7 @@ export default async function AdminPricing(container) {
       const r = await smartbillTestIssue();
       const line = (label, d) => {
         if (d.error) return `<div class="text-red-600">${escapeHtml(label)}: ✗ ${escapeHtml(d.error)}</div>`;
-        if (!d.series) return `<div class="text-mango">${escapeHtml(label)}: ${escapeHtml(t('smartbill.testIssueNoSeries'))}</div>`;
+        if (!d.series) return `<div class="text-mango">${escapeHtml(label)}: ${escapeHtml(d.seriesError || t('smartbill.testIssueNoSeries'))}</div>`;
         const cleaned = d.deleted === false
           ? `<span class="text-red-600 font-semibold"> — ${escapeHtml(d.STRAY || t('smartbill.testIssueStray'))}</span>`
           : `<span class="text-charcoal/60"> — ${escapeHtml(t('smartbill.testIssueCleaned'))}</span>`;

@@ -1412,6 +1412,7 @@ export default {
     ready: 'Ready to invoice',
     notReady: 'Needs configuration',
     series: 'Invoice series',
+    seriesProforma: 'Proforma series',
     vat: 'VAT rates',
     vatMissing: '{pct}% missing',
     testIssueBtn: 'Test document issue',

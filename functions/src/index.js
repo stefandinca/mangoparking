@@ -47,6 +47,7 @@ import {
   DEFAULT_VAT_PERCENT,
   PROFORMA_SERIES,
   INVOICE_SERIES,
+  matchSeries,
   buildInvoicePayload,
   checkBillingComplete,
   issueInvoice,
@@ -3498,16 +3499,18 @@ export const smartbillHealthcheck = onCall(
       : Array.isArray(taxes?.list) ? taxes.list
       : [];
     const hasExpectedVat = taxList.some((t) => Number(t?.percentage) === DEFAULT_VAT_PERCENT);
-    const hasInvoiceSeries = invoiceSeriesNames.includes(INVOICE_SERIES);
-    const hasProformaSeries = proformaSeriesNames.includes(PROFORMA_SERIES);
+    const resolvedInvoiceSeries = matchSeries(invoiceSeriesNames, INVOICE_SERIES);
+    const resolvedProformaSeries = matchSeries(proformaSeriesNames, PROFORMA_SERIES);
     return {
-      ready: hasInvoiceSeries && hasProformaSeries && hasExpectedVat,
+      ready: !!resolvedInvoiceSeries && !!resolvedProformaSeries && hasExpectedVat,
       expectedVatPercent: DEFAULT_VAT_PERCENT,
       hasExpectedVat,
       expectedInvoiceSeries: INVOICE_SERIES,
-      hasInvoiceSeries,
+      resolvedInvoiceSeries,
+      hasInvoiceSeries: !!resolvedInvoiceSeries,
       expectedProformaSeries: PROFORMA_SERIES,
-      hasProformaSeries,
+      resolvedProformaSeries,
+      hasProformaSeries: !!resolvedProformaSeries,
       series: invoiceSeriesNames,
       proformaSeries: proformaSeriesNames,
       taxes: taxList,
@@ -3536,22 +3539,23 @@ export const smartbillTestIssue = onCall(
     const issueDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC ok for a test)
     const report = { issueDate, proforma: {}, invoice: {} };
 
-    // Resolve the pinned series for each document type. Issuing into whatever
+    // Resolve the pinned series for each document type (case-insensitive —
+    // the account spells them 'MANGO'/p and 'Mango'/f). Issuing into whatever
     // series happens to exist would pollute a real numbering sequence, so a
     // missing pinned series is a hard per-slot error, not a fallback.
     let proformaSeries = null;
     let invoiceSeries = null;
     try {
       const names = seriesNames(await listSeries('p'));
-      if (names.includes(PROFORMA_SERIES)) proformaSeries = PROFORMA_SERIES;
-      else report.proforma.seriesError = `Proforma series '${PROFORMA_SERIES}' not on account — has: ${names.join(', ') || '(none)'}`;
+      proformaSeries = matchSeries(names, PROFORMA_SERIES);
+      if (!proformaSeries) report.proforma.seriesError = `Proforma series '${PROFORMA_SERIES}' not on account — has: ${names.join(', ') || '(none)'}`;
     } catch (err) {
       report.proforma.seriesError = err?.message || 'unknown';
     }
     try {
       const names = seriesNames(await listSeries('f'));
-      if (names.includes(INVOICE_SERIES)) invoiceSeries = INVOICE_SERIES;
-      else report.invoice.seriesError = `Invoice series '${INVOICE_SERIES}' not on account — has: ${names.join(', ') || '(none)'}`;
+      invoiceSeries = matchSeries(names, INVOICE_SERIES);
+      if (!invoiceSeries) report.invoice.seriesError = `Invoice series '${INVOICE_SERIES}' not on account — has: ${names.join(', ') || '(none)'}`;
     } catch (err) {
       report.invoice.seriesError = err?.message || 'unknown';
     }

@@ -29,12 +29,22 @@ const BASE = 'https://ws.smartbill.ro/SBORO/api';
 // at build time (see the plan's "locked decisions").
 export const DEFAULT_VAT_PERCENT = 21;
 
-// Series configured on the SmartBill account (both already started, numbering
-// continues from where they are). Names are case-sensitive: 'Mango' is the
-// proforma (estimate, type 'p') series, 'MANGO' the fiscal-invoice (type 'f')
-// series. The healthcheck verifies both exist before any document is issued.
-export const PROFORMA_SERIES = 'Mango';
-export const INVOICE_SERIES = 'MANGO';
+// Series configured on the SmartBill account, as reported by GET /series on
+// 2026-07-16: fiscal-invoice series 'Mango' (type 'f', nextNumber 60) and
+// proforma series 'MANGO' (type 'p', nextNumber 1). The two differ only by
+// case and the account also carries the company's other series (RENT, ACR,
+// TRO, OTP/...), so resolution is done case-insensitively WITHIN a document
+// type via matchSeries() — the exact account spelling is what gets sent when
+// issuing, so a later rename between casings keeps working.
+export const PROFORMA_SERIES = 'MANGO';
+export const INVOICE_SERIES = 'Mango';
+
+// Case-insensitive lookup of a series name in a list of account series names.
+// Returns the account's exact spelling (needed for issuing), or null.
+export function matchSeries(names, wanted) {
+  const w = String(wanted).toLowerCase();
+  return names.find((n) => String(n).toLowerCase() === w) || null;
+}
 
 function requireSecret(param, name) {
   const v = param.value();

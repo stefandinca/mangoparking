@@ -17,11 +17,15 @@
   user — this was the fix for the earlier proforma-rights blocker
   (`Lipsesc drepturile de: emitere proforma, acces serii`). Both functions
   redeployed to bind the new versions.
-- **Series pinned in code** (`functions/src/smartbill.js`): proforma series
-  **`Mango`** (type `p`), fiscal-invoice series **`MANGO`** (type `f`). Both
-  already started on the account; names are case-sensitive. The healthcheck
-  verifies both exist; `smartbillTestIssue` issues ONLY into these (missing
-  pinned series = hard error, no fallback to "first series found").
+- **Series pinned in code** (`functions/src/smartbill.js`): fiscal-invoice
+  series **`Mango`** (type `f`, nextNumber 60 at pin time), proforma series
+  **`MANGO`** (type `p`, nextNumber 1). ⚠️ The two names differ **only by
+  case**, and the casing on the account is the opposite of what was first
+  communicated — GET /series is the source of truth. Resolution is
+  case-insensitive within each document type (`matchSeries()`), so a rename
+  between casings keeps working; the account's exact spelling is what gets
+  sent when issuing. The healthcheck verifies both resolve; `smartbillTestIssue`
+  issues ONLY into these (missing series = hard per-slot error, no fallback).
 - **Phase 2 pre-flight (payload checkpoint): BUILT.** An admin-only
   `smartbillTestIssue` callable issues sample documents and deletes them, to
   confirm SmartBill accepts our payload shape before wiring the money path.
@@ -43,15 +47,18 @@
   proforma, acces serii (ACR).` → resolved by swapping the secrets to a
   full-rights user (2026-07-16, secret versions 2).
 
-## Account series (pinned 2026-07-16)
+## Account series (pinned 2026-07-16, from GET /series)
 
-| Document | Series name | SmartBill type | Code constant (`smartbill.js`) |
-|---|---|---|---|
-| Proforma (estimate) | **`Mango`** | `p` | `PROFORMA_SERIES` |
-| Fiscal invoice | **`MANGO`** | `f` | `INVOICE_SERIES` |
+| Document | Series name | SmartBill type | Next number at pin | Code constant (`smartbill.js`) |
+|---|---|---|---|---|
+| Fiscal invoice | **`Mango`** | `f` | 60 | `INVOICE_SERIES` |
+| Proforma (estimate) | **`MANGO`** | `p` | 1 | `PROFORMA_SERIES` |
 
-Both series were already started on the account — numbering continues, never
-reset. Names are case-sensitive and differ only by case: watch for typos.
+The names differ **only by case** (and the shared account also carries the
+company's other series: RENT, ACR, TRO, OTP/…). `matchSeries()` resolves the
+pinned name case-insensitively within each type and issuing always uses the
+account's exact spelling, so a cosmetic rename between casings won't break
+anything.
 
 ## Document model (decided 2026-07-16)
 

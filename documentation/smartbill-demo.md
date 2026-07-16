@@ -58,8 +58,9 @@ Admin → **`/admin/pricing`** → SmartBill card:
 
 Secrets are at **version 2** — swapped to a full-rights user, which resolved the
 earlier proforma-rights blocker (`Nu poti emite proforma. Lipsesc drepturile
-de: emitere proforma, acces serii (ACR).`). Account series are pinned in code:
-proforma **`Mango`** (type `p`), fiscal invoice **`MANGO`** (type `f`).
+de: emitere proforma, acces serii (ACR).`). Account series are pinned in code
+(per GET /series — note the casing): fiscal invoice **`Mango`** (type `f`),
+proforma **`MANGO`** (type `p`).
 
 > Scratch file for real values: `documentation/smartbill-creds.md` — gitignored,
 > never commit it. See `smartbill-doc.md` for the full state snapshot.
