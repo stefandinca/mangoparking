@@ -707,6 +707,7 @@ export default {
       locale: 'Language',
       uid: 'Account ID',
       vehicles: 'Vehicles',
+      plateFromBookings: 'from bookings',
       billing: 'Billing details',
       billingType: 'Type',
       billingName: 'Name / Company',

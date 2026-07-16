@@ -134,10 +134,25 @@ function profileHtml(u) {
   `);
 }
 
-function vehiclesHtml(u) {
-  const list = Array.isArray(u.vehicles) ? u.vehicles : [];
-  if (!list.length) return sectionCard(t('admin.usersDetail.vehicles'), 0, emptyLine());
-  const items = list.map((v) => {
+// Same normalization the server uses (normalizePlate) so plates from different
+// sources dedupe: uppercase, strip spaces and hyphens.
+function normPlate(p) {
+  return String(p == null ? '' : p).toUpperCase().replace(/[\s-]/g, '');
+}
+
+// `extraPlates` are plates seen on this customer's reservations / credit
+// balances that aren't (yet) saved as a vehicle. Shown display-only, tagged, so
+// the plate is visible in this section immediately — before addPlateToProfile /
+// mergeGuestData persist it to users.vehicles (which only happens on a new
+// booking or the customer's next login).
+function vehiclesHtml(u, extraPlates = []) {
+  const saved = Array.isArray(u.vehicles) ? u.vehicles : [];
+  const savedNorm = new Set(saved.map((v) => normPlate(typeof v === 'string' ? v : v?.plate)));
+  const extra = [...new Set(extraPlates.map(normPlate))].filter((p) => p && !savedNorm.has(p));
+  const count = saved.length + extra.length;
+  if (!count) return sectionCard(t('admin.usersDetail.vehicles'), 0, emptyLine());
+
+  const savedItems = saved.map((v) => {
     const plate = typeof v === 'string' ? v : (v.plate || '');
     const meta = typeof v === 'object'
       ? [v.make, v.model].filter(Boolean).join(' ')
@@ -148,7 +163,13 @@ function vehiclesHtml(u) {
         ${meta ? `<span class="text-[12px] text-dim">${escapeHtml(meta)}</span>` : ''}
       </li>`;
   }).join('');
-  return sectionCard(t('admin.usersDetail.vehicles'), list.length, `<ul>${items}</ul>`);
+  const extraItems = extra.map((plate) => `
+      <li class="flex items-center justify-between gap-3 py-1.5 border-b border-frost-deep/60 last:border-0">
+        <span class="font-mono font-semibold text-[13px] text-charcoal">${escapeHtml(plate)}</span>
+        <span class="text-[11px] text-dim italic">${escapeHtml(t('admin.usersDetail.plateFromBookings'))}</span>
+      </li>`).join('');
+
+  return sectionCard(t('admin.usersDetail.vehicles'), count, `<ul>${savedItems}${extraItems}</ul>`);
 }
 
 function billingHtml(u) {
@@ -662,7 +683,7 @@ async function loadAndRender(user, body) {
   const staticHtml = `
     <div class="grid sm:grid-cols-2 gap-4">
       <div data-profile-slot>${profileHtml(user)}</div>
-      ${vehiclesHtml(user)}
+      <div data-vehicles-slot>${vehiclesHtml(user)}</div>
       ${billingHtml(user)}
       <div data-balance-slot>${sectionCard(t('admin.usersDetail.balance'), null, `<p class="text-[13px] text-dim">${escapeHtml(t('admin.usersDetail.loading'))}</p>`)}</div>
     </div>
@@ -726,6 +747,17 @@ async function loadAndRender(user, body) {
   if (canManageVouchers) wireVouchers(body, user, promos, redemptionsByCode, legacy);
   qs('[data-bookings-slot]', body).innerHTML = bookingsHtml(bookings);
   qs('[data-transactions-slot]', body).innerHTML = transactionsHtml(txns);
+
+  // Now that bookings + credit balance have loaded, surface the plates they
+  // carry in the Vehicles section (display-only, deduped against saved
+  // vehicles) so a guest reservation's plate shows even before it is persisted
+  // to users.vehicles.
+  const seenPlates = [
+    ...bookings.map((b) => b.licensePlate).filter(Boolean),
+    ...(balance && Array.isArray(balance.plates) ? balance.plates : []),
+  ];
+  const vslot = qs('[data-vehicles-slot]', body);
+  if (vslot) vslot.innerHTML = vehiclesHtml(user, seenPlates);
 }
 
 // ── Open-from-anywhere helpers ──────────────────────────────────────────

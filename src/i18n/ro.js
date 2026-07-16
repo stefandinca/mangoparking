@@ -708,6 +708,7 @@ export default {
       locale: 'Limbă',
       uid: 'ID cont',
       vehicles: 'Vehicule',
+      plateFromBookings: 'din rezervări',
       billing: 'Date facturare',
       billingType: 'Tip',
       billingName: 'Nume / Firmă',
