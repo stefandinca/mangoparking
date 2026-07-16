@@ -40,6 +40,7 @@ import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
 import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail } from './emails.js';
 import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
+import { SMARTBILL_SECRETS, listSeries, listTaxes, DEFAULT_VAT_PERCENT } from './smartbill.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
 export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated, onPromoVoucherAssigned } from './emails.js';
@@ -3445,6 +3446,49 @@ async function assertAdmin(request) {
   }
   return { uid, role };
 }
+
+// ── smartbillHealthcheck (callable) ─────────────────────────────────────
+// Phase 1 of the SmartBill integration (see documentation/roadmap/v.1.2_smartbill.md).
+// Admin-only. Exercises the two read-only SmartBill endpoints to confirm the
+// account is wired before any invoice is ever issued:
+//   - the configured invoice series exist (so `MNG`, or whatever we settle on,
+//     is present)
+//   - the expected VAT rate (21%) is available
+// Returns what SmartBill reports plus a `ready` flag. Throws a clear
+// permission/precondition error if the secrets aren't set, so a failed call
+// distinguishes "not configured yet" from "misconfigured account".
+export const smartbillHealthcheck = onCall(
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
+  async (request) => {
+    await assertAdmin(request);
+    let series;
+    let taxes;
+    try {
+      // Type 'f' = invoice series (fatura).
+      series = await listSeries('f');
+      taxes = await listTaxes();
+    } catch (err) {
+      throw new HttpsError('failed-precondition', `SmartBill: ${err?.message || 'unknown error'}`);
+    }
+    const seriesList = Array.isArray(series?.list) ? series.list
+      : Array.isArray(series?.series) ? series.series
+      : [];
+    const taxList = Array.isArray(taxes?.taxes) ? taxes.taxes
+      : Array.isArray(taxes?.list) ? taxes.list
+      : [];
+    const hasExpectedVat = taxList.some((t) => Number(t?.percentage) === DEFAULT_VAT_PERCENT);
+    return {
+      ready: seriesList.length > 0 && hasExpectedVat,
+      expectedVatPercent: DEFAULT_VAT_PERCENT,
+      hasExpectedVat,
+      series: seriesList,
+      taxes: taxList,
+      // Raw payloads kept so the admin can eyeball unexpected shapes — the
+      // documented response keys aren't fully pinned until we see the sandbox.
+      raw: { series, taxes },
+    };
+  }
+);
 
 // ── adminCreateUser (callable) ──────────────────────────────────────────
 // Admin creates a user with email + password directly, bypassing the

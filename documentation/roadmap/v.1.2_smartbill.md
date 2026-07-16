@@ -1,10 +1,15 @@
 # Mango Parking v1.2 — SmartBill Integration
 
-> **Status: 📋 PLANNED — not yet built** (as of 2026-07-01). This is a design
-> plan; none of it is in the codebase. There is no `functions/src/smartbill.js`,
-> no `smartbill` field on any Firestore doc, and no SmartBill API call anywhere.
-> Billing identity (PF/PJ, CUI via ANAF `lookupCui`) **is** captured at checkout
-> today — that's the only part that exists; invoicing itself is unimplemented.
+> **Status: 🟡 PHASE 1 SCAFFOLDED, rest PLANNED** (updated 2026-07-16). The REST
+> wrapper `functions/src/smartbill.js` and the admin-only `smartbillHealthcheck`
+> callable now exist, but are **inert until the three secrets are set** — nothing
+> issues an invoice yet. No `smartbill` field is written to any Firestore doc, and
+> no paid flow calls SmartBill. Billing identity (PF/PJ, CUI via ANAF `lookupCui`)
+> is captured at checkout as before. See "Phase 1" below for exactly what shipped.
+>
+> **Deploy note:** `smartbillHealthcheck` binds `SMARTBILL_USERNAME` / `SMARTBILL_TOKEN`
+> / `SMARTBILL_CIF`, so `firebase deploy --only functions` will fail until those
+> three secrets exist in Secret Manager. Set them first (Phase 1.1).
 
 ## Goal
 
@@ -56,6 +61,17 @@ Documentation: <https://api.smartbill.ro/>
 ---
 
 ## Phase 1 — Foundations (~0.5 day)
+
+> **Built 2026-07-16:** the wrapper (`functions/src/smartbill.js`) and the
+> healthcheck callable (§1.4) are in the codebase. What remains in Phase 1 is
+> operational: set the three secrets (§1.1) and run the healthcheck once. The
+> `smartbill` doc-shape (§1.3) is documented but not yet written by any flow —
+> that lands with Phase 2. Corrections found while building: the base host is
+> `ws.smartbill.ro` (§reconciliation note); `POST /invoice` returns series+number
+> but **not** a public PDF link (the authenticated `/invoice/pdf` URL needs Basic
+> auth — Phase 6's "public link" assumption is the V2 issue variant, to confirm);
+> and the cancel/reverse/delete verbs in the wrapper are the community-SDK
+> convention, flagged PROVISIONAL until the sandbox confirms them.
 
 ### 1.1 Secrets
 

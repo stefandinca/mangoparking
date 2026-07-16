@@ -143,6 +143,7 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 |---|---|---|---|
 | `lookupCui` | `cui.js:58` | public | ANAF CUI → company record, with a 24h `lookupCache` cache. Uses raw `https` (forced HTTP/1.1 + relaxed TLS) because ANAF resets `fetch`. |
 | `lookupFlightStatuses` | `flightStatus.js:141` | `assertStaff` | Batch flight-status lookup with a 15-min `flightStatusCache`. **Dormant** — returns `{ configured:false }` until `FLIGHT_API_KEY`/`FLIGHT_API_PROVIDER` are set. Providers: `aerodatabox`, `aviationstack`. |
+| `smartbillHealthcheck` | `index.js` (helpers in `smartbill.js`) | `assertAdmin` | Phase-1 SmartBill scaffolding: calls `GET /series` + `GET /tax` and returns `{ ready, series, taxes, hasExpectedVat }`. **Inert** — throws `failed-precondition` until `SMARTBILL_USERNAME`/`SMARTBILL_TOKEN`/`SMARTBILL_CIF` secrets are set. No invoice is issued anywhere yet. See [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md). |
 
 ---
 
