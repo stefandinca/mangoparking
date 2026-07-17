@@ -170,9 +170,10 @@ customer BookingHistory and the admin BookingDetailModal. Emails (Phase 6):
 
 **SmartBill invalidation (v1.2 Phase 4)** — `smartbillDeleteProformaSafe` +
 `smartbillCancelInvoiceSafe` (index.js): every cancel path drops the non-fiscal
-proforma (`smartbill.proformaDeleted`); an auto-issued invoice gets **anulare**
-(same Bucharest fiscal day) or **storno** via `/invoice/reverse` (stored under
-`smartbill.storno`, incl. SmartBill's public `documentViewUrl`). Wired into
+proforma (`smartbill.proformaDeleted`); an auto-issued invoice gets a **storno,
+always** — client decision, no anulare even same-day — via `/invoice/reverse`
+(stored under `smartbill.storno`, incl. SmartBill's public `documentViewUrl`).
+Wired into
 `cancelBookingWithRefund` (+ its no-show branch, unpaid only — paid no-shows
 forfeit and keep their invoice), `cancelPendingCreditOrder`, and the scheduled
 `markNoShows` / `expireStaleHolds`. Reprice (4b): `adminRepriceBooking` unpaid

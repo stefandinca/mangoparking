@@ -55,7 +55,6 @@ import {
   deleteInvoice,
   issueEstimate,
   deleteEstimate,
-  cancelInvoice,
   reverseInvoice,
   fetchDocumentPdf,
 } from './smartbill.js';
@@ -399,12 +398,6 @@ function bucharestToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(new Date());
 }
 
-function bucharestDateOf(iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
-}
-
 // Stamp a smartbill.* patch onto every given doc ref, swallowing failures.
 async function smartbillStamp(refs, patch, label) {
   await Promise.all(refs.map((ref) =>
@@ -510,34 +503,29 @@ async function smartbillDeleteProformaSafe({ sb, refs = [], label = '' }) {
   }
 }
 
-// Invalidate the fiscal invoice of a cancelled paid booking. RO rule (locked
-// decision): same fiscal day → anulare (cancel, keeps the number, no second
-// document); any later day → storno (reverse — a reversing invoice, mandatory,
-// deletion is not an option). Stamps smartbill.status = 'cancelled' | 'storno'
+// Invalidate the fiscal invoice of a cancelled paid booking — ALWAYS via
+// storno (reverse), even on the issue day. Client decision 2026-07-17: no
+// anulare; a reversing invoice is the safer trail in every case (the earlier
+// same-day-anulare branch is gone). Stamps smartbill.status = 'storno'
 // (+ smartbill.storno block) or 'cancel-failed'.
 async function smartbillCancelInvoiceSafe({ sb, refs = [], label = '' }) {
   const inv = sb?.invoice;
   if (!inv?.number) return;
   if (['cancelled', 'storno'].includes(sb?.status)) return; // idempotent
   try {
-    if (bucharestDateOf(inv.issuedAt) === bucharestToday()) {
-      await cancelInvoice(inv.series, inv.number);
-      await smartbillStamp(refs, { 'smartbill.status': 'cancelled', 'smartbill.lastError': null }, label);
-    } else {
-      const res = await reverseInvoice(inv.series, inv.number, bucharestToday());
-      await smartbillStamp(refs, {
-        'smartbill.storno': {
-          series: res?.series || inv.series,
-          number: res?.number ?? null,
-          issuedAt: new Date().toISOString(),
-          ...(res?.documentViewUrl ? { viewUrl: res.documentViewUrl } : {}),
-        },
-        'smartbill.status': 'storno',
-        'smartbill.lastError': null,
-      }, label);
-    }
+    const res = await reverseInvoice(inv.series, inv.number, bucharestToday());
+    await smartbillStamp(refs, {
+      'smartbill.storno': {
+        series: res?.series || inv.series,
+        number: res?.number ?? null,
+        issuedAt: new Date().toISOString(),
+        ...(res?.documentViewUrl ? { viewUrl: res.documentViewUrl } : {}),
+      },
+      'smartbill.status': 'storno',
+      'smartbill.lastError': null,
+    }, label);
   } catch (err) {
-    console.error(`smartbill invoice cancel failed (${label}):`, err?.message);
+    console.error(`smartbill invoice storno failed (${label}):`, err?.message);
     await smartbillStamp(refs, {
       'smartbill.status': 'cancel-failed',
       'smartbill.lastError': String(err?.message || err),

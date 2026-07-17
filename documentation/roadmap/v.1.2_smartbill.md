@@ -12,8 +12,9 @@
 > invoices are issued manually in the SmartBill UI, so `adminMarkOrderPaid`
 > issues nothing.
 >
-> **Phase 4 live (2026-07-17):** cancellation → anulare (same fiscal day) or
-> storno (later) of the auto-issued invoice + proforma deletion, wired into
+> **Phase 4 live (2026-07-17):** cancellation → **storno, always** (client
+> decision same day: no anulare even on the issue day — a reversing invoice is
+> the safer trail) of the auto-issued invoice + proforma deletion, wired into
 > `cancelBookingWithRefund`, `cancelPendingCreditOrder`, and the scheduled
 > `markNoShows` / `expireStaleHolds` (unpaid docs only — paid no-shows forfeit,
 > their invoice stands). **4b live:** reprice re-quote → proforma replaced;
@@ -262,12 +263,14 @@ Cashbook entries get the invoice number stamped on `cashEntries.invoiceNumber` f
 
 > **Built 2026-07-17.** Implemented as `smartbillDeleteProformaSafe` +
 > `smartbillCancelInvoiceSafe` (index.js): proforma deleted in every cancel
-> branch; invoice → anulare when issued the same Bucharest fiscal day, storno
-> (`POST /invoice/reverse`) otherwise, with the reversing invoice stored under
-> `smartbill.storno` (incl. the public `documentViewUrl` SmartBill returns).
-> Status becomes `cancelled` | `storno` | `cancel-failed`. The sketch below is
-> the original plan; the creditnote endpoint it names does not exist —
-> reverse is the storno primitive (verified live).
+> branch; invoice → **storno always** (`POST /invoice/reverse`), with the
+> reversing invoice stored under `smartbill.storno` (incl. the public
+> `documentViewUrl` SmartBill returns). The same-day-anulare branch shipped
+> briefly and was removed the same day per client decision — always storno,
+> it's the safer trail. Status becomes `storno` | `cancel-failed` (`cancelled`
+> may exist on docs from the hours the anulare branch was live). The sketch
+> below is the original plan; the creditnote endpoint it names does not
+> exist — reverse is the storno primitive (verified live).
 
 Original sketch (kept for reference) — `cancelBookingWithRefund`:
 

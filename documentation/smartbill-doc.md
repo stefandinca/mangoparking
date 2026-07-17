@@ -34,9 +34,9 @@
   proforma deleted in every branch (`cancelBookingWithRefund`,
   `cancelPendingCreditOrder`, scheduled `markNoShows`/`expireStaleHolds` —
   unpaid only; paid no-shows forfeit and keep their invoice); auto-issued
-  invoice → **anulare** same fiscal day, **storno** (`/invoice/reverse`)
-  later, stored under `smartbill.storno` with SmartBill's public
-  `documentViewUrl`. Reprice: unpaid re-quote replaces the proforma; paid
+  invoice → **storno always** (`/invoice/reverse`; client decision — no
+  anulare, even on the issue day), stored under `smartbill.storno` with
+  SmartBill's public `documentViewUrl`. Reprice: unpaid re-quote replaces the proforma; paid
   extension/overstay → proforma for the difference (`smartbill.extraProformas`,
   desk money → manual invoice); paid shortening → **partial storno**
   (negative-line invoice, `smartbill.partialStornos`) when we auto-issued the
