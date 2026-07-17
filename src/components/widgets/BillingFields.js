@@ -40,6 +40,28 @@ function loadRoGeo() {
 // free text, ANAF spellings, cedilla-vs-comma diacritics) against the dataset.
 const geoKey = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
+// Second-chance key: ANAF spells administrative names with prefixes the
+// dataset doesn't use ("Municipiul București", "Mun. Timișoara", "Com. X",
+// "SECTORUL 3" / "Sect. 3"). Strip them so autofill still lands in the
+// dropdowns; sector spellings normalize to the dataset's "Sector N".
+const geoKeyLoose = (s) => geoKey(
+  String(s || '')
+    .trim()
+    .replace(/^(municipiul|mun\.?|orașul|orasul|oraș|oras|or\.?|comuna|com\.?|satul|sat|județul|judetul|jud\.?)\s+/i, '')
+    .replace(/^sect(?:or(?:ul)?|\.)?\s*/i, 'sector ')
+);
+
+// Find `value` in a list of dataset names: exact key first, loose key second.
+// Returns the DATASET spelling (that's what gets stored) or undefined.
+const geoFind = (list, value) => {
+  if (!value) return undefined;
+  const k = geoKey(value);
+  const exact = list.find((x) => geoKey(x) === k);
+  if (exact) return exact;
+  const loose = geoKeyLoose(value);
+  return list.find((x) => geoKeyLoose(x) === loose);
+};
+
 // Markup for the abroad checkbox + the two selects. `names` picks the form
 // field names so several instances can coexist in one form. Saved values are
 // rendered as a provisional <option> so the form is meaningful pre-hydration.
@@ -83,7 +105,7 @@ function geoEls(scope, names) {
 
 function fillLocalityOptions(localitySel, list, keepValue) {
   const placeholder = localitySel.querySelector('option[value=""]')?.textContent || '';
-  const match = keepValue ? list.find((l) => geoKey(l) === geoKey(keepValue)) : '';
+  const match = keepValue ? (geoFind(list, keepValue) || '') : '';
   let htmlStr = `<option value="">${escapeHtml(placeholder)}</option>`
     + list.map((l) => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
   // A saved value outside the dataset (legacy free text) is kept as an extra
@@ -101,7 +123,7 @@ export async function wireGeoFields(scope, names) {
   const counties = Object.keys(data);
 
   const savedCounty = els.county.value;
-  const countyMatch = savedCounty ? counties.find((c) => geoKey(c) === geoKey(savedCounty)) : '';
+  const countyMatch = savedCounty ? (geoFind(counties, savedCounty) || '') : '';
   const countyPh = els.county.querySelector('option[value=""]')?.textContent || '';
   els.county.innerHTML = `<option value="">${escapeHtml(countyPh)}</option>`
     + counties.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
@@ -134,8 +156,7 @@ export async function setGeoValues(scope, names, { county = '', locality = '', a
     els.abroad.dispatchEvent(new Event('change', { bubbles: true }));
   }
   if (county) {
-    const match = Object.keys(data).find((c) => geoKey(c) === geoKey(county));
-    els.county.value = match || '';
+    els.county.value = geoFind(Object.keys(data), county) || '';
     fillLocalityOptions(els.locality, data[els.county.value] || [], locality);
   } else if (locality) {
     fillLocalityOptions(els.locality, data[els.county.value] || [], locality);
