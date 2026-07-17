@@ -18,9 +18,24 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
+import { SMARTBILL_SECRETS, deleteEstimate } from './smartbill.js';
 
 const REGION = 'europe-west1';
 const TZ = 'Europe/Bucharest';
+
+// v1.2 Phase 4: drop the (non-fiscal) SmartBill proforma of a doc that will
+// never be paid (no-show, expired hold). Best-effort — fiscal housekeeping
+// must never block the job.
+async function dropProforma(ref, data, label) {
+  const p = data?.smartbill?.proforma;
+  if (!p?.number || data?.smartbill?.proformaDeleted) return;
+  try {
+    await deleteEstimate(p.series, p.number);
+    await ref.update({ 'smartbill.proformaDeleted': true }).catch(() => {});
+  } catch (err) {
+    console.warn(`${label}: proforma delete failed`, err?.message);
+  }
+}
 
 function isoDayPart(iso) {
   // 'YYYY-MM-DD' interpreted in Europe/Bucharest, so the 7PM commuter
@@ -278,6 +293,7 @@ export const markNoShows = onSchedule(
     schedule: 'every 60 minutes',
     timeZone: TZ,
     region: REGION,
+    secrets: SMARTBILL_SECRETS,
   },
   async () => {
     const db = getFirestore();
@@ -341,6 +357,11 @@ export const markNoShows = onSchedule(
         },
         timestamp: nowIso,
       });
+      // Unpaid no-show collected nothing → drop its proforma. Paid no-shows
+      // forfeit the fee, so their fiscal invoice legitimately stands.
+      if (data.paymentStatus !== 'paid') {
+        await dropProforma(doc.ref, data, 'markNoShows');
+      }
       flagged++;
     }
     console.log(`markNoShows: flagged=${flagged} pastCutoff=${scanned} upcoming=${snap.size}`);
@@ -358,6 +379,7 @@ export const expireStaleHolds = onSchedule(
     schedule: '0 2 * * *',
     timeZone: TZ,
     region: REGION,
+    secrets: SMARTBILL_SECRETS,
   },
   async () => {
     const db = getFirestore();
@@ -375,6 +397,8 @@ export const expireStaleHolds = onSchedule(
         status: 'expired',
         expiredAt: new Date().toISOString(),
       });
+      // The order will never be paid → its (non-fiscal) proforma goes too.
+      await dropProforma(doc.ref, data, 'expireStaleHolds');
       expired++;
     }
     console.log(`expireStaleHolds: expired=${expired} scanned=${snap.size}`);

@@ -1,7 +1,7 @@
 # Mango Parking v1.2 — SmartBill Integration
 
-> **Status: 🟢 PHASES 1–2 DONE (documents issue on the paid flows); Phases 4–8 PLANNED**
-> (updated 2026-07-17). Phase 2 is live: `createPayment` issues a **proforma** on
+> **Status: 🟢 PHASES 1–2 + 4/4b DONE; Phases 5–8 PLANNED** (updated 2026-07-17).
+> Phase 2 is live and client-verified: `createPayment` issues a **proforma** on
 > every order, `netopiaCallback` issues the **fiscal invoice** on online payment
 > confirm (bookings, repays, credit packs), `adminCreateLongtermBooking`
 > (non-broker) + `grantCreditsForCash` issue proformas for desk sales. All via
@@ -10,8 +10,17 @@
 > `smartbill` field is rules-protected (server-written only). Phase 3 as
 > originally written is **superseded** by decision 1a — pay-at-location fiscal
 > invoices are issued manually in the SmartBill UI, so `adminMarkOrderPaid`
-> issues nothing. **First real documents pending verification** — see the Phase 2
-> checkpoint below.
+> issues nothing.
+>
+> **Phase 4 live (2026-07-17):** cancellation → anulare (same fiscal day) or
+> storno (later) of the auto-issued invoice + proforma deletion, wired into
+> `cancelBookingWithRefund`, `cancelPendingCreditOrder`, and the scheduled
+> `markNoShows` / `expireStaleHolds` (unpaid docs only — paid no-shows forfeit,
+> their invoice stands). **4b live:** reprice re-quote → proforma replaced;
+> paid extension / overstay → proforma for the difference (desk money → manual
+> invoice); paid shortening → **partial storno** (negative-line invoice) when
+> we auto-issued the original. All mutation verbs verified against the live
+> account 2026-07-17 (issue → cancel → restore → reverse → delete, cleaned up).
 >
 > **New in this pass — the Phase 2 pre-flight checkpoint.** Before wiring
 > SmartBill into the money path, `smartbillTestIssue` (admin callable, button on
@@ -251,7 +260,16 @@ Cashbook entries get the invoice number stamped on `cashEntries.invoiceNumber` f
 
 ## Phase 4 — Cancellation → storno (~0.5 day)
 
-`cancelBookingWithRefund`:
+> **Built 2026-07-17.** Implemented as `smartbillDeleteProformaSafe` +
+> `smartbillCancelInvoiceSafe` (index.js): proforma deleted in every cancel
+> branch; invoice → anulare when issued the same Bucharest fiscal day, storno
+> (`POST /invoice/reverse`) otherwise, with the reversing invoice stored under
+> `smartbill.storno` (incl. the public `documentViewUrl` SmartBill returns).
+> Status becomes `cancelled` | `storno` | `cancel-failed`. The sketch below is
+> the original plan; the creditnote endpoint it names does not exist —
+> reverse is the storno primitive (verified live).
+
+Original sketch (kept for reference) — `cancelBookingWithRefund`:
 
 ```js
 const existing = bookingDoc.data().smartbill;
@@ -268,7 +286,7 @@ if (!existing || existing.status === 'failed') {
 
 If the original was e-Factura, the storno/cancel also needs to submit to ANAF. Same `submitEinvoice` call, marked with `isCancellation: true` flag in our doc to distinguish.
 
-### 4b. Reprice (date/hour edits) → invoice adjustment (client-flagged 2026-07-16)
+### 4b. Reprice (date/hour edits) → invoice adjustment (client-flagged 2026-07-16, **built 2026-07-17**)
 
 The client flagged: a paid booking whose dates/hours are edited changes total, and
 the customer owes (or is owed) a difference. The **money side already exists**
@@ -437,10 +455,15 @@ Phases 1 → 2 → 3 are linear (each builds on the SmartBill wrapper). Phases 4
 Spot-checked the plan against the official docs (<https://ws.smartbill.ro/SBORO/api>,
 SmartBill help, and community SDKs). Confirmed: base URL `ws.smartbill.ro/SBORO/api`,
 HTTP Basic auth (email + token), and the `POST /invoice` → `{ series, number, url }`
-issue flow with the HTTP-200-plus-`errorText` failure convention. **Still to verify
-against the sandbox in Phase 1 before writing the storno branch** — SmartBill exposes
-invoice invalidation as four distinct operations that don't map one-to-one onto this
-plan's "same-day cancel vs prior-day credit note":
+issue flow with the HTTP-200-plus-`errorText` failure convention.
+
+**2026-07-17 — all four invalidation verbs verified against the live account**
+(issue → cancel → restore → reverse → delete, fully cleaned up, numbering
+intact): `PUT /invoice/cancel`, `PUT /invoice/restore`, `POST /invoice/reverse`
+(returns the storno's number + a public tokenized `documentViewUrl`),
+`DELETE /invoice` (last invoice only). Invoice numbers come back as zero-padded
+STRINGS (`"0064"`). Negative-line invoices (partial storno) are accepted.
+SmartBill's operations, for reference:
 
 - **cancel** — marks an *already-issued* invoice as cancelled (anulare) without deleting
   it; works for any past invoice, keeps the number in the fiscal trail.

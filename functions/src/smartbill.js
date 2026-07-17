@@ -153,11 +153,12 @@ export function invoicePdfUrl(seriesName, number) {
   return `${BASE}/invoice/pdf?${q.toString()}`;
 }
 
-// ── Mutation ops — PROVISIONAL: confirm HTTP method + param location against
-//    the sandbox before Phase 4 wires them into cancelBookingWithRefund. The
-//    method verbs below are the community-SDK convention, not yet re-verified.
-//    SmartBill distinguishes: cancel (anulare, keeps the number), reverse
-//    (stornare, issues a reversing invoice), delete (only the last invoice).
+// ── Mutation ops — VERIFIED against the live account 2026-07-17 (issue →
+//    cancel → restore → reverse → delete sequence, fully cleaned up).
+//    SmartBill distinguishes: cancel (anulare, keeps the number), restore
+//    (un-cancel), reverse (stornare — issues a reversing invoice), delete
+//    (only the LAST invoice; frees its number). Invoice numbers are
+//    zero-padded STRINGS ('0064') — pass them back verbatim.
 
 // PUT /invoice/cancel?cif=..&seriesname=..&number=..
 export async function cancelInvoice(seriesName, number) {
@@ -165,7 +166,15 @@ export async function cancelInvoice(seriesName, number) {
   return smartbillFetch(`/invoice/cancel?${q.toString()}`, { method: 'PUT' });
 }
 
-// POST /invoice/reverse — storno. issueDate is the ORIGINAL invoice's date.
+// PUT /invoice/restore?cif=..&seriesname=..&number=..  (un-cancels an anulare)
+export async function restoreInvoice(seriesName, number) {
+  const q = new URLSearchParams({ cif: sellerCif(), seriesname: seriesName, number: String(number) });
+  return smartbillFetch(`/invoice/restore?${q.toString()}`, { method: 'PUT' });
+}
+
+// POST /invoice/reverse — storno. issueDate is the STORNO's issue date (today,
+// Bucharest). Returns the reversing invoice's { series, number } plus a PUBLIC
+// tokenized documentViewUrl (no Basic auth needed — candidate for Phase 5).
 export async function reverseInvoice(seriesName, number, issueDate) {
   return smartbillFetch('/invoice/reverse', {
     method: 'POST',

@@ -158,6 +158,19 @@ invoices stay **manual** in the SmartBill UI (locked decision) —
 `smartbill.{proforma,invoice,status,lastError}` on `pendingOrders` / `bookings` /
 `tokenTransactions`; the field is server-written only (rules reject client writes).
 
+**SmartBill invalidation (v1.2 Phase 4)** — `smartbillDeleteProformaSafe` +
+`smartbillCancelInvoiceSafe` (index.js): every cancel path drops the non-fiscal
+proforma (`smartbill.proformaDeleted`); an auto-issued invoice gets **anulare**
+(same Bucharest fiscal day) or **storno** via `/invoice/reverse` (stored under
+`smartbill.storno`, incl. SmartBill's public `documentViewUrl`). Wired into
+`cancelBookingWithRefund` (+ its no-show branch, unpaid only — paid no-shows
+forfeit and keep their invoice), `cancelPendingCreditOrder`, and the scheduled
+`markNoShows` / `expireStaleHolds`. Reprice (4b): `adminRepriceBooking` unpaid
+re-quote replaces the proforma; paid extension and `adminChargeOverstay` append
+a difference proforma (`smartbill.extraProformas`); paid shortening appends a
+**partial storno** (negative-line invoice, `smartbill.partialStornos`) when the
+original was auto-issued. Statuses: `cancelled` | `storno` | `cancel-failed`.
+
 ---
 
 ## Firestore triggers

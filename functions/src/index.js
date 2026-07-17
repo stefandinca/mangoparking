@@ -55,6 +55,8 @@ import {
   deleteInvoice,
   issueEstimate,
   deleteEstimate,
+  cancelInvoice,
+  reverseInvoice,
 } from './smartbill.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
@@ -396,6 +398,19 @@ function bucharestToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(new Date());
 }
 
+function bucharestDateOf(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
+}
+
+// Stamp a smartbill.* patch onto every given doc ref, swallowing failures.
+async function smartbillStamp(refs, patch, label) {
+  await Promise.all(refs.map((ref) =>
+    ref.update(patch).catch((err) => console.warn(`smartbill stamp failed (${label}):`, err?.message))
+  ));
+}
+
 // One document line per sale, priced at the VAT-inclusive charged total —
 // vouchers/discounts make a days×perDay split disagree with what was charged.
 // Descriptions per client spec (2026-07-17): long-term references the
@@ -423,19 +438,28 @@ function creditsDocItems({ amount }) {
 // Issue one SmartBill document (kind: 'proforma' | 'invoice') and stamp the
 // outcome onto every given doc ref via dot-path updates (so an invoice stamp
 // never clobbers the earlier proforma block). NEVER throws.
-async function smartbillIssueSafe({ kind, billing, email, items, refs = [], label = '' }) {
-  const stamp = async (patch) => {
-    await Promise.all(refs.map((ref) =>
-      ref.update(patch).catch((err) => console.warn(`smartbill stamp failed (${label}):`, err?.message))
-    ));
-  };
+//   field  — smartbill.* key the block lands under (defaults to `kind`)
+//   append — arrayUnion the block instead of overwriting (extension proformas,
+//            partial stornos: several can accumulate on one booking)
+//   statusOnSuccess — smartbill.status value to set; null leaves status alone
+//            (adjustment documents must not mask 'invoiced')
+async function smartbillIssueSafe({
+  kind, billing, email, items, refs = [], label = '',
+  field = kind,
+  append = false,
+  statusOnSuccess = kind === 'invoice' ? 'invoiced' : 'proforma-issued',
+}) {
+  const stamp = (patch) => smartbillStamp(refs, patch, label);
+  // Adjustment documents (statusOnSuccess: null) leave smartbill.status alone
+  // on failure too — a failed extension proforma must not mask 'invoiced'.
+  const failPatch = (msg) => ({
+    ...(statusOnSuccess ? { 'smartbill.status': 'failed' } : {}),
+    'smartbill.lastError': msg,
+  });
   try {
     const complete = checkBillingComplete(billing || {});
     if (!complete.ok) {
-      await stamp({
-        'smartbill.status': 'failed',
-        'smartbill.lastError': `billing incomplete: ${complete.missing.join(', ')}`,
-      });
+      await stamp(failPatch(`billing incomplete: ${complete.missing.join(', ')}`));
       return null;
     }
     const series = await resolveSmartbillSeries();
@@ -454,15 +478,69 @@ async function smartbillIssueSafe({ kind, billing, email, items, refs = [], labe
       issuedAt: new Date().toISOString(),
     };
     await stamp({
-      [`smartbill.${kind}`]: block,
-      'smartbill.status': kind === 'invoice' ? 'invoiced' : 'proforma-issued',
+      [`smartbill.${field}`]: append ? FieldValue.arrayUnion(block) : block,
+      ...(statusOnSuccess ? { 'smartbill.status': statusOnSuccess } : {}),
+      // A replacement proforma revives the "there is a live proforma" state.
+      ...(field === 'proforma' && !append ? { 'smartbill.proformaDeleted': FieldValue.delete() } : {}),
       'smartbill.lastError': null,
     });
     return block;
   } catch (err) {
     console.error(`smartbill ${kind} issue failed (${label}):`, err?.message);
-    await stamp({ 'smartbill.status': 'failed', 'smartbill.lastError': String(err?.message || err) });
+    await stamp(failPatch(String(err?.message || err)));
     return null;
+  }
+}
+
+// ── Phase 4: document invalidation on cancellation ───────────────────────
+// Best-effort like issuance — fiscal cleanup must never block a cancellation.
+
+// Delete the (non-fiscal) proforma of a cancelled/expired order or booking.
+async function smartbillDeleteProformaSafe({ sb, refs = [], label = '' }) {
+  const p = sb?.proforma;
+  if (!p?.number || sb?.proformaDeleted) return;
+  try {
+    await deleteEstimate(p.series, p.number);
+    await smartbillStamp(refs, { 'smartbill.proformaDeleted': true }, label);
+  } catch (err) {
+    // Common benign cause: staff already converted/deleted it in the UI.
+    console.warn(`smartbill proforma delete failed (${label}):`, err?.message);
+    await smartbillStamp(refs, { 'smartbill.lastError': `proforma delete: ${err?.message || err}` }, label);
+  }
+}
+
+// Invalidate the fiscal invoice of a cancelled paid booking. RO rule (locked
+// decision): same fiscal day → anulare (cancel, keeps the number, no second
+// document); any later day → storno (reverse — a reversing invoice, mandatory,
+// deletion is not an option). Stamps smartbill.status = 'cancelled' | 'storno'
+// (+ smartbill.storno block) or 'cancel-failed'.
+async function smartbillCancelInvoiceSafe({ sb, refs = [], label = '' }) {
+  const inv = sb?.invoice;
+  if (!inv?.number) return;
+  if (['cancelled', 'storno'].includes(sb?.status)) return; // idempotent
+  try {
+    if (bucharestDateOf(inv.issuedAt) === bucharestToday()) {
+      await cancelInvoice(inv.series, inv.number);
+      await smartbillStamp(refs, { 'smartbill.status': 'cancelled', 'smartbill.lastError': null }, label);
+    } else {
+      const res = await reverseInvoice(inv.series, inv.number, bucharestToday());
+      await smartbillStamp(refs, {
+        'smartbill.storno': {
+          series: res?.series || inv.series,
+          number: res?.number ?? null,
+          issuedAt: new Date().toISOString(),
+          ...(res?.documentViewUrl ? { viewUrl: res.documentViewUrl } : {}),
+        },
+        'smartbill.status': 'storno',
+        'smartbill.lastError': null,
+      }, label);
+    }
+  } catch (err) {
+    console.error(`smartbill invoice cancel failed (${label}):`, err?.message);
+    await smartbillStamp(refs, {
+      'smartbill.status': 'cancel-failed',
+      'smartbill.lastError': String(err?.message || err),
+    }, label);
   }
 }
 
@@ -1685,7 +1763,7 @@ export const adminMarkOrderUnpaid = onCall(
 // the customerData blob (guest who placed the order while not signed in
 // and later returns).
 export const cancelPendingCreditOrder = onCall(
-  { region: 'europe-west1', cors: true },
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated');
@@ -1734,6 +1812,9 @@ export const cancelPendingCreditOrder = onCall(
       cancelledAt: nowIso,
       cancelledBy: callerUid,
     });
+
+    // v1.2 Phase 4: drop the order's (non-fiscal) proforma — nothing was paid.
+    await smartbillDeleteProformaSafe({ sb: order.smartbill, refs: [orderRef], label: `credit order ${orderId}` });
 
     await db.collection('auditLog').add({
       action: 'pending_order_cancelled',
@@ -1986,7 +2067,7 @@ export const cancelCashHandover = onCall(
 // (so the capacity map updates immediately), and write an audit log.
 // Staff/admin may cancel any booking; customers may cancel only their own.
 export const cancelBookingWithRefund = onCall(
-  { region: 'europe-west1', cors: true },
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated');
@@ -2071,6 +2152,13 @@ export const cancelBookingWithRefund = onCall(
           },
           timestamp: nowIso,
         });
+        // v1.2 Phase 4: paid no-shows forfeit the fee, so their fiscal invoice
+        // legitimately stands. An unpaid no-show collected nothing — drop its
+        // (non-fiscal) proforma.
+        if (booking.paymentStatus !== 'paid') {
+          const sbRefs = [bookingRef, ...(booking.paymentId ? [db.collection('pendingOrders').doc(booking.paymentId)] : [])];
+          await smartbillDeleteProformaSafe({ sb: booking.smartbill, refs: sbRefs, label: `no-show ${bookingId}` });
+        }
         return { ok: true, noShow: true };
       }
     }
@@ -2132,6 +2220,18 @@ export const cancelBookingWithRefund = onCall(
           ...(refundOutcome !== 'none' ? { paymentStatus: 'refund-pending', refundRequestedAt: nowIso } : {}),
         })
         .catch((err) => console.warn('pendingOrders cancel mirror failed:', err?.message));
+    }
+
+    // v1.2 Phase 4: invalidate the SmartBill documents. The (non-fiscal)
+    // proforma is deleted in every branch; a fiscal invoice gets anulare
+    // (same fiscal day) or storno (later — mandatory under RO rules, the
+    // number can't just disappear). Money movement stays manual via the
+    // refund queue — this is the document trail only, and it never blocks
+    // the cancellation itself.
+    {
+      const sbRefs = [bookingRef, ...(booking.paymentId ? [db.collection('pendingOrders').doc(booking.paymentId)] : [])];
+      await smartbillDeleteProformaSafe({ sb: booking.smartbill, refs: sbRefs, label: `cancel ${bookingId}` });
+      await smartbillCancelInvoiceSafe({ sb: booking.smartbill, refs: sbRefs, label: `cancel ${bookingId}` });
     }
 
     await db.collection('auditLog').add({
@@ -3307,7 +3407,7 @@ export const checkInWithCredits = onCall(
 // records a cash-drawer entry when paid in cash, and audit-logs. Money op →
 // agent gate (drivers excluded).
 export const adminChargeOverstay = onCall(
-  { region: 'europe-west1', cors: true },
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     const { uid } = await assertAgent(request);
     const { bookingId, amount, paidBy = 'cash' } = request.data || {};
@@ -3359,6 +3459,20 @@ export const adminChargeOverstay = onCall(
         bookingId,
       });
     }
+
+    // v1.2 Phase 4b: overstay is desk-collected money → proforma for the
+    // charge (the fiscal invoice for pay-at-location money stays manual).
+    await smartbillIssueSafe({
+      kind: 'proforma',
+      field: 'extraProformas',
+      append: true,
+      statusOnSuccess: null,
+      billing: b.billing,
+      email: b.contact?.email,
+      items: [{ name: `Servicii parcare conform rezervării ${b.code || bookingId} - depășire`, quantity: 1, price: amt, code: 'PARK-LT' }],
+      refs: [ref],
+      label: `overstay ${bookingId}`,
+    });
 
     await db.collection('auditLog').add({
       action: 'booking_overstay_charged',
@@ -3428,7 +3542,7 @@ export const previewBookingReprice = onCall(
 //     queue (`pendingRefundAmount`). The booking stays check-out-able.
 // Money op → agent gate (drivers excluded).
 export const adminRepriceBooking = onCall(
-  { region: 'europe-west1', cors: true },
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     const { uid } = await assertAgent(request);
     const { bookingId, newDropoffAt, newPickupAt, paidBy = 'cash' } = request.data || {};
@@ -3494,6 +3608,20 @@ export const adminRepriceBooking = onCall(
         payload: { requote: true, newDropoff, newPickupAt, days: newCalc.days, oldTotal, newTotal: newCalc.expected },
         timestamp: nowIso,
       });
+      // v1.2 Phase 4b: the payment request changed → replace the proforma
+      // (delete the old non-fiscal one, issue a fresh one at the new total).
+      {
+        const sbRefs = [ref, ...(b.paymentId ? [db.collection('pendingOrders').doc(b.paymentId)] : [])];
+        await smartbillDeleteProformaSafe({ sb: b.smartbill, refs: sbRefs, label: `requote ${bookingId}` });
+        await smartbillIssueSafe({
+          kind: 'proforma',
+          billing: b.billing,
+          email: b.contact?.email,
+          items: longTermDocItems({ bookingCode: b.code, amount: newCalc.expected }),
+          refs: sbRefs,
+          label: `requote ${bookingId}`,
+        });
+      }
       return { ok: true, requote: true, difference, days: newCalc.days, perDay: newCalc.perDay, newTotal: newCalc.expected };
     }
 
@@ -3528,11 +3656,43 @@ export const adminRepriceBooking = onCall(
           bookingId,
         });
       }
+
+      // v1.2 Phase 4b: the extension is desk-collected money → proforma for
+      // the difference (fiscal invoice for pay-at-location money is manual).
+      await smartbillIssueSafe({
+        kind: 'proforma',
+        field: 'extraProformas',
+        append: true,
+        statusOnSuccess: null,
+        billing: b.billing,
+        email: b.contact?.email,
+        items: [{ name: `Servicii parcare conform rezervării ${b.code || bookingId} - extindere`, quantity: 1, price: difference, code: 'PARK-LT' }],
+        refs: [ref],
+        label: `extension ${bookingId}`,
+      });
     } else if (difference < 0) {
       patch.pendingRefundAmount = (Number(b.pendingRefundAmount) || 0) + Math.abs(difference);
       patch.pendingRefundReason = 'reprice-shortened';
       patch.pendingRefundCreatedAt = nowIso;
       await ref.update(patch);
+
+      // v1.2 Phase 4b: shortened paid stay. If WE issued the fiscal invoice
+      // (online-paid), adjust it with a partial storno — an invoice with a
+      // negative line (verified against the account 2026-07-17). Desk-paid
+      // bookings have no auto invoice; staff adjust theirs manually.
+      if (b.smartbill?.invoice?.number) {
+        await smartbillIssueSafe({
+          kind: 'invoice',
+          field: 'partialStornos',
+          append: true,
+          statusOnSuccess: null,
+          billing: b.billing,
+          email: b.contact?.email,
+          items: [{ name: `Storno parțial - Servicii parcare conform rezervării ${b.code || bookingId}`, quantity: 1, price: difference, code: 'PARK-LT' }],
+          refs: [ref],
+          label: `partial storno ${bookingId}`,
+        });
+      }
     } else {
       await ref.update(patch);
     }

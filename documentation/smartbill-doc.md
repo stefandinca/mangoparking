@@ -30,8 +30,20 @@
   (button on `/admin/pricing`) issues + deletes sample documents. Drafts are
   number-less (SmartBill numbers at fiscalization) → each run leaves a ciornă
   to delete manually (Facturi → Ciorne).
-- **Phase 2 real wiring: DONE (2026-07-17), first real documents pending
-  verification.** `smartbillIssueSafe` (index.js) issues: **proforma** on every
+- **Phase 4 + 4b: DONE (2026-07-17).** Cancellation invalidates the documents:
+  proforma deleted in every branch (`cancelBookingWithRefund`,
+  `cancelPendingCreditOrder`, scheduled `markNoShows`/`expireStaleHolds` —
+  unpaid only; paid no-shows forfeit and keep their invoice); auto-issued
+  invoice → **anulare** same fiscal day, **storno** (`/invoice/reverse`)
+  later, stored under `smartbill.storno` with SmartBill's public
+  `documentViewUrl`. Reprice: unpaid re-quote replaces the proforma; paid
+  extension/overstay → proforma for the difference (`smartbill.extraProformas`,
+  desk money → manual invoice); paid shortening → **partial storno**
+  (negative-line invoice, `smartbill.partialStornos`) when we auto-issued the
+  original. All verbs verified live 2026-07-17; statuses now include
+  `cancelled` | `storno` | `cancel-failed`; `smartbill.proformaDeleted` marks
+  a dropped proforma.
+- **Phase 2 real wiring: DONE (2026-07-17), client-verified.** `smartbillIssueSafe` (index.js) issues: **proforma** on every
   order (`createPayment`; `adminCreateLongtermBooking` non-broker;
   `grantCreditsForCash`; skipped when a voucher covers the full amount) and
   **fiscal invoice** on online payment confirm (`netopiaCallback` — new
@@ -183,14 +195,14 @@ The two callables are deployed and live. The frontend buttons are on `origin/mai
    - a desk reservation + a desk credit sale → proforma each, no auto invoice;
    - a PJ order → regCom/locality present on the document;
    - delete any leftover test ciorne (Facturi → Ciorne).
-4. **Phase 4 — storno on cancel/refund** (`cancelBookingWithRefund`,
-   reprice-shortened) + **4b reprice adjustments** (difference invoice on
-   extension; proforma re-issue on unpaid reprice) — verify SmartBill's partial
-   reverse convention first.
-5. **Phase 5/6 — surfacing**: PDF access for admin + customer (SmartBill PDF
-   endpoints need Basic auth → proxy via callable), invoice link/number in
-   confirmation emails (`/document/send` or link param), invoice column in
-   cashbook.
+4. ~~Phase 4 — storno on cancel/refund + 4b reprice adjustments~~ **done
+   2026-07-17** (see TL;DR). Verify once with a real cancellation of a paid
+   test booking: expect anulare/storno visible in SmartBill + proforma gone.
+5. **Phase 5/6 — surfacing** (next): PDF access for admin + customer. Note:
+   `/invoice/reverse` returns a PUBLIC tokenized `documentViewUrl` — check
+   whether a similar public link exists for plain invoices (V2 issue variant
+   or `/document/...`); otherwise proxy the authenticated PDF via a callable.
+   Then invoice link/number in confirmation emails, invoice column in cashbook.
 6. **Phase 7/8 — retry queue for `smartbill.status='failed'` docs; e-Factura**
    (B2B VAT payers; needs `isVatPayer` persisted on PJ billing — currently not
    stored by `readBilling`, comes from `lookupCui` at capture time).
