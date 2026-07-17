@@ -20,6 +20,13 @@ export const REPAY_ORDER_URL =
   import.meta.env.VITE_REPAY_ORDER_URL
   || 'https://repayorder-zddpe6b7fa-ew.a.run.app';
 
+// SmartBill document PDF proxy (v1.2 Phase 5) — GET with ?order=|?booking=|?tx=
+// (+ &doc=invoice|proforma|storno). Authorization is possession of the
+// unguessable doc id, same trust model as the /pay repay link.
+export const INVOICE_PDF_URL =
+  import.meta.env.VITE_INVOICE_PDF_URL
+  || 'https://invoicepdf-zddpe6b7fa-ew.a.run.app';
+
 // ── Contact (public, operating location — the parking lot itself) ──
 // Corbeanca is adjacent to Otopeni (~5 km from Henri Coandă Airport); site copy
 // still references "Aeroportul Otopeni" as the destination served via shuttle.

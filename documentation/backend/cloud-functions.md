@@ -158,6 +158,16 @@ invoices stay **manual** in the SmartBill UI (locked decision) —
 `smartbill.{proforma,invoice,status,lastError}` on `pendingOrders` / `bookings` /
 `tokenTransactions`; the field is server-written only (rules reject client writes).
 
+**SmartBill PDF access (v1.2 Phase 5)** — `invoicePdf` (HTTP GET, binds the
+SmartBill secrets) streams a document PDF from SmartBill so clients never need
+credentials: `?order=|?booking=|?tx=<doc id>` + `&doc=invoice|proforma|storno`.
+Authorization is possession of the unguessable Firestore id (same model as the
+`/pay` repay link) — errors are a flat 404. Frontend: `INVOICE_PDF_URL`
+(constants.js) + `invoicePdfLink()` (invoiceService.js); links render in the
+customer BookingHistory and the admin BookingDetailModal. Emails (Phase 6):
+`booking-longterm-confirm` and `credit-purchase` carry `params.invoiceUrl` /
+`params.proformaUrl` — the Brevo templates must render the buttons.
+
 **SmartBill invalidation (v1.2 Phase 4)** — `smartbillDeleteProformaSafe` +
 `smartbillCancelInvoiceSafe` (index.js): every cancel path drops the non-fiscal
 proforma (`smartbill.proformaDeleted`); an auto-issued invoice gets **anulare**

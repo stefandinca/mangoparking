@@ -12,6 +12,7 @@ import { confirmModal } from '../../components/core/Modal.js';
 import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
+import { invoicePdfLink } from '../../services/invoiceService.js';
 
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
 const cancelPendingCreditOrderFn = httpsCallable(functions, 'cancelPendingCreditOrder');
@@ -217,6 +218,17 @@ function renderBookingRow(b, locale) {
   // Cancel is allowed only for upcoming bookings; refund branch is decided
   // server-side so we don't show different copy here.
   const canCancel = b.status === 'upcoming';
+  // SmartBill document links (v1.2 Phase 5): fiscal invoice when auto-issued
+  // (online-paid), otherwise the proforma; a storno link joins on cancellation.
+  const sb = b.smartbill || {};
+  const docLinks = [
+    sb.invoice?.number ? { doc: 'invoice', label: t('invoice.download') }
+      : (sb.proforma?.number && !sb.proformaDeleted) ? { doc: 'proforma', label: t('invoice.downloadProforma') }
+      : null,
+    sb.storno?.number ? { doc: 'storno', label: t('invoice.downloadStorno') } : null,
+  ].filter(Boolean)
+    .map((l) => `<a href="${invoicePdfLink({ bookingId: b.id, doc: l.doc })}" target="_blank" rel="noopener" class="text-blueberry hover:underline text-[13px] font-semibold">${l.label}</a>`)
+    .join('');
   return `
     <div class="card-solid rounded-2xl p-5 mb-3">
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -232,8 +244,9 @@ function renderBookingRow(b, locale) {
             · ${t('account.leavingOn')} <span class="font-medium">${formatDate(pickup, locale)}</span>
           </p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
           ${typeof b.totalPrice === 'number' ? `<p class="font-mono font-semibold text-[15px]">${b.totalPrice} ${t('common.lei')}</p>` : ''}
+          ${docLinks}
           ${canCancel ? `<button data-cancel-booking="${b.id}" class="text-red-500 hover:text-red-600 text-[13px] font-semibold underline-offset-2 hover:underline transition-colors">${t('account.cancelBooking')}</button>` : ''}
         </div>
       </div>
@@ -263,7 +276,8 @@ function renderPendingCreditOrder(o, locale) {
             ${amount ? `· <span class="font-mono">${amount}</span>` : ''}
           </p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          ${o.smartbill?.proforma?.number && !o.smartbill?.proformaDeleted ? `<a href="${invoicePdfLink({ orderId: o.id, doc: 'proforma' })}" target="_blank" rel="noopener" class="text-blueberry hover:underline text-[13px] font-semibold">${t('invoice.downloadProforma')}</a>` : ''}
           <a href="${localePath('/pay')}?orderId=${encodeURIComponent(o.id)}" class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[13px] px-4 py-2 rounded-xl transition-colors">${t('account.payNow')}</a>
           <button data-cancel-order="${o.id}" class="text-red-500 hover:text-red-600 text-[13px] font-semibold underline-offset-2 hover:underline transition-colors">${t('account.cancelOrder')}</button>
         </div>

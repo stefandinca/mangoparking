@@ -1082,6 +1082,14 @@ export default {
     },
   },
 
+  // SmartBill document downloads (invoices / proformas)
+  invoice: {
+    documents: 'Documents',
+    download: 'Download invoice',
+    downloadProforma: 'Download proforma',
+    downloadStorno: 'Download reversal invoice (storno)',
+  },
+
   // Signup voucher
   voucher: {
     applied: 'Loyalty voucher applied: −{amount} lei',

@@ -1083,6 +1083,14 @@ export default {
     },
   },
 
+  // SmartBill document downloads (facturi / proforme)
+  invoice: {
+    documents: 'Documente',
+    download: 'Descarcă factura',
+    downloadProforma: 'Descarcă proforma',
+    downloadStorno: 'Descarcă factura storno',
+  },
+
   // Signup voucher
   voucher: {
     applied: 'Voucher fidelitate aplicat: −{amount} lei',
