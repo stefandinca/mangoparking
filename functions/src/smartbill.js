@@ -66,16 +66,32 @@ export function sellerCif() {
 // Core request helper. SmartBill's failure convention is the trap here: a
 // validation error comes back as HTTP 200 with `{ errorText: "...", number: 0 }`,
 // so the status code alone is NOT enough — always inspect errorText.
+//
+// Hard 10s timeout: this wrapper sits inside checkout (createPayment) and the
+// Netopia IPN. A hung SmartBill request must not stall a payment until the
+// function times out — on the IPN that would make Netopia redeliver and
+// re-enter fulfilment. Issuance is best-effort everywhere, so timing out and
+// stamping smartbill.status='failed' is strictly better than hanging.
+const SMARTBILL_TIMEOUT_MS = 10_000;
+
 async function smartbillFetch(path, { method = 'GET', body } = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: authHeader(),
-      Accept: 'application/json',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      signal: AbortSignal.timeout(SMARTBILL_TIMEOUT_MS),
+      headers: {
+        Authorization: authHeader(),
+        Accept: 'application/json',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch (err) {
+    throw new Error(err?.name === 'TimeoutError' || err?.name === 'AbortError'
+      ? `SmartBill: timeout after ${SMARTBILL_TIMEOUT_MS / 1000}s`
+      : `SmartBill: ${err?.message || 'network error'}`);
+  }
 
   const text = await res.text();
   let data;

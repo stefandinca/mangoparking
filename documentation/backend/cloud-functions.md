@@ -237,6 +237,11 @@ re-run doesn't double-send. Secret `BREVO_API_KEY` where they email.
   order, fiscal invoice on online payment confirm; pay-at-location invoices stay
   manual in the SmartBill UI. PDF links/emails, storno on cancel, retry queue and
   e-Factura are still planned (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
+- **IPN replay lease:** `netopiaCallback` claims the order transactionally
+  (`pendingOrders.ipnProcessingAt`, 5-min expiry, cleared on success/failure)
+  before fulfilment — concurrent or redelivered IPNs can't double-create the
+  booking/credits or mint a duplicate SmartBill invoice. SmartBill calls carry
+  a hard 10s timeout so a hung request can't stall checkout or the IPN.
 - **Netopia crypto:** the envelope build/encrypt/decrypt lives in `functions/src/netopia.js`
   (`NETOPIA_ENDPOINTS`, `encryptRequest`, `decryptIpn`, `buildRequestXml`, `crcSuccess/Error`).
   Sandbox vs live is chosen by `NETOPIA_ENV`.

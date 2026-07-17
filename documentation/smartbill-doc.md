@@ -225,6 +225,42 @@ The two callables are deployed and live. The frontend buttons are on `origin/mai
   The proforma series `MANGO` is brand new, so the first real proforma will be
   **MANGO 0001**; there is no earlier proforma sequence to continue.
 
+## Deep audit (2026-07-18) — findings, all fixed
+
+A full trace of every SmartBill-touching path (issuance, IPN, cancel, reprice,
+scheduled cleanup, billing capture) surfaced six defects, fixed same day:
+
+1. **No timeout on SmartBill HTTP calls** — a hung request stalled checkout /
+   the Netopia IPN until the 60s function kill (and a killed IPN means Netopia
+   redelivers). Now a hard **10s** `AbortSignal.timeout` in `smartbillFetch`;
+   the failure lands in `smartbill.lastError` like any other issue error.
+2. **IPN dedupe wasn't concurrency-safe** — the `status==='paid'` check is
+   read-then-act, so two concurrent deliveries could BOTH fulfil: duplicate
+   booking/credits and (since v1.2) a duplicate fiscal invoice. Now a
+   **transactional lease** (`pendingOrders.ipnProcessingAt`, 5-min expiry,
+   cleared on success and on fulfilment failure) claims the order before
+   fulfilment; a concurrent delivery gets a retry-later CRC.
+3. **Repay amount mismatch** — the proforma was issued at the standard price
+   but the repay invoice bills the discounted `repayAmount`. The repay path
+   now **replaces the proforma** at the charged amount (same rule as an
+   unpaid re-quote) before issuing the invoice.
+4. **One-sided proforma-deleted stamping** in scheduled cleanup — the
+   booking↔order mirror kept an undeleted-looking block, so the other sweep
+   re-attempted the delete. `dropProforma` now stamps the linked doc too.
+5. **`payLater` admin orders lacked `bookingCode`** — repay invoices fell back
+   to an extra booking read. The order now carries the code.
+6. **ANAF autofill didn't land in the dropdowns for prefixed spellings**
+   ("Municipiul București", "SECTORUL 3", "Mun. Timișoara") — a second-chance
+   loose match strips administrative prefixes and normalizes sector spellings
+   (frontend `geoKeyLoose`/`geoFind` in BillingFields.js).
+
+Non-issues verified while auditing: client booking edits use `updateDoc`
+(partial), so the `smartbill` rules guard can't break staff flows; all four
+`creditTokens` call sites destructure the new return shape; UserDetailModal
+wires the shared billing widget (geo dropdowns hydrate); `setFieldError`
+works on `<select>`; email/ops triggers don't re-fire on smartbill dot-path
+updates (create-triggers) and cancel-alert claims prevent double alerts.
+
 ## Known caveats
 
 - **Draft invoices can't be auto-deleted** via API (no fiscal number to delete

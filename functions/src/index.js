@@ -1032,6 +1032,35 @@ export const netopiaCallback = onRequest(
 
     // action = 'confirmed' or 'confirmed_pending' on success, 'canceled' / 'credit' on others.
     if ((action === 'confirmed' || action === 'paid') && errorCode === '0') {
+      // Replay/concurrency lease. Netopia redelivers IPNs, and the plain
+      // status==='paid' check above can't stop two deliveries running the
+      // fulfilment CONCURRENTLY (each reads pre-paid state before the other
+      // finishes) — which would double-create the booking / double-credit
+      // the tokens and, since v1.2, mint a duplicate fiscal invoice. Claim
+      // the order transactionally; a stale claim (crashed run) expires after
+      // 5 minutes so an order can never get stuck unpaid.
+      const IPN_LEASE_MS = 5 * 60 * 1000;
+      let claim;
+      try {
+        claim = await db.runTransaction(async (tx) => {
+          const claimSnap = await tx.get(orderRef);
+          if (!claimSnap.exists) return 'missing';
+          const d = claimSnap.data();
+          if (d.status === 'paid') return 'paid';
+          const leaseAt = Date.parse(d.ipnProcessingAt || '') || 0;
+          if (Date.now() - leaseAt < IPN_LEASE_MS) return 'busy';
+          tx.update(orderRef, { ipnProcessingAt: new Date().toISOString() });
+          return 'claimed';
+        });
+      } catch (err) {
+        console.error('IPN lease transaction failed:', err?.message);
+        return res.status(500).send(crcError('0x06', 'lease failed'));
+      }
+      if (claim === 'paid') return res.status(200).send(crcSuccess());
+      if (claim === 'missing') return res.status(404).send(crcError('0x05', 'unknown order'));
+      // Another delivery is mid-fulfilment — tell Netopia to come back; by
+      // then the order is either paid (→ success) or the lease has expired.
+      if (claim === 'busy') return res.status(500).send(crcError('0x06', 'processing, retry later'));
       try {
         const nowIso = new Date().toISOString();
         const isRepay = pending.paymentMethod === 'pay-at-pickup' && pending.bookingId;
@@ -1085,6 +1114,7 @@ export const netopiaCallback = onRequest(
               ? { amount: Number(pending.repayAmount) }
               : {}),
             repayInProgress: FieldValue.delete(),
+            ipnProcessingAt: FieldValue.delete(),
           });
           // v1.2: online payment confirmed → fiscal invoice (the proforma was
           // issued at order time). Repays charge the discounted repayAmount.
@@ -1101,12 +1131,28 @@ export const netopiaCallback = onRequest(
                 invoiceBookingCode = bs.exists ? (bs.data().code || null) : null;
               } catch (_) { /* line falls back to the generic wording */ }
             }
+            const sbRefs = [db.collection('bookings').doc(bookingId), orderRef];
+            // A repay charges the DISCOUNTED amount while the proforma was
+            // issued at the standard price — replace it so proforma and
+            // invoice agree (same rule as an unpaid re-quote).
+            if (isRepay && pending.smartbill?.proforma?.number
+                && Number(pending.amount) !== chargedForInvoice) {
+              await smartbillDeleteProformaSafe({ sb: pending.smartbill, refs: sbRefs, label: `repay requote ${orderId}` });
+              await smartbillIssueSafe({
+                kind: 'proforma',
+                billing: pending.customerData?.billing,
+                email: pending.customerData?.email,
+                items: longTermDocItems({ bookingCode: invoiceBookingCode, amount: chargedForInvoice }),
+                refs: sbRefs,
+                label: `repay requote ${orderId}`,
+              });
+            }
             await smartbillIssueSafe({
               kind: 'invoice',
               billing: pending.customerData?.billing,
               email: pending.customerData?.email,
               items: longTermDocItems({ bookingCode: invoiceBookingCode, amount: chargedForInvoice }),
-              refs: [db.collection('bookings').doc(bookingId), orderRef],
+              refs: sbRefs,
               label: `IPN ${orderId}`,
             });
           }
@@ -1147,6 +1193,7 @@ export const netopiaCallback = onRequest(
             paymentStatus: 'paid',
             paidAt: nowIso,
             paidBy: 'netopia',
+            ipnProcessingAt: FieldValue.delete(),
           });
           // v1.2: online payment confirmed → fiscal invoice (the proforma was
           // issued at order time by createPayment).
@@ -1184,6 +1231,9 @@ export const netopiaCallback = onRequest(
         return res.status(200).send(crcSuccess());
       } catch (err) {
         console.error('Fulfilment failed:', err);
+        // Free the lease so Netopia's next redelivery retries immediately
+        // instead of waiting out the 5-minute expiry.
+        await orderRef.update({ ipnProcessingAt: FieldValue.delete() }).catch(() => {});
         return res.status(500).send(crcError('0x06', 'fulfilment failed'));
       }
     }
@@ -2800,6 +2850,9 @@ export const adminCreateLongtermBooking = onCall(
         amount: total,
         totalPrice: total,
         days: d,
+        // Same reservation number as the booking — the IPN invoice line reads
+        // it from here on an online repay (avoids the fallback booking read).
+        bookingCode,
         startDate: dropoffAt,
         endDate: pickupAt,
         dropoffAt,

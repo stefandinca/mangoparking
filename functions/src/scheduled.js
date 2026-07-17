@@ -25,13 +25,16 @@ const TZ = 'Europe/Bucharest';
 
 // v1.2 Phase 4: drop the (non-fiscal) SmartBill proforma of a doc that will
 // never be paid (no-show, expired hold). Best-effort — fiscal housekeeping
-// must never block the job.
-async function dropProforma(ref, data, label) {
+// must never block the job. `mirrorRef` is the linked order/booking doc that
+// carries the SAME proforma block — stamp it too, or the other sweep would
+// re-attempt the delete against a document that's already gone.
+async function dropProforma(ref, data, label, mirrorRef = null) {
   const p = data?.smartbill?.proforma;
   if (!p?.number || data?.smartbill?.proformaDeleted) return;
   try {
     await deleteEstimate(p.series, p.number);
     await ref.update({ 'smartbill.proformaDeleted': true }).catch(() => {});
+    if (mirrorRef) await mirrorRef.update({ 'smartbill.proformaDeleted': true }).catch(() => {});
   } catch (err) {
     console.warn(`${label}: proforma delete failed`, err?.message);
   }
@@ -360,7 +363,8 @@ export const markNoShows = onSchedule(
       // Unpaid no-show collected nothing → drop its proforma. Paid no-shows
       // forfeit the fee, so their fiscal invoice legitimately stands.
       if (data.paymentStatus !== 'paid') {
-        await dropProforma(doc.ref, data, 'markNoShows');
+        await dropProforma(doc.ref, data, 'markNoShows',
+          data.paymentId ? db.collection('pendingOrders').doc(data.paymentId) : null);
       }
       flagged++;
     }
@@ -398,7 +402,8 @@ export const expireStaleHolds = onSchedule(
         expiredAt: new Date().toISOString(),
       });
       // The order will never be paid → its (non-fiscal) proforma goes too.
-      await dropProforma(doc.ref, data, 'expireStaleHolds');
+      await dropProforma(doc.ref, data, 'expireStaleHolds',
+        data.bookingId ? db.collection('bookings').doc(data.bookingId) : null);
       expired++;
     }
     console.log(`expireStaleHolds: expired=${expired} scanned=${snap.size}`);
