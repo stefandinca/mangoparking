@@ -153,24 +153,6 @@ export function invoicePdfUrl(seriesName, number) {
   return `${BASE}/invoice/pdf?${q.toString()}`;
 }
 
-// Fetch a document's PDF bytes (type: 'invoice' | 'estimate') — the Phase 5
-// proxy uses this so customers/admins never need SmartBill credentials.
-// SmartBill signals errors as JSON even on the pdf endpoints, so sniff the
-// content type before trusting the bytes.
-export async function fetchDocumentPdf(type, seriesName, number) {
-  const q = new URLSearchParams({ cif: sellerCif(), seriesname: seriesName, number: String(number) });
-  const res = await fetch(`${BASE}/${type}/pdf?${q.toString()}`, {
-    headers: { Authorization: authHeader() },
-  });
-  const ct = res.headers.get('content-type') || '';
-  if (ct.includes('json')) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.errorText ? `SmartBill: ${data.errorText}` : `SmartBill PDF HTTP ${res.status}`);
-  }
-  if (!res.ok) throw new Error(`SmartBill PDF HTTP ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
-}
-
 // ── Mutation ops — VERIFIED against the live account 2026-07-17 (issue →
 //    cancel → restore → reverse → delete sequence, fully cleaned up).
 //    SmartBill distinguishes: cancel (anulare, keeps the number), restore

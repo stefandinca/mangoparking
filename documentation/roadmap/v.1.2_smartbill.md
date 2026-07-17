@@ -316,12 +316,12 @@ exist** and is out of scope for v1.2 — differences are settled at the desk.
 
 ## Phase 5 — Customer + admin PDF access (~0.5 day)
 
-> **Built 2026-07-17** — via a new `invoicePdf` HTTP proxy (SmartBill's PDF
-> endpoints need Basic auth and plain invoices have no public link, verified).
-> Authorization = possession of the unguessable doc id. Customer links live in
-> BookingHistory; admin links in BookingDetailModal ("Documente" row). The
-> cashbook invoice column was dropped (desk invoices are manual per decision
-> 1a). Reissue button: deferred to Phase 7 (retry queue).
+> **DROPPED — client decision 2026-07-17.** Documents are not surfaced in the
+> app: customers don't need them, staff check SmartBill directly. An
+> `invoicePdf` HTTP proxy + UI links shipped briefly and were reverted the
+> same day (implementation preserved in git history, commit `7d87fa4`).
+> Relevant finding if ever revived: plain SmartBill invoices have NO public
+> URL (verified) — only `/invoice/reverse` returns a tokenized view link.
 
 - `src/pages/account/BookingHistory.js` — each row: `Descarcă factura` link if `smartbill.pdfUrl`. Falls back to `—` when missing or failed.
 - `src/pages/admin/AdminCheckIns.js` + `AdminTransactions.js`:
@@ -333,14 +333,9 @@ exist** and is out of scope for v1.2 — differences are settled at the desk.
 
 ## Phase 6 — Email attachment via Brevo (~0.25 day)
 
-> **Wired code-side 2026-07-17** — `booking-longterm-confirm` (incl. repay) and
-> `credit-purchase` sends now carry `params.invoiceUrl` / `params.proformaUrl`
-> pointing at the `invoicePdf` proxy (NOT SmartBill's URL — the public-link
-> assumption below was wrong for plain invoices). The URLs are deterministic,
-> so the confirm email can embed them even though the invoice is stamped a few
-> seconds after the booking-created trigger fires. **Remaining manual step:**
-> edit the Brevo templates to render a "Descarcă factura" button from these
-> params.
+> **DROPPED — client decision 2026-07-17** (same as Phase 5: documents are not
+> sent to customers). The `invoiceUrl`/`proformaUrl` email params shipped
+> briefly and were removed; no Brevo template changes are needed.
 
 - Brevo templates `booking-longterm-confirm-ro/en` and `credit-purchase-ro/en` already render via the `mail` collection.
 - Pass `params.invoiceUrl` and `params.invoiceNumber` when writing the `mail` doc.

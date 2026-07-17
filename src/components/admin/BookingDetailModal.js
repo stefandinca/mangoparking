@@ -10,7 +10,6 @@ import { t, getLocale } from '../../i18n/index.js';
 import { openModal } from '../core/Modal.js';
 import { getDocument } from '../../firebase/db.js';
 import { openUserDetail } from './UserDetailModal.js';
-import { invoicePdfLink } from '../../services/invoiceService.js';
 
 function fmt(iso, locale) {
   if (!iso) return '—';
@@ -72,20 +71,6 @@ async function creatorLine(b, locale) {
   return t('bookingDetail.madeOnline', { date: when });
 }
 
-// SmartBill document links for the row() list — invoice (+ number), storno,
-// and the proforma while it still exists. Empty string → row() hides itself.
-function smartbillLinks(b) {
-  const esc = escapeHtml;
-  const sb = b.smartbill || {};
-  const link = (doc, label, blk) =>
-    `<a href="${esc(invoicePdfLink({ bookingId: b.id, doc }))}" target="_blank" rel="noopener" class="text-blueberry hover:underline">${esc(label)} <span class="font-mono">${esc(String(blk.series || ''))}${esc(String(blk.number || ''))}</span></a>`;
-  return [
-    sb.invoice?.number ? link('invoice', t('invoice.download'), sb.invoice) : '',
-    sb.storno?.number ? link('storno', t('invoice.downloadStorno'), sb.storno) : '',
-    (sb.proforma?.number && !sb.proformaDeleted) ? link('proforma', t('invoice.downloadProforma'), sb.proforma) : '',
-  ].filter(Boolean).join(' · ');
-}
-
 export function openBookingDetail(booking) {
   const b = booking || {};
   const locale = getLocale();
@@ -132,7 +117,6 @@ export function openBookingDetail(booking) {
         ${row(t('bookingDetail.total'), b.totalPrice != null ? `${Number(b.totalPrice)} ${esc(t('common.lei'))}` : '')}
         ${row(t('bookingDetail.checkedIn'), b.checkinTimestamp ? esc(fmt(b.checkinTimestamp, locale)) : '')}
         ${row(t('bookingDetail.checkedOut'), b.completedAt ? esc(fmt(b.completedAt, locale)) : '')}
-        ${row(t('invoice.documents'), smartbillLinks(b))}
         ${b.notes ? row(t('bookingDetail.notes'), esc(b.notes)) : ''}
       </div>
 

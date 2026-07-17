@@ -56,7 +56,6 @@ import {
   issueEstimate,
   deleteEstimate,
   reverseInvoice,
-  fetchDocumentPdf,
 } from './smartbill.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
@@ -4022,55 +4021,6 @@ export const smartbillTestIssue = onCall(
       && report.proformaCompany.issued === true
       && report.invoice.issued === true;
     return report;
-  }
-);
-
-// ── invoicePdf (HTTP GET) ───────────────────────────────────────────────
-// Phase 5: streams a SmartBill document PDF to the caller so neither the
-// customer nor the admin UI ever needs SmartBill credentials (the PDF
-// endpoints require Basic auth; there is no public link for plain invoices).
-//
-// Authorization is possession of the unguessable doc id — the same trust
-// model as the public /booking/return polling and the /pay repay link, and it
-// makes the email link work for guests with no account:
-//   ?order=<pendingOrders id>   | ?booking=<bookings id> | ?tx=<tokenTransactions id>
-//   &doc=invoice|proforma|storno   (default: invoice if present, else proforma)
-// Errors are a flat 404 — nothing about the doc's existence is leaked.
-export const invoicePdf = onRequest(
-  { cors: true, secrets: SMARTBILL_SECRETS },
-  async (req, res) => {
-    if (req.method !== 'GET') return res.status(405).send('Method not allowed');
-    const { order, booking, tx, doc } = req.query || {};
-    const db = getFirestore();
-    let snap = null;
-    try {
-      if (order) snap = await db.collection('pendingOrders').doc(String(order)).get();
-      else if (booking) snap = await db.collection('bookings').doc(String(booking)).get();
-      else if (tx) snap = await db.collection('tokenTransactions').doc(String(tx)).get();
-    } catch (_) { /* malformed id → same 404 below */ }
-    if (!snap || !snap.exists) return res.status(404).send('Not found');
-
-    const sb = snap.data().smartbill || {};
-    const kind = ['invoice', 'proforma', 'storno'].includes(String(doc))
-      ? String(doc)
-      : (sb.invoice?.number ? 'invoice' : 'proforma');
-    const block = kind === 'invoice' ? sb.invoice : kind === 'storno' ? sb.storno : sb.proforma;
-    if (!block?.number || (kind === 'proforma' && sb.proformaDeleted)) {
-      return res.status(404).send('Document not available (yet)');
-    }
-
-    try {
-      // Stornos are invoices too — only proformas live on /estimate.
-      const pdf = await fetchDocumentPdf(kind === 'proforma' ? 'estimate' : 'invoice', block.series, block.number);
-      const label = kind === 'proforma' ? 'Proforma' : kind === 'storno' ? 'Factura-storno' : 'Factura';
-      res.set('Content-Type', 'application/pdf');
-      res.set('Content-Disposition', `inline; filename="${label}-${block.series}${block.number}.pdf"`);
-      res.set('Cache-Control', 'private, max-age=300');
-      return res.send(pdf);
-    } catch (err) {
-      console.error('invoicePdf fetch failed:', err?.message);
-      return res.status(502).send('Document temporarily unavailable');
-    }
   }
 );
 

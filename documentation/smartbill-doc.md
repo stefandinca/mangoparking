@@ -198,23 +198,15 @@ The two callables are deployed and live. The frontend buttons are on `origin/mai
 4. ~~Phase 4 — storno on cancel/refund + 4b reprice adjustments~~ **done
    2026-07-17** (see TL;DR). Verify once with a real cancellation of a paid
    test booking: expect anulare/storno visible in SmartBill + proforma gone.
-5. ~~Phase 5/6 — surfacing~~ **done 2026-07-17** (plain invoices have no public
-   URL — verified — so a proxy was built):
-   - **`invoicePdf` HTTP function** streams the PDF from SmartBill; auth =
-     possession of the unguessable doc id (`?order=` / `?booking=` / `?tx=` +
-     `&doc=invoice|proforma|storno`), same trust model as `/pay`. Works for
-     guests; embeddable in emails BEFORE the invoice exists (early click →
-     graceful 404). Frontend base URL: `INVOICE_PDF_URL` in `constants.js`;
-     builder `invoicePdfLink()` in `invoiceService.js`.
-   - **Customer**: BookingHistory rows link invoice/proforma (+ storno);
-     pending credit orders link their proforma.
-   - **Admin**: BookingDetailModal shows a "Documente" row with all links.
-   - **Emails**: `booking-longterm-confirm` + `credit-purchase` now receive
-     `params.invoiceUrl` (online-paid) and `params.proformaUrl` — ⚠️ the
-     Brevo TEMPLATES must be edited (Brevo UI) to render download buttons
-     from these params; until then the params are simply unused.
-   - Cashbook invoice column: dropped — desk invoices are manual (decision 1a),
-     `cashEntries.invoiceNumber` never gets stamped.
+5. ~~Phase 5/6 — surfacing~~ **DROPPED, client decision 2026-07-17**: documents
+   are NOT surfaced in the app or in emails — customers don't need them and
+   staff consult SmartBill directly. The whole increment (an `invoicePdf` HTTP
+   proxy + UI links + `params.invoiceUrl`/`proformaUrl` email params) shipped
+   and was reverted the same day; the deployed `invoicePdf` function was
+   deleted. If the client ever changes their mind, the working implementation
+   is in git history (commit `7d87fa4`, reverted by the follow-up commit) —
+   note that plain SmartBill invoices have NO public URL (verified), which is
+   why the proxy existed. No Brevo template changes are needed.
 6. **Phase 7/8 — retry queue for `smartbill.status='failed'` docs; e-Factura**
    (B2B VAT payers; needs `isVatPayer` persisted on PJ billing — currently not
    stored by `readBilling`, comes from `lookupCui` at capture time).

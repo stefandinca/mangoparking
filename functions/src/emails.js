@@ -20,12 +20,6 @@ import { templateId } from './emailTemplates.js';
 
 const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
 
-// v1.2 Phase 6: the invoicePdf proxy function (index.js) — streams SmartBill
-// PDFs keyed by the unguessable order/tx id, so the link works for guests too.
-// The URL is deterministic and safe to embed BEFORE the document exists (an
-// early click gets a graceful 404; the invoice lands seconds after payment).
-const INVOICE_PDF_URL = 'https://invoicepdf-zddpe6b7fa-ew.a.run.app';
-
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function normalizePlate(plate) {
@@ -273,13 +267,6 @@ export async function sendBookingConfirmationEmail(bookingId) {
       paid,
       payOnlineLink,
       discountPct,
-      // SmartBill document downloads (v1.2 Phase 6). Online-paid → fiscal
-      // invoice; everyone with an order gets the proforma. Desk-paid bookings
-      // have no auto invoice (issued manually), so invoiceUrl stays empty.
-      invoiceUrl: paid && booking.paidBy === 'netopia' && booking.paymentId
-        ? `${INVOICE_PDF_URL}/?order=${booking.paymentId}&doc=invoice` : '',
-      proformaUrl: booking.paymentId
-        ? `${INVOICE_PDF_URL}/?order=${booking.paymentId}&doc=proforma` : '',
     },
   });
   return result?.ok
@@ -320,8 +307,6 @@ export async function sendRepayPaidEmail(bookingId) {
       paid: true,
       payOnlineLink: '',
       discountPct: 0,
-      invoiceUrl: booking.paymentId ? `${INVOICE_PDF_URL}/?order=${booking.paymentId}&doc=invoice` : '',
-      proformaUrl: booking.paymentId ? `${INVOICE_PDF_URL}/?order=${booking.paymentId}&doc=proforma` : '',
     },
   });
 }
@@ -425,12 +410,12 @@ export const onTokenTransactionCreated = onDocumentCreated(
     }
 
     console.log(`onTokenTransactionCreated: handling type=${tx.type} plate=${tx.licensePlate} id=${event.params.id}`);
-    if (tx.type === 'purchase') return handlePurchase(tx, event.params.id);
+    if (tx.type === 'purchase') return handlePurchase(tx);
     if (tx.type === 'use') return handleUse(tx);
   }
 );
 
-async function handlePurchase(tx, txId) {
+async function handlePurchase(tx) {
   const recipient = await resolveRecipient({
     customerId: tx.customerId,
     licensePlate: tx.licensePlate,
@@ -466,11 +451,6 @@ async function handlePurchase(tx, txId) {
       paid,
       payOnlineLink,
       discountPct,
-      // SmartBill documents (v1.2 Phase 6) — both are stamped onto this
-      // tokenTransactions row: online purchases carry the fiscal invoice,
-      // desk sales the proforma (their invoice is manual).
-      invoiceUrl: txId && tx.source === 'netopia' ? `${INVOICE_PDF_URL}/?tx=${txId}&doc=invoice` : '',
-      proformaUrl: txId && tx.source === 'admin-cash' ? `${INVOICE_PDF_URL}/?tx=${txId}&doc=proforma` : '',
     },
   });
 }
