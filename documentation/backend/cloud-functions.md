@@ -143,7 +143,20 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 |---|---|---|---|
 | `lookupCui` | `cui.js:58` | public | ANAF CUI → company record, with a 24h `lookupCache` cache. Uses raw `https` (forced HTTP/1.1 + relaxed TLS) because ANAF resets `fetch`. |
 | `lookupFlightStatuses` | `flightStatus.js:141` | `assertStaff` | Batch flight-status lookup with a 15-min `flightStatusCache`. **Dormant** — returns `{ configured:false }` until `FLIGHT_API_KEY`/`FLIGHT_API_PROVIDER` are set. Providers: `aerodatabox`, `aviationstack`. |
-| `smartbillHealthcheck` | `index.js` (helpers in `smartbill.js`) | `assertAdmin` | Phase-1 SmartBill scaffolding: calls `GET /series` + `GET /tax` and returns `{ ready, series, taxes, hasExpectedVat }`. **Inert** — throws `failed-precondition` until `SMARTBILL_USERNAME`/`SMARTBILL_TOKEN`/`SMARTBILL_CIF` secrets are set. No invoice is issued anywhere yet. See [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md). |
+| `smartbillHealthcheck` | `index.js` (helpers in `smartbill.js`) | `assertAdmin` | Lists invoice + proforma series and taxes; `ready` requires the pinned `Mango` (type f) / `MANGO` (type p) series plus 21% VAT. See [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md). |
+| `smartbillTestIssue` | `index.js` | `assertAdmin` | Payload checkpoint: issues + deletes a PF proforma, a PJ proforma and a draft fiscal invoice. Number-less draft strays are flagged `STRAY` (delete manually: Facturi → Ciorne). |
+
+**SmartBill issuance on the paid flows (v1.2 Phase 2)** — via `smartbillIssueSafe`
+in `index.js` (never throws: a SmartBill failure stamps `smartbill.status='failed'`
++ `lastError`; the money flow always completes). `createPayment` issues a
+**proforma** on every order (skipped when a voucher covers the full amount);
+`netopiaCallback` issues the **fiscal invoice** on IPN success (new bookings,
+repays, credit packs); `adminCreateLongtermBooking` (non-broker) and
+`grantCreditsForCash` issue proformas for desk sales. Pay-at-location fiscal
+invoices stay **manual** in the SmartBill UI (locked decision) —
+`adminMarkOrderPaid` issues nothing. Outcomes land under
+`smartbill.{proforma,invoice,status,lastError}` on `pendingOrders` / `bookings` /
+`tokenTransactions`; the field is server-written only (rules reject client writes).
 
 ---
 
@@ -201,9 +214,10 @@ re-run doesn't double-send. Secret `BREVO_API_KEY` where they email.
   only records that a refund was processed out-of-band (Netopia panel / cash / card terminal).
   The JSON-REST "v2" migration that would automate this is planned, not built
   (see [../roadmap/v.1.4_netopia_v2_migration.md](../roadmap/v.1.4_netopia_v2_migration.md)).
-- **SmartBill invoicing is not wired.** Billing identity (PF/PJ, CUI via `lookupCui`) is
-  captured on orders/bookings but no invoice is generated
-  (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
+- **SmartBill invoicing (Phase 2) is live on the paid flows** — proforma on every
+  order, fiscal invoice on online payment confirm; pay-at-location invoices stay
+  manual in the SmartBill UI. PDF links/emails, storno on cancel, retry queue and
+  e-Factura are still planned (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
 - **Netopia crypto:** the envelope build/encrypt/decrypt lives in `functions/src/netopia.js`
   (`NETOPIA_ENDPOINTS`, `encryptRequest`, `decryptIpn`, `buildRequestXml`, `crcSuccess/Error`).
   Sandbox vs live is chosen by `NETOPIA_ENV`.

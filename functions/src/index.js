@@ -217,7 +217,7 @@ async function creditTokens({ packId, quantity, amount = 0, customerData, source
     }
   });
 
-  await db.collection('tokenTransactions').add({
+  const txRef = await db.collection('tokenTransactions').add({
     customerId: customerData.customerId || null,
     licensePlate: plate,
     type: 'purchase',
@@ -241,7 +241,7 @@ async function creditTokens({ packId, quantity, amount = 0, customerData, source
       .catch((err) => console.warn('billing profile cache failed:', err?.message));
   }
 
-  return docId;
+  return { balanceDocId: docId, txId: txRef.id };
 }
 
 // Pick the first available spot and flip it to `reserved`, then return
@@ -360,6 +360,107 @@ async function createBookingFromOrder(orderId, order) {
   return bookingRef.id;
 }
 
+// ── SmartBill v1.2 Phase 2: document issuance on the paid flows ──────────
+// Locked model (documentation/roadmap/v.1.2_smartbill.md): every order gets a
+// PROFORMA up front; online-confirmed payments (Netopia IPN / repay) also get
+// a FISCAL INVOICE. Pay-at-location money gets its invoice manually in the
+// SmartBill UI after collection, so adminMarkOrderPaid issues nothing.
+// A SmartBill failure must never break a money flow — issuance is best-effort
+// and the outcome lands on the source docs under `smartbill.*` (server-written
+// only; firestore.rules block the field from client writes).
+
+// Both pinned series must resolve or nothing may be issued — issuing into a
+// wrong series would pollute a real numbering sequence. Cached per instance;
+// the names only change if someone renames them in the SmartBill UI.
+let smartbillSeriesCache = null;
+async function resolveSmartbillSeries() {
+  if (smartbillSeriesCache) return smartbillSeriesCache;
+  const [f, p] = await Promise.all([listSeries('f'), listSeries('p')]);
+  const resolved = {
+    invoice: matchSeries(seriesNames(f), INVOICE_SERIES),
+    proforma: matchSeries(seriesNames(p), PROFORMA_SERIES),
+  };
+  if (!resolved.invoice || !resolved.proforma) {
+    throw new Error(`SmartBill series missing (invoice=${resolved.invoice}, proforma=${resolved.proforma})`);
+  }
+  smartbillSeriesCache = resolved;
+  return resolved;
+}
+
+// Documents carry the LOCAL fiscal date — at 01:00 in Bucharest the UTC date
+// is still yesterday, and a wrong issueDate is a fiscal defect, not a nit.
+function bucharestToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(new Date());
+}
+
+// One document line per sale, priced at the VAT-inclusive charged total —
+// vouchers/discounts make a days×perDay split disagree with what was charged.
+function longTermDocItems({ days, plate, amount }) {
+  const d = Number(days) || 1;
+  return [{
+    name: `Parcare termen lung ${d} ${d === 1 ? 'zi' : 'zile'} — ${plate || ''}`.trim().replace(/—$/, '').trim(),
+    quantity: 1,
+    price: Number(amount) || 0,
+    code: 'PARK-LT',
+  }];
+}
+
+function creditsDocItems({ quantity, amount }) {
+  const q = Number(quantity) || 1;
+  return [{
+    name: `Credite parcare ManGO — ${q} ${q === 1 ? 'credit' : 'credite'}`,
+    quantity: 1,
+    price: Number(amount) || 0,
+    code: 'PARK-CR',
+  }];
+}
+
+// Issue one SmartBill document (kind: 'proforma' | 'invoice') and stamp the
+// outcome onto every given doc ref via dot-path updates (so an invoice stamp
+// never clobbers the earlier proforma block). NEVER throws.
+async function smartbillIssueSafe({ kind, billing, email, items, refs = [], label = '' }) {
+  const stamp = async (patch) => {
+    await Promise.all(refs.map((ref) =>
+      ref.update(patch).catch((err) => console.warn(`smartbill stamp failed (${label}):`, err?.message))
+    ));
+  };
+  try {
+    const complete = checkBillingComplete(billing || {});
+    if (!complete.ok) {
+      await stamp({
+        'smartbill.status': 'failed',
+        'smartbill.lastError': `billing incomplete: ${complete.missing.join(', ')}`,
+      });
+      return null;
+    }
+    const series = await resolveSmartbillSeries();
+    const seriesName = kind === 'invoice' ? series.invoice : series.proforma;
+    const res = await (kind === 'invoice' ? issueInvoice : issueEstimate)(
+      buildInvoicePayload({
+        billing: { ...billing, email: billing?.email || email || '' },
+        items,
+        seriesName,
+        issueDate: bucharestToday(),
+      })
+    );
+    const block = {
+      series: seriesName,
+      number: res?.number ?? null,
+      issuedAt: new Date().toISOString(),
+    };
+    await stamp({
+      [`smartbill.${kind}`]: block,
+      'smartbill.status': kind === 'invoice' ? 'invoiced' : 'proforma-issued',
+      'smartbill.lastError': null,
+    });
+    return block;
+  } catch (err) {
+    console.error(`smartbill ${kind} issue failed (${label}):`, err?.message);
+    await stamp({ 'smartbill.status': 'failed', 'smartbill.lastError': String(err?.message || err) });
+    return null;
+  }
+}
+
 // ── POST /createPayment ──────────────────────────────────────────────────
 // Body (credits):   { orderType:'credits',  packId, quantity, customerData }
 // Body (longTerm):  { orderType:'longTerm', startDate, endDate, days, totalPrice, customerData }
@@ -370,7 +471,7 @@ async function createBookingFromOrder(orderId, order) {
 export const createPayment = onRequest(
   {
     cors: true,
-    secrets: [NETOPIA_SIGNATURE, NETOPIA_PUBLIC_KEY, NETOPIA_ENV],
+    secrets: [NETOPIA_SIGNATURE, NETOPIA_PUBLIC_KEY, NETOPIA_ENV, ...SMARTBILL_SECRETS],
   },
   async (req, res) => {
     if (req.method !== 'POST') return res.status(405).send('Method not allowed');
@@ -741,6 +842,24 @@ export const createPayment = onRequest(
 
     await getFirestore().collection('pendingOrders').doc(orderId).set(pendingDoc);
 
+    // v1.2: every order gets a proforma up front — the fiscal invoice follows
+    // only when payment confirms online (netopiaCallback). Voucher-covered
+    // free orders returned earlier and get no documents (nothing was charged).
+    {
+      const refs = [getFirestore().collection('pendingOrders').doc(orderId)];
+      if (pendingDoc.bookingId) refs.push(getFirestore().collection('bookings').doc(pendingDoc.bookingId));
+      await smartbillIssueSafe({
+        kind: 'proforma',
+        billing: cdClean.billing,
+        email: cdClean.email,
+        items: orderType === 'longTerm'
+          ? longTermDocItems({ days: pendingDoc.days, plate: cdClean.licensePlate, amount })
+          : creditsDocItems({ quantity: pendingDoc.quantity, amount }),
+        refs,
+        label: `order ${orderId}`,
+      });
+    }
+
     // Pay-at-pickup short-circuit: no Netopia handoff, just tell the
     // client to navigate to the confirmation page. The return page sees
     // paymentMethod=pay-at-pickup and shows the lot-payment copy.
@@ -795,7 +914,7 @@ export const createPayment = onRequest(
 export const netopiaCallback = onRequest(
   {
     cors: false,
-    secrets: [NETOPIA_PRIVATE_KEY],
+    secrets: [NETOPIA_PRIVATE_KEY, ...SMARTBILL_SECRETS],
   },
   async (req, res) => {
     if (req.method !== 'POST') {
@@ -893,6 +1012,25 @@ export const netopiaCallback = onRequest(
               : {}),
             repayInProgress: FieldValue.delete(),
           });
+          // v1.2: online payment confirmed → fiscal invoice (the proforma was
+          // issued at order time). Repays charge the discounted repayAmount.
+          const chargedForInvoice = Number.isFinite(Number(pending.repayAmount)) && Number(pending.repayAmount) > 0
+            ? Number(pending.repayAmount)
+            : Number(pending.amount) || 0;
+          if (chargedForInvoice > 0) {
+            await smartbillIssueSafe({
+              kind: 'invoice',
+              billing: pending.customerData?.billing,
+              email: pending.customerData?.email,
+              items: longTermDocItems({
+                days: pending.days,
+                plate: pending.customerData?.licensePlate,
+                amount: chargedForInvoice,
+              }),
+              refs: [db.collection('bookings').doc(bookingId), orderRef],
+              label: `IPN ${orderId}`,
+            });
+          }
           // Stamp the promo redemption (if any) with the booking it produced —
           // online longTerm orders only reach here after payment. Mirrors the
           // free-order path; best-effort, never blocks fulfilment.
@@ -917,7 +1055,7 @@ export const netopiaCallback = onRequest(
             }
           }
         } else {
-          const balanceDocId = await creditTokens({
+          const { balanceDocId, txId } = await creditTokens({
             packId: pending.packId,
             quantity: pending.quantity,
             amount: pending.amount,
@@ -931,6 +1069,18 @@ export const netopiaCallback = onRequest(
             paidAt: nowIso,
             paidBy: 'netopia',
           });
+          // v1.2: online payment confirmed → fiscal invoice (the proforma was
+          // issued at order time by createPayment).
+          if (Number(pending.amount) > 0) {
+            await smartbillIssueSafe({
+              kind: 'invoice',
+              billing: pending.customerData?.billing,
+              email: pending.customerData?.email,
+              items: creditsDocItems({ quantity: pending.quantity, amount: pending.amount }),
+              refs: [orderRef, db.collection('tokenTransactions').doc(txId)],
+              label: `IPN credits ${orderId}`,
+            });
+          }
         }
         // Consume the applied voucher (if any) — flip status to 'redeemed'.
         // Best-effort: a failure here doesn't undo the order. Idempotent
@@ -1288,7 +1438,7 @@ export const adminMarkOrderPaid = onCall(
     };
 
     if (pending.orderType === 'credits') {
-      const docId = await creditTokens({
+      const { balanceDocId: docId } = await creditTokens({
         packId: pending.packId,
         quantity: pending.quantity,
         amount: pending.amount,
@@ -2366,6 +2516,10 @@ function sanitizeBilling(raw) {
       companyName: s(b.companyName),
       cui: s(b.cui),
       regCom: s(b.regCom),
+      // Mandatory on SmartBill PJ invoices — dropping it here silently failed
+      // every PJ document against checkBillingComplete.
+      locality: s(b.locality),
+      county: s(b.county),
       companyAddress: s(b.companyAddress),
     };
   }
@@ -2375,6 +2529,7 @@ function sanitizeBilling(raw) {
     firstName: s(b.firstName),
     lastName: s(b.lastName),
     locality: s(b.locality),
+    county: s(b.county),
     address: s(b.address),
   };
   const cnp = s(b.cnp);
@@ -2408,7 +2563,7 @@ function sanitizeFlight(v) {
 // without going through pendingOrders. The bookings doc still triggers
 // the booking-longterm-confirm email (paid branch).
 export const adminCreateLongtermBooking = onCall(
-  { region: 'europe-west1', cors: true },
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     const { uid } = await assertStaff(request);
     const {
@@ -2548,6 +2703,21 @@ export const adminCreateLongtermBooking = onCall(
       });
     }
 
+    // v1.2: proforma up front for desk-created reservations too (cash, card
+    // and pay-later; the pay-at-location fiscal invoice stays manual). Broker
+    // money never passes through us (ParkVia et al. bill the customer), so
+    // broker reservations get no SmartBill documents.
+    if (paidBy !== 'broker') {
+      await smartbillIssueSafe({
+        kind: 'proforma',
+        billing: billingClean,
+        email: payerEmailNorm,
+        items: longTermDocItems({ days: d, plate: normalizePlate(plate), amount: total }),
+        refs: [bookingRef, ...(payLater ? [db.collection('pendingOrders').doc(orderId)] : [])],
+        label: `admin booking ${bookingRef.id}`,
+      });
+    }
+
     await db.collection('auditLog').add({
       action: 'booking_created',
       entityType: 'booking',
@@ -2629,7 +2799,7 @@ export const adminCreateLongtermBooking = onCall(
 );
 
 export const grantCreditsForCash = onCall(
-  { region: 'europe-west1', cors: true },
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     const { uid } = await assertStaff(request);
     const {
@@ -2651,7 +2821,7 @@ export const grantCreditsForCash = onCall(
 
     const adminPaidBy = paidBy === 'cash' ? 'admin-cash' : 'admin-card';
     const billingClean = sanitizeBilling(billing);
-    const docId = await creditTokens({
+    const { balanceDocId: docId, txId } = await creditTokens({
       packId: packId || null,
       quantity: qty,
       amount: Number(amount) || 0,
@@ -2667,6 +2837,19 @@ export const grantCreditsForCash = onCall(
       paidBy: adminPaidBy,
       grantedBy: uid,
     });
+
+    // v1.2: proforma for the over-the-counter credit sale. The fiscal invoice
+    // is issued manually after collection (pay-at-location decision).
+    if ((Number(amount) || 0) > 0) {
+      await smartbillIssueSafe({
+        kind: 'proforma',
+        billing: billingClean,
+        email: payerEmail || '',
+        items: creditsDocItems({ quantity: qty, amount: Number(amount) || 0 }),
+        refs: [getFirestore().collection('tokenTransactions').doc(txId)],
+        label: `credits desk ${txId}`,
+      });
+    }
 
     const nowIso = new Date().toISOString();
     await getFirestore().collection('auditLog').add({
@@ -2790,7 +2973,7 @@ export const adminGrantCredits = onCall(
     const u = uSnap.data();
     const firstPlate = Array.isArray(u.vehicles) && u.vehicles[0]?.plate ? u.vehicles[0].plate : '';
 
-    const docId = await creditTokens({
+    const { balanceDocId: docId } = await creditTokens({
       packId: null,
       quantity: qty,
       amount: 0,

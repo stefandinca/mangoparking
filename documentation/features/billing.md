@@ -1,6 +1,7 @@
 # Billing (PF/PJ invoice identity)
 
-> Status: 🟡 Partial — capture-only · Last verified: 2026-07-09
+> Status: 🟢 Captured **and consumed** — SmartBill Phase 2 issues documents from
+> this data on the paid flows · Last verified: 2026-07-17
 
 ## What it is
 
@@ -13,10 +14,14 @@ identity** so an invoice can be issued later:
   funnels), Reg.Com (optional), company address. A CUI lookup autofills company
   name / address / Reg.Com from ANAF.
 
-This is **capture-only**: the data is validated, sanitized and stored on the
-order/booking/transaction and cached on the user profile, but **no invoice is
-ever issued** — the SmartBill API is not wired. See
-[roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md). Billing rides along
+The data is validated, sanitized and stored on the order/booking/transaction
+and cached on the user profile. Since v1.2 Phase 2 (2026-07-17) it is also
+**consumed**: SmartBill proformas are issued from it on every order and fiscal
+invoices on online payment confirm — a billing record that fails the
+server-side mandatory-field check (`checkBillingComplete`) stamps
+`smartbill.status='failed'` with the missing fields instead of issuing. See
+[roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md) and
+[backend/cloud-functions.md](../backend/cloud-functions.md). Billing rides along
 with [credits](credits.md) and [long-term bookings](long-term-bookings.md).
 
 ## How it works

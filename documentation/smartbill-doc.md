@@ -26,13 +26,23 @@
   between casings keeps working; the account's exact spelling is what gets
   sent when issuing. The healthcheck verifies both resolve; `smartbillTestIssue`
   issues ONLY into these (missing series = hard per-slot error, no fallback).
-- **Phase 2 pre-flight (payload checkpoint): BUILT.** An admin-only
-  `smartbillTestIssue` callable issues sample documents and deletes them, to
-  confirm SmartBill accepts our payload shape before wiring the money path.
-  Last full run was under the old (rights-limited) token: draft invoice
-  **accepted**, proforma blocked → needs a re-run with the new credentials.
-- **Phase 2 real wiring (issue on payment): NOT STARTED.** Waiting on the
-  checkpoint going fully green.
+- **Phase 2 pre-flight (payload checkpoint): DONE.** `smartbillTestIssue`
+  (button on `/admin/pricing`) issues + deletes sample documents. Drafts are
+  number-less (SmartBill numbers at fiscalization) → each run leaves a ciornă
+  to delete manually (Facturi → Ciorne).
+- **Phase 2 real wiring: DONE (2026-07-17), first real documents pending
+  verification.** `smartbillIssueSafe` (index.js) issues: **proforma** on every
+  order (`createPayment`; `adminCreateLongtermBooking` non-broker;
+  `grantCreditsForCash`; skipped when a voucher covers the full amount) and
+  **fiscal invoice** on online payment confirm (`netopiaCallback` — new
+  bookings, repays at `repayAmount`, credit packs). Pay-at-location fiscal
+  invoices stay MANUAL in the SmartBill UI (locked decision) —
+  `adminMarkOrderPaid` issues nothing. Best-effort: failures stamp
+  `smartbill.status='failed'` + `lastError`; money flows never break. Outcome
+  shape: `smartbill.{proforma,invoice,status,lastError}` on
+  `pendingOrders`/`bookings`/`tokenTransactions`, rules-protected
+  (server-written only). Fixed alongside: `sanitizeBilling` dropped PJ
+  `locality`/`county`, which would have failed every PJ document.
 
 ## Last checkpoint result (`Test document issue`)
 
@@ -152,21 +162,27 @@ The two callables are deployed and live. The frontend buttons are on `origin/mai
 
 ## Next steps (resume here)
 
-1. ~~Unblock proforma~~ **done 2026-07-16** — secrets swapped to a full-rights
-   user (versions 2), both callables redeployed, series pinned in code.
-2. **Delete the stray "Mango" draft** invoice from the earlier checkpoint run
-   (SmartBill UI → Facturi → Ciorne).
-3. **Re-run Check connection + Test document issue** (`/admin/pricing`) → expect
-   `ready` (both series + VAT) and Proforma (PF) ✓, Proforma (PJ) ✓,
-   Invoice (draft) ✓.
-4. **Phase 2 — wire issuance into the paid flows** (`createBookingFromOrder`,
-   `adminMarkOrderPaid`, credit path): proforma up front everywhere; fiscal invoice
-   auto on online-paid, manual on pay-at-location. Flip `isDraft:false`. Persist the
-   issued `{ series, number }` onto the booking/order doc (new `smartbill` field —
-   not written by any flow yet). Guard every issue with `checkBillingComplete`.
-5. **Later phases** — customer email of the PDF (SmartBill `/document/send`,
-   `type: factura|proforma`), storno on refund/cancel (`reverseInvoice`), e-Factura
-   for B2B VAT payers.
+1. ~~Unblock proforma~~ **done 2026-07-16** — secrets v2 (full-rights user).
+2. ~~Phase 2 wiring~~ **done 2026-07-17** — proforma + invoice on the paid flows
+   (see TL;DR above); functions + rules deployed.
+3. **VERIFY with real money paths** (this is the current step):
+   - a small online booking (or Netopia sandbox if `NETOPIA_ENV` permits) →
+     proforma at order time (MANGO 000X) + fiscal invoice on confirm (Mango 0060),
+     amounts and client data correct in the SmartBill UI;
+   - a desk reservation + a desk credit sale → proforma each, no auto invoice;
+   - a PJ order → regCom/locality present on the document;
+   - delete any leftover test ciorne (Facturi → Ciorne).
+4. **Phase 4 — storno on cancel/refund** (`cancelBookingWithRefund`,
+   reprice-shortened) + **4b reprice adjustments** (difference invoice on
+   extension; proforma re-issue on unpaid reprice) — verify SmartBill's partial
+   reverse convention first.
+5. **Phase 5/6 — surfacing**: PDF access for admin + customer (SmartBill PDF
+   endpoints need Basic auth → proxy via callable), invoice link/number in
+   confirmation emails (`/document/send` or link param), invoice column in
+   cashbook.
+6. **Phase 7/8 — retry queue for `smartbill.status='failed'` docs; e-Factura**
+   (B2B VAT payers; needs `isVatPayer` persisted on PJ billing — currently not
+   stored by `readBilling`, comes from `lookupCui` at capture time).
 
 ## Numbering semantics (verified on the live account 2026-07-16)
 

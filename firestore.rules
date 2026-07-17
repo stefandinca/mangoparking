@@ -118,7 +118,9 @@ service cloud.firestore {
     // would spam the `credit-used` email trigger.
     match /tokenTransactions/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
-      allow create: if request.resource.data.type != 'use';
+      // `smartbill` (fiscal document trail) is server-written only.
+      allow create: if request.resource.data.type != 'use'
+                    && !request.resource.data.keys().hasAny(['smartbill']);
       allow update, delete: if false;
     }
 
@@ -166,7 +168,11 @@ service cloud.firestore {
     // check in.
     match /bookings/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
-      allow create, update: if isStaff();
+      // `smartbill` (fiscal document trail) is server-written only — staff
+      // client flows (check-in/out, edit details) must not touch it.
+      allow create: if isStaff() && !request.resource.data.keys().hasAny(['smartbill']);
+      allow update: if isStaff()
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['smartbill']);
       allow delete: if isAdmin();
     }
 

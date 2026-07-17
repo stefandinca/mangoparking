@@ -1,10 +1,17 @@
 # Mango Parking v1.2 — SmartBill Integration
 
-> **Status: 🟡 PHASE 1 DONE + PHASE 2 PRE-FLIGHT (payload checkpoint), rest PLANNED**
-> (updated 2026-07-16). The three secrets are set in Secret Manager, and the
-> admin-only `smartbillHealthcheck` ran **green** (invoice series present, 21% VAT
-> found → account is a VAT payer). No paid flow issues an invoice yet — billing
-> identity (PF/PJ, CUI via ANAF `lookupCui`) is captured at checkout as before.
+> **Status: 🟢 PHASES 1–2 DONE (documents issue on the paid flows); Phases 4–8 PLANNED**
+> (updated 2026-07-17). Phase 2 is live: `createPayment` issues a **proforma** on
+> every order, `netopiaCallback` issues the **fiscal invoice** on online payment
+> confirm (bookings, repays, credit packs), `adminCreateLongtermBooking`
+> (non-broker) + `grantCreditsForCash` issue proformas for desk sales. All via
+> `smartbillIssueSafe` (best-effort — a SmartBill failure stamps
+> `smartbill.status='failed'` + `lastError`, never breaks a money flow). The
+> `smartbill` field is rules-protected (server-written only). Phase 3 as
+> originally written is **superseded** by decision 1a — pay-at-location fiscal
+> invoices are issued manually in the SmartBill UI, so `adminMarkOrderPaid`
+> issues nothing. **First real documents pending verification** — see the Phase 2
+> checkpoint below.
 >
 > **New in this pass — the Phase 2 pre-flight checkpoint.** Before wiring
 > SmartBill into the money path, `smartbillTestIssue` (admin callable, button on
@@ -139,29 +146,27 @@ export async function einvoiceStatus(uploadId) { /* GET /einvoice/status/{upload
 
 ### 1.3 Doc-shape extension
 
-New `smartbill` field on `bookings`, `pendingOrders`, `tokenTransactions`:
+`smartbill` field on `bookings`, `pendingOrders`, `tokenTransactions` — **as
+implemented in Phase 2** (two-document model; the original single-invoice shape
+below it is superseded):
 
 ```js
 smartbill: {
-  series: 'MNG',
-  number: 1042,                            // numeric, assigned by SmartBill
-  issuedAt: '2026-05-18T10:14:22.000Z',
-  pdfUrl: 'https://www.smartbill.ro/api/invoice/pdf?...',
-  status: 'issued' | 'cancelled' | 'credit-noted' | 'failed',
-  eFactura: {
-    required: true,
-    uploadId: 'abc123',
-    status: 'IN_PROGRESS' | 'OK' | 'NOK',
-    statusText: '',                        // ANAF rejection reason if NOK
-    submittedAt: '...',
-    polledAt: '...',
-  } | null,
-  lastError: null,
-  attempts: 0,
+  proforma: { series: 'MANGO', number: 12, issuedAt: '2026-07-17T...' },  // absent until issued
+  invoice:  { series: 'Mango', number: 60, issuedAt: '2026-07-17T...' },  // online-paid only
+  status: 'proforma-issued' | 'invoiced' | 'failed',
+  lastError: null | 'billing incomplete: regCom' | 'SmartBill: ...',
 }
 ```
 
-Server-written only. Firestore rules: customers can read their own (already covered by existing booking rule); staff can read all; no client writes.
+Written via dot-path updates so the invoice stamp never clobbers the proforma
+block. `attempts` + `eFactura` sub-blocks arrive with Phases 7–8 (retry queue,
+ANAF SPV). PDF URLs are NOT stored — SmartBill's PDF endpoints need Basic auth,
+so Phase 5 will proxy through a callable instead of persisting a public link.
+
+Server-written only — enforced in `firestore.rules`: `bookings` staff
+create/update reject any write touching `smartbill`; `tokenTransactions` client
+creates reject it; `pendingOrders` already allow no client writes.
 
 ### 1.4 Boot validation
 
@@ -170,6 +175,24 @@ Add a one-shot callable `smartbillHealthcheck` (admin-only). Calls `/series` and
 ---
 
 ## Phase 2 — Auto-issue on online payment (~0.5 day)
+
+> **Built 2026-07-17.** Implementation differs from the sketch below (which
+> predates the two-document model): issuance lives in `smartbillIssueSafe`
+> (`index.js`), wired at four points — `createPayment` (proforma, every order,
+> skipped when a voucher covers the full amount), `netopiaCallback` (fiscal
+> invoice on IPN success — new bookings, repays at `repayAmount`, credit packs),
+> `adminCreateLongtermBooking` (proforma, non-broker; broker money never passes
+> through us), `grantCreditsForCash` (proforma). Items are one line at the
+> VAT-inclusive charged total (`Parcare termen lung N zile — PLATE` /
+> `Credite parcare ManGO — N credite`), issueDate is the Europe/Bucharest date,
+> and both pinned series must resolve or nothing is issued. Stored shape (see
+> §1.3): `smartbill.{proforma,invoice,status,lastError}` via dot-path updates.
+> `creditTokens` now returns `{ balanceDocId, txId }` so credit documents stamp
+> onto the `tokenTransactions` row. `sanitizeBilling` fix folded in: it dropped
+> PJ `locality` (and `county`), which would have failed every PJ document
+> against `checkBillingComplete`.
+
+Original sketch (kept for reference):
 
 `functions/src/index.js` → `createBookingFromOrder`:
 
@@ -205,6 +228,11 @@ Same pattern for the credits branch (`tokenTransactions/{id}` after `creditToken
 ---
 
 ## Phase 3 — Auto-issue on cash/admin flows (~0.5 day)
+
+> **Superseded by decision 1a (2026-07-16).** Pay-at-location money gets a
+> proforma up front and a **manually issued** fiscal invoice after collection —
+> no auto factură/chitanță from `adminMarkOrderPaid`. The table below is kept in
+> case the client later wants desk invoices automated after all.
 
 | Source | `paymentMethod` | `paymentBase` |
 |---|---|---|
