@@ -39,6 +39,7 @@ import { hasPermission, PERM } from '../../utils/permissions.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
 import { setTransferStatus, deleteTransfer } from '../../services/transferService.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
+import { geoFieldsHtml, wireGeoFields, readGeoFields } from '../../components/widgets/BillingFields.js';
 import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
@@ -1460,7 +1461,7 @@ function openCollectPaymentDialog({ orderId, booking }) {
         <input name="firstName" type="text" placeholder="${escapeHtml(t('billing.firstName'))} *" value="${escapeHtml(initialBilling.firstName || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
         <input name="lastName" type="text" placeholder="${escapeHtml(t('billing.lastName'))} *" value="${escapeHtml(initialBilling.lastName || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
       </div>
-      <input name="locality" type="text" placeholder="${escapeHtml(t('billing.locality'))} *" value="${escapeHtml(initialBilling.locality || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
+      ${geoFieldsHtml({ county: 'county', locality: 'locality', abroad: 'abroad' }, { county: initialBilling.county || '', locality: initialBilling.locality || '', abroad: initialBilling.abroad === true, compact: true })}
       <input name="address" type="text" placeholder="${escapeHtml(t('billing.personalAddress'))} *" value="${escapeHtml(initialBilling.address || initialBilling.personalAddress || '')}" required class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
 
       <div>
@@ -1480,6 +1481,9 @@ function openCollectPaymentDialog({ orderId, booking }) {
       <button type="submit" class="w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('checkins.confirmPayment')}</button>
     </form>`;
     const modal = openModal(form, { onClose: () => resolve() });
+
+    // Hydrate the county/locality dropdowns (lazy dataset).
+    wireGeoFields(form, { county: 'county', locality: 'locality', abroad: 'abroad' });
 
     // Refine the displayed amount from the pending order — its `amount`
     // includes any pay-at-pickup gross-up, so it's the figure actually owed.
@@ -1507,10 +1511,10 @@ function openCollectPaymentDialog({ orderId, booking }) {
       e.preventDefault();
       const firstName = form.firstName.value.trim();
       const lastName = form.lastName.value.trim();
-      const locality = form.locality.value.trim();
+      const geo = readGeoFields(form, { county: 'county', locality: 'locality', abroad: 'abroad' });
       const address = form.address.value.trim();
       const paidBy = form.querySelector('input[name="paidBy"]:checked')?.value || 'cash';
-      if (!firstName || !lastName || !locality || !address) {
+      if (!firstName || !lastName || !address || (!geo.abroad && (!geo.county || !geo.locality))) {
         showToast(t('common.error'), 'error');
         return;
       }
@@ -1529,7 +1533,7 @@ function openCollectPaymentDialog({ orderId, booking }) {
         await adminMarkOrderPaidFn({
           orderId,
           paidBy,
-          payerDetails: { firstName, lastName, locality, address },
+          payerDetails: { firstName, lastName, locality: geo.locality, county: geo.county, abroad: geo.abroad, address },
         });
         showToast(t('checkins.toastMarkedPaid'), 'success');
         modal.close();

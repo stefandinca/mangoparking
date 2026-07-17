@@ -15,16 +15,20 @@
 import { required, isValidCui } from './validators.js';
 
 // Billing is complete when the required fields for its type are present:
-//   PJ → company name + valid CUI + company address
-//   PF (default) → full name (or first/last) + locality + address
-// (CNP / Reg.Com are optional, matching readBilling.)
+//   PJ → company name + valid CUI + company address + county/locality
+//   PF (default) → full name (or first/last) + county/locality + address
+// The "outside Romania" flag (abroad) lifts the county/locality requirement —
+// the server invoices those under BUCUREȘTI. (CNP / Reg.Com stay optional
+// here so long-standing profiles aren't suddenly gated; the input forms
+// enforce the stricter SmartBill set on the next edit.)
 export function isBillingComplete(b) {
   if (!b || typeof b !== 'object') return false;
+  const geoOk = b.abroad === true || (required(b.locality) && required(b.county));
   if (b.type === 'PJ') {
-    return required(b.companyName) && isValidCui(b.cui) && required(b.companyAddress);
+    return required(b.companyName) && isValidCui(b.cui) && required(b.companyAddress) && geoOk;
   }
   const name = b.name || [b.firstName, b.lastName].filter(Boolean).join(' ');
-  return required(name) && required(b.locality) && required(b.address);
+  return required(name) && geoOk && required(b.address);
 }
 
 // Returns the list of missing required fields:

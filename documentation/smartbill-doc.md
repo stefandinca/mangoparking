@@ -84,16 +84,27 @@ Implication: **two SmartBill series** are needed — a proforma series (type `p`
 and an invoice series (type `f`). This supersedes the earlier "one series for
 everything" idea.
 
-## Mandatory invoice fields (per SmartBill account config)
+## Mandatory invoice fields (per SmartBill account config + client feedback 2026-07-17)
 
-- **PF (persoană fizică)** — required: **Nume, Prenume, Localitate**. Optional:
-  Adresă, CNP.
-- **PJ (persoană juridică)** — required: **CUI, Nume companie, Localitate,
-  Nr. reg. com. (J...)**. Optional: the rest.
+- **PF (persoană fizică)** — required: **Nume, Prenume, Județ + Localitate**
+  (linked dropdowns). Optional: Adresă, CNP.
+- **PJ (persoană juridică)** — required: **CUI, Nume companie, Județ +
+  Localitate, Nr. reg. com. (J...)**. Optional: the rest.
+- **În afara României (abroad)** — checkbox on every billing form; lifts the
+  Județ/Localitate requirement. Documents issue under **BUCUREȘTI/BUCUREȘTI**
+  and PF gets CNP **0000000000000** (`ABROAD_CNP`, mirrored client + server).
 
-Enforced client-side in `BillingFields.js` and server-side by
-`checkBillingComplete()` (fails BEFORE calling SmartBill with a precise list of
-missing fields).
+Enforced client-side in `BillingFields.js` (+ CreateTransactionModal + the
+collect-payment dialog) and server-side by `checkBillingComplete()` (fails
+BEFORE calling SmartBill with a precise list of missing fields).
+
+## Document line descriptions (client spec 2026-07-17)
+
+- Long-term: `Servicii parcare conform rezervării {code}` — the reservation
+  number is minted at ORDER time (`pendingOrders.bookingCode`) so even the
+  order-time proforma carries it; `createBookingFromOrder` reuses it.
+- Credits: `Servicii parcare - credite`.
+- One line per document, quantity 1, price = VAT-inclusive charged total.
 
 ---
 

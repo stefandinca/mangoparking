@@ -48,6 +48,7 @@ import {
   PROFORMA_SERIES,
   INVOICE_SERIES,
   matchSeries,
+  ABROAD_CNP,
   buildInvoicePayload,
   checkBillingComplete,
   issueInvoice,
@@ -295,7 +296,9 @@ async function createBookingFromOrder(orderId, order) {
     ? Math.round(Number(order.amount))
     : Number(order.totalPrice);
   const bookingRef = await db.collection('bookings').add({
-    code: generateBookingCode('longTerm'),
+    // Orders mint the code up front (it's already on the proforma); older
+    // orders without one still get a fresh code here.
+    code: order.bookingCode || generateBookingCode('longTerm'),
     type: 'longTerm',
     customerId: order.customerData.customerId || null,
     licensePlate: normalizePlate(order.customerData.licensePlate),
@@ -395,20 +398,22 @@ function bucharestToday() {
 
 // One document line per sale, priced at the VAT-inclusive charged total —
 // vouchers/discounts make a days×perDay split disagree with what was charged.
-function longTermDocItems({ days, plate, amount }) {
-  const d = Number(days) || 1;
+// Descriptions per client spec (2026-07-17): long-term references the
+// reservation number; credits use the generic credits wording.
+function longTermDocItems({ bookingCode, amount }) {
   return [{
-    name: `Parcare termen lung ${d} ${d === 1 ? 'zi' : 'zile'} — ${plate || ''}`.trim().replace(/—$/, '').trim(),
+    name: bookingCode
+      ? `Servicii parcare conform rezervării ${bookingCode}`
+      : 'Servicii parcare',
     quantity: 1,
     price: Number(amount) || 0,
     code: 'PARK-LT',
   }];
 }
 
-function creditsDocItems({ quantity, amount }) {
-  const q = Number(quantity) || 1;
+function creditsDocItems({ amount }) {
   return [{
-    name: `Credite parcare ManGO — ${q} ${q === 1 ? 'credit' : 'credite'}`,
+    name: 'Servicii parcare - credite',
     quantity: 1,
     price: Number(amount) || 0,
     code: 'PARK-CR',
@@ -675,6 +680,9 @@ export const createPayment = onRequest(
         // `days` is unvalidated and can disagree with the validated dates.
         days: authoritativeDays ?? (Number(body.days) || null),
         totalPrice: Number(body.totalPrice) || null,
+        // Reservation number minted at ORDER time so the proforma can already
+        // reference it; createBookingFromOrder reuses it on the booking doc.
+        bookingCode: generateBookingCode('longTerm'),
       } : {
         packId: body.packId,
         quantity: Number(body.quantity) || 0,
@@ -853,8 +861,8 @@ export const createPayment = onRequest(
         billing: cdClean.billing,
         email: cdClean.email,
         items: orderType === 'longTerm'
-          ? longTermDocItems({ days: pendingDoc.days, plate: cdClean.licensePlate, amount })
-          : creditsDocItems({ quantity: pendingDoc.quantity, amount }),
+          ? longTermDocItems({ bookingCode: pendingDoc.bookingCode, amount })
+          : creditsDocItems({ amount }),
         refs,
         label: `order ${orderId}`,
       });
@@ -1018,15 +1026,20 @@ export const netopiaCallback = onRequest(
             ? Number(pending.repayAmount)
             : Number(pending.amount) || 0;
           if (chargedForInvoice > 0) {
+            // Orders mint the reservation number up front; for older orders
+            // read it off the booking so the invoice line still carries it.
+            let invoiceBookingCode = pending.bookingCode || null;
+            if (!invoiceBookingCode) {
+              try {
+                const bs = await db.collection('bookings').doc(bookingId).get();
+                invoiceBookingCode = bs.exists ? (bs.data().code || null) : null;
+              } catch (_) { /* line falls back to the generic wording */ }
+            }
             await smartbillIssueSafe({
               kind: 'invoice',
               billing: pending.customerData?.billing,
               email: pending.customerData?.email,
-              items: longTermDocItems({
-                days: pending.days,
-                plate: pending.customerData?.licensePlate,
-                amount: chargedForInvoice,
-              }),
+              items: longTermDocItems({ bookingCode: invoiceBookingCode, amount: chargedForInvoice }),
               refs: [db.collection('bookings').doc(bookingId), orderRef],
               label: `IPN ${orderId}`,
             });
@@ -1076,7 +1089,7 @@ export const netopiaCallback = onRequest(
               kind: 'invoice',
               billing: pending.customerData?.billing,
               email: pending.customerData?.email,
-              items: creditsDocItems({ quantity: pending.quantity, amount: pending.amount }),
+              items: creditsDocItems({ amount: pending.amount }),
               refs: [orderRef, db.collection('tokenTransactions').doc(txId)],
               label: `IPN credits ${orderId}`,
             });
@@ -1413,6 +1426,8 @@ export const adminMarkOrderPaid = onCall(
       firstName: String(payerDetails.firstName || '').trim(),
       lastName: String(payerDetails.lastName || '').trim(),
       locality: String(payerDetails.locality || '').trim(),
+      county: String(payerDetails.county || '').trim(),
+      abroad: payerDetails.abroad === true,
       address: String(payerDetails.address || '').trim(),
     } : null;
 
@@ -1469,7 +1484,12 @@ export const adminMarkOrderPaid = onCall(
           firstName: payer.firstName,
           lastName: payer.lastName,
           locality: payer.locality,
+          county: payer.county,
+          abroad: payer.abroad,
           address: payer.address,
+          // Foreign payer without a CNP on file → the 13-zero stand-in, so a
+          // later manual/auto invoice has a complete PF identity.
+          ...(payer.abroad && !existing.cnp ? { cnp: ABROAD_CNP } : {}),
         };
       }
       // The reservation is now real (payment confirmed) — reserve a spot
@@ -2510,6 +2530,9 @@ export const adminResendConfirmationEmail = onCall(
 function sanitizeBilling(raw) {
   const b = raw && typeof raw === 'object' ? raw : {};
   const s = (v) => (v == null ? '' : String(v)).trim().slice(0, 200);
+  // Customer outside Romania: county/locality not required (documents issue
+  // under BUCURESTI) and PF gets the 13-zero CNP stand-in on the profile too.
+  const abroad = b.abroad === true;
   if (b.type === 'PJ') {
     return {
       type: 'PJ',
@@ -2520,6 +2543,7 @@ function sanitizeBilling(raw) {
       // every PJ document against checkBillingComplete.
       locality: s(b.locality),
       county: s(b.county),
+      abroad,
       companyAddress: s(b.companyAddress),
     };
   }
@@ -2530,9 +2554,10 @@ function sanitizeBilling(raw) {
     lastName: s(b.lastName),
     locality: s(b.locality),
     county: s(b.county),
+    abroad,
     address: s(b.address),
   };
-  const cnp = s(b.cnp);
+  const cnp = s(b.cnp) || (abroad ? ABROAD_CNP : '');
   if (cnp) out.cnp = cnp;
   return out;
 }
@@ -2629,8 +2654,10 @@ export const adminCreateLongtermBooking = onCall(
     // (/pay → repayOrder) and collectable later (Check-in "Collect" →
     // adminMarkOrderPaid), exactly like a customer pay-at-pickup booking.
     const orderId = payLater ? `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
+    // Minted before the insert so the proforma line below can reference it.
+    const bookingCode = generateBookingCode('longTerm');
     const bookingRef = await db.collection('bookings').add({
-      code: generateBookingCode('longTerm'),
+      code: bookingCode,
       type: 'longTerm',
       customerId: linkedCustomerId,
       licensePlate: normalizePlate(plate),
@@ -2712,7 +2739,7 @@ export const adminCreateLongtermBooking = onCall(
         kind: 'proforma',
         billing: billingClean,
         email: payerEmailNorm,
-        items: longTermDocItems({ days: d, plate: normalizePlate(plate), amount: total }),
+        items: longTermDocItems({ bookingCode, amount: total }),
         refs: [bookingRef, ...(payLater ? [db.collection('pendingOrders').doc(orderId)] : [])],
         label: `admin booking ${bookingRef.id}`,
       });
@@ -2845,7 +2872,7 @@ export const grantCreditsForCash = onCall(
         kind: 'proforma',
         billing: billingClean,
         email: payerEmail || '',
-        items: creditsDocItems({ quantity: qty, amount: Number(amount) || 0 }),
+        items: creditsDocItems({ amount: Number(amount) || 0 }),
         refs: [getFirestore().collection('tokenTransactions').doc(txId)],
         label: `credits desk ${txId}`,
       });

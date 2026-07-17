@@ -57,6 +57,8 @@ Documentation: <https://api.smartbill.ro/>
 3. **PF without CNP** — factură for everyone, PF or PJ, CNP or no CNP. Romanian fiscal law accepts name + address as identifier for PF.
 4. **e-Factura** — auto-submit to ANAF SPV for any invoice where the client is a VAT payer (PJ with CUI returned `isTaxPayer: true` from ANAF). Skip for PF.
 5. **VAT rate** — **21%** standard rate (Romania's 2026 rate). Configured server-side; if SmartBill account is non-VAT-payer, code branches to `taxPercentage: 0`.
+6. **County + locality mandatory** (client, 2026-07-17) — every invoice carries the client's **Județ + Localitate**, captured via linked dropdowns (dataset: `src/data/roLocalities.js`). An **"outside Romania"** checkbox lifts the requirement: documents issue under **BUCUREȘTI/BUCUREȘTI** and PF gets CNP `0000000000000` on the invoice and stored profile.
+7. **Line descriptions** (client, 2026-07-17) — long-term: `Servicii parcare conform rezervării {reservation number}` (the code is minted at order time so the proforma already carries it); credits: `Servicii parcare - credite`.
 
 ---
 

@@ -13,6 +13,11 @@ import { getBalance, lookupByPlate, getTokenPacks } from '../../services/tokenSe
 import { getLongTermRates, calculateLongTermCost } from '../../services/longTermService.js';
 import { listSeasonalPeriods, getEffectiveRates } from '../../services/seasonalRatesService.js';
 import { createTransfer, updateTransfer } from '../../services/transferService.js';
+import { geoFieldsHtml, wireGeoFields, setGeoValues, readGeoFields, ABROAD_CNP } from '../widgets/BillingFields.js';
+
+// County/locality/abroad field names for the modal's two billing variants.
+const CT_PF_GEO = { county: 'ctBillCounty', locality: 'ctBillLocality', abroad: 'ctBillAbroad' };
+const CT_PJ_GEO = { county: 'ctBillCompanyCounty', locality: 'ctBillCompanyLocality', abroad: 'ctBillCompanyAbroad' };
 
 // Billing rule mirror of BookingLongTerm: 1 day = 24h from drop-off with a
 // single 2h grace at the end. Kept in sync so a walk-in priced here matches
@@ -377,8 +382,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
             <input type="text" name="ctBillPrenume" placeholder="${escapeHtml(t('transactions.billPrenume'))} *"
               class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           </div>
-          <input type="text" name="ctBillLocality" placeholder="${escapeHtml(t('billing.locality'))} *"
-            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          ${geoFieldsHtml(CT_PF_GEO, { compact: true })}
           <input type="text" name="ctBillAddress" placeholder="${escapeHtml(t('transactions.billAddress'))}"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <input type="text" name="ctBillCnp" placeholder="${escapeHtml(t('transactions.billCnpOptional'))}"
@@ -396,8 +400,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           </div>
           <input type="text" name="ctBillRegCom" placeholder="${escapeHtml(t('billing.regCom'))} * (J40/123/2020)"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
-          <input type="text" name="ctBillCompanyLocality" placeholder="${escapeHtml(t('billing.locality'))} *"
-            class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
+          ${geoFieldsHtml(CT_PJ_GEO, { compact: true })}
           <input type="text" name="ctBillCompanyAddress" placeholder="${escapeHtml(t('transactions.billCompanyAddress'))}"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
         </div>
@@ -676,6 +679,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
   });
 
   // ── Billing (PF/PJ) block ──
+  // Hydrate the county/locality dropdowns (lazy dataset — fire and forget).
+  wireGeoFields(contentEl, CT_PF_GEO);
+  wireGeoFields(contentEl, CT_PJ_GEO);
+
   function setBillingType(type) {
     const isPJ = type === 'PJ';
     billingPf?.classList.toggle('hidden', isPJ);
@@ -712,8 +719,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         };
         fill('ctBillCompany', result.companyName);
         fill('ctBillCompanyAddress', result.address);
-        fill('ctBillCompanyLocality', result.locality);
         fill('ctBillRegCom', result.regCom);
+        if (!qs(`select[name="${CT_PJ_GEO.locality}"]`, contentEl)?.value) {
+          setGeoValues(contentEl, CT_PJ_GEO, { county: result.county, locality: result.locality });
+        }
       }, 600);
     });
   }
@@ -732,8 +741,8 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       set('ctBillCompany', b.companyName);
       set('ctBillCui', b.cui);
       set('ctBillRegCom', b.regCom);
-      set('ctBillCompanyLocality', b.locality);
       set('ctBillCompanyAddress', b.companyAddress);
+      setGeoValues(contentEl, CT_PJ_GEO, { county: b.county, locality: b.locality, abroad: b.abroad === true });
     } else {
       let nume = b.lastName || '';
       let prenume = b.firstName || '';
@@ -744,9 +753,9 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       }
       set('ctBillNume', nume);
       set('ctBillPrenume', prenume);
-      set('ctBillLocality', b.locality);
       set('ctBillAddress', b.address || b.personalAddress || '');
       set('ctBillCnp', b.cnp);
+      setGeoValues(contentEl, CT_PF_GEO, { county: b.county, locality: b.locality, abroad: b.abroad === true });
     }
   }
   function maybePrefillBilling() {
@@ -773,26 +782,31 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       const companyName = val('ctBillCompany');
       const cui = val('ctBillCui');
       const regCom = val('ctBillRegCom');
-      const locality = val('ctBillCompanyLocality');
+      const geo = readGeoFields(contentEl, CT_PJ_GEO);
       const companyAddress = val('ctBillCompanyAddress');
       if (!companyName) return fail('ctBillCompany', 'billing.errors.companyName');
       if (!isValidCui(cui)) return fail('ctBillCui', 'billing.errors.cui');
       if (!required(regCom) || !isValidRegCom(regCom)) return fail('ctBillRegCom', 'billing.errors.regCom');
-      if (!locality) return fail('ctBillCompanyLocality', 'billing.errors.locality');
-      const billing = { type: 'PJ', companyName, cui, regCom, locality };
+      if (!geo.abroad && !geo.county) return fail('ctBillCompanyCounty', 'billing.errors.county');
+      if (!geo.abroad && !geo.locality) return fail('ctBillCompanyLocality', 'billing.errors.locality');
+      const billing = { type: 'PJ', companyName, cui, regCom, locality: geo.locality, county: geo.county, abroad: geo.abroad };
       if (companyAddress) billing.companyAddress = companyAddress;
       return { billing };
     }
     const nume = val('ctBillNume');
     const prenume = val('ctBillPrenume');
-    const locality = val('ctBillLocality');
+    const geo = readGeoFields(contentEl, CT_PF_GEO);
     const address = val('ctBillAddress');
-    const cnp = val('ctBillCnp');
+    let cnp = val('ctBillCnp');
     if (!nume) return fail('ctBillNume', 'transactions.billErrorNume');
     if (!prenume) return fail('ctBillPrenume', 'transactions.billErrorPrenume');
-    if (!locality) return fail('ctBillLocality', 'billing.errors.locality');
-    if (cnp && !isValidCnp(cnp)) return fail('ctBillCnp', 'billing.errors.cnp');
-    const billing = { type: 'PF', name: `${nume} ${prenume}`.trim(), firstName: prenume, lastName: nume, locality };
+    if (!geo.abroad && !geo.county) return fail('ctBillCounty', 'billing.errors.county');
+    if (!geo.abroad && !geo.locality) return fail('ctBillLocality', 'billing.errors.locality');
+    // Foreign customers have no CNP — abroad defaults it to the 13-zero
+    // stand-in (checksum validation skipped).
+    if (geo.abroad && !cnp) cnp = ABROAD_CNP;
+    else if (!geo.abroad && cnp && !isValidCnp(cnp)) return fail('ctBillCnp', 'billing.errors.cnp');
+    const billing = { type: 'PF', name: `${nume} ${prenume}`.trim(), firstName: prenume, lastName: nume, locality: geo.locality, county: geo.county, abroad: geo.abroad };
     if (address) billing.address = address;
     if (cnp) billing.cnp = cnp;
     return { billing };

@@ -192,23 +192,33 @@ export async function deleteInvoice(seriesName, number) {
 // Enforce SmartBill's mandatory invoice fields BEFORE calling the API, so a
 // missing field surfaces as a precise, actionable error instead of a cryptic
 // SmartBill rejection deep in a paid flow.
-//   PF: name (nume + prenume), locality
-//   PJ: cui, company name, locality, regCom (trade-registry "J...")
+//   PF: name (nume + prenume), locality + county
+//   PJ: cui, company name, locality + county, regCom (trade-registry "J...")
+// billing.abroad === true (customer outside Romania) lifts the locality/county
+// requirement — the payload builder substitutes BUCURESTI for both (and the
+// 13-zero CNP stand-in for PF).
 // Returns { ok:true } or { ok:false, missing:[...] }.
 export function checkBillingComplete(billing = {}) {
   const missing = [];
+  const abroad = billing.abroad === true;
   if (billing.type === 'PJ') {
     if (!String(billing.cui || '').trim()) missing.push('cui');
     if (!String(billing.companyName || '').trim()) missing.push('companyName');
-    if (!String(billing.locality || '').trim()) missing.push('locality');
     if (!String(billing.regCom || '').trim()) missing.push('regCom');
   } else {
     const name = String(billing.name || `${billing.firstName || ''} ${billing.lastName || ''}`).trim();
     if (!name) missing.push('name');
+  }
+  if (!abroad) {
     if (!String(billing.locality || '').trim()) missing.push('locality');
+    if (!String(billing.county || '').trim()) missing.push('county');
   }
   return { ok: missing.length === 0, missing };
 }
+
+// CNP stand-in for customers outside Romania (mirrors ABROAD_CNP in
+// BillingFields.js — keep the two in sync).
+export const ABROAD_CNP = '0000000000000';
 
 export function buildInvoicePayload({
   billing = {},
@@ -225,30 +235,36 @@ export function buildInvoicePayload({
   isDraft = false,
 }) {
   const isPJ = billing.type === 'PJ';
+  // Customers outside Romania (billing.abroad) are invoiced under
+  // BUCURESTI/BUCURESTI with the 13-zero CNP stand-in for PF (client decision
+  // 2026-07-17) — their real county/locality aren't RO administrative units.
+  const abroad = billing.abroad === true;
+  const city = abroad ? 'BUCURESTI' : (billing.locality || '');
+  const county = abroad ? 'BUCURESTI' : (billing.county || '');
   const client = isPJ
     ? {
         // PJ mandatory (per SmartBill account config): CUI, company name,
-        // locality, trade-registry number (regCom, "J..."). regCom was missing
-        // before — SmartBill rejects PJ invoices without it now.
+        // locality + county, trade-registry number (regCom, "J...").
         name: billing.companyName || '',
         vatCode: billing.cui || '',
         regCom: billing.regCom || '',
         isTaxPayer: billing.isVatPayer === true,
         address: billing.companyAddress || '',
-        city: billing.locality || '',
-        county: billing.county || '',
+        city,
+        county,
         country: 'Romania',
         email: billing.email || '',
         saveToDb: false,
       }
     : {
-        // PF mandatory: name (nume + prenume), locality. Address + CNP optional.
+        // PF mandatory: name (nume + prenume), locality + county. Address
+        // optional; CNP optional (foreigners get the zero stand-in).
         name: billing.name || [billing.firstName, billing.lastName].filter(Boolean).join(' '),
-        vatCode: billing.cnp || '',
+        vatCode: billing.cnp || (abroad ? ABROAD_CNP : ''),
         isTaxPayer: false,
         address: billing.address || '',
-        city: billing.locality || '',
-        county: billing.county || '',
+        city,
+        county,
         country: 'Romania',
         email: billing.email || '',
         saveToDb: false,

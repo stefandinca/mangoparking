@@ -8,11 +8,23 @@
 At checkout (and at the admin desk) we capture the customer's **fiscal invoice
 identity** so an invoice can be issued later:
 
-- **PF (Persoană fizică)** — full name (one field), locality (oraș), personal
-  address, and an **optional** CNP.
-- **PJ (Persoană juridică)** — company name, **CUI** (required in the public
-  funnels), Reg.Com (optional), company address. A CUI lookup autofills company
-  name / address / Reg.Com from ANAF.
+- **PF (Persoană fizică)** — full name (one field), **county (Județ) +
+  locality** (linked dropdowns), personal address, and an **optional** CNP.
+- **PJ (Persoană juridică)** — company name, **CUI**, **Reg.Com (mandatory)**,
+  **county + locality** (dropdowns), company address. A CUI lookup autofills
+  company name / address / Reg.Com / county / locality from ANAF.
+- **Outside Romania** — a checkbox on every billing form (client decision
+  2026-07-17). When checked, county/locality are not required and the fiscal
+  documents issue under **BUCUREȘTI / BUCUREȘTI**; PF additionally gets the
+  CNP stand-in **0000000000000** on the invoice and the stored profile.
+
+The county → locality dropdowns are backed by `src/data/roLocalities.js`
+(42 counties → 13.7k localities, village level; București = its 6 sectors),
+lazily loaded as its own chunk. The shared widget lives in `BillingFields.js`
+(`geoFieldsHtml` / `wireGeoFields` / `readGeoFields` / `setGeoValues`) and is
+reused by the admin CreateTransactionModal and the collect-payment dialog.
+Matching against saved values and ANAF spellings is diacritic/case-insensitive;
+a legacy free-text locality outside the dataset is kept as an extra option.
 
 The data is validated, sanitized and stored on the order/booking/transaction
 and cached on the user profile. Since v1.2 Phase 2 (2026-07-17) it is also
