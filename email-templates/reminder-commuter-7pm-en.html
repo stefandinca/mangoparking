@@ -1,4 +1,4 @@
-<!-- subject: ⏰ 1 hour left to pick up your car, {{ params.plate }} -->
+<!-- subject: Your car's been asking about you, {{ params.firstName }} 🚗 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -16,19 +16,21 @@
 </td></tr>
 
 <tr><td style="padding:32px;">
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">1 hour left, {{ params.firstName }}</h1>
-<p style="margin:0 0 14px;font-size:15px;">Vehicle <strong style="font-family:'JetBrains Mono',Consolas,monospace;">{{ params.plate }}</strong> is registered with today's commuter credit. The commuter window closes at <strong>{{ params.cutoffTime }}</strong>.</p>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Hey {{ params.firstName }}!</h1>
+<p style="margin:0 0 14px;font-size:15px;">Your car (<strong style="font-family:'JetBrains Mono',Consolas,monospace;">{{ params.plate }}</strong>) has been with us since this morning on a commuter day pass. Our commuter programme wraps up at <strong>{{ params.cutoffTime }}</strong> — we hope you're already on your way!</p>
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FDBB3015;border-radius:12px;border:1px solid #FDBB3050;">
 <tr><td style="padding:18px 20px;">
-<p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#0F2D66;">⚠️ If you don't pick up by 20:00</p>
-<p style="margin:0;font-size:14px;color:#666;">An overnight surcharge will apply (per our late-pickup policy). We recommend picking up on time or messaging us if something's up.</p>
+<p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#0F2D66;">⚠️ If the car isn't picked up by 20:00</p>
+<p style="margin:0;font-size:14px;color:#666;">An extra day gets added to your bill automatically — that's why we're giving you a heads up now. If you know you're running late, just call us in advance and we'll figure something out together.</p>
 </td></tr>
 </table>
 
-<p style="margin:0 0 14px;font-size:14px;color:#666;">Already on your way? Great. If you need a shuttle from the train station, call us at <strong>+40 769 064 721</strong> and we'll come pick you up.</p>
+<p style="margin:0 0 14px;font-size:14px;color:#666;">Already on your way? Great — call us at <strong>+40 769 064 721</strong> when you arrive and we'll come pick you up.</p>
 
-<p style="margin:0;font-size:13px;color:#999;">This message is sent automatically at 19:00 when today's credit hasn't been closed. You won't get this tomorrow if you pick up on time.</p>
+<p style="margin:0 0 14px;font-size:14px;color:#1A1A1A;">See you soon! 🥭<br><strong>The ManGO Team</strong></p>
+
+<p style="margin:0;font-size:13px;color:#999;">This message goes out automatically at 19:00 if your car hasn't been collected yet.</p>
 </td></tr>
 
 <tr><td style="padding:20px 32px;background:#FFF8E8;border-top:1px solid #EDE3CC;font-size:12px;color:#666;line-height:1.6;">

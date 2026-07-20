@@ -17,11 +17,12 @@
 
 <tr><td style="padding:32px;">
 {% if params.paid %}
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Credits added, {{ params.firstName }}!</h1>
-<p style="margin:0 0 14px;font-size:15px;">{{ params.quantity }} credits have been added to your account. Use them any weekday between 06:00–20:00.</p>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Your credits have been confirmed, {{ params.firstName }}!</h1>
+<p style="margin:0 0 14px;font-size:15px;">{{ params.quantity }} credits have been added to your account. You can use them anytime, Monday to Friday, between 06:00 and 20:00.</p>
+<p style="margin:0 0 14px;font-size:15px;">Thank you for choosing our commuter service. If you have any questions, we're here to help.</p>
 {% else %}
 <h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Credits reserved, {{ params.firstName }}</h1>
-<p style="margin:0 0 14px;font-size:15px;">You've chosen to pay on arrival. The <strong>{{ params.quantity }} credits</strong> are held for you and will activate once you pay <strong>{{ params.totalAmount }} lei</strong> (cash or card) at the lot.</p>
+<p style="margin:0 0 14px;font-size:15px;">You chose to pay on arrival. Your <strong>{{ params.quantity }} credits</strong> have been reserved and will be activated once you pay <strong>{{ params.totalAmount }} lei</strong> (cash or card) at the parking location.</p>
 {% endif %}
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
@@ -59,13 +60,13 @@
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FDBB3015;border-radius:12px;border:1px solid #FDBB3050;">
 <tr><td style="padding:16px 20px;">
 <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0F2D66;">💡 Pay online and save {{ params.discountPct }}%</p>
-<p style="margin:0 0 12px;font-size:14px;color:#666;">Change your mind? Pay online any time before arrival and the discount applies automatically.</p>
+<p style="margin:0 0 12px;font-size:14px;color:#666;">Changed your mind? Pay online before arrival and your discount will be applied automatically.</p>
 <a href="{{ params.payOnlineLink }}" style="display:inline-block;padding:10px 20px;background:#1E5BD6;color:#fff;font-weight:600;text-decoration:none;font-size:14px;border-radius:8px;">Pay online now</a>
 </td></tr>
 </table>
 {% endif %}
 
-<p style="margin:24px 0 0;font-size:14px;color:#666;">Credits never expire — use them when you need them.</p>
+<p style="margin:24px 0 0;font-size:14px;color:#666;">Your credits never expire — use them whenever you need them.</p>
 </td></tr>
 
 <tr><td style="padding:20px 32px;background:#FFF8E8;border-top:1px solid #EDE3CC;font-size:12px;color:#666;line-height:1.6;">

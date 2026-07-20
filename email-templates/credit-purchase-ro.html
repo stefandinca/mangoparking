@@ -17,8 +17,9 @@
 
 <tr><td style="padding:32px;">
 {% if params.paid %}
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Credite adăugate, {{ params.firstName }}!</h1>
-<p style="margin:0 0 14px;font-size:15px;">{{ params.quantity }} credite au fost adăugate în contul tău. Le poți folosi oricând, Luni–Vineri, în intervalul 06:00–20:00.</p>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Creditele tale sunt confirmate, {{ params.firstName }}!</h1>
+<p style="margin:0 0 14px;font-size:15px;">{{ params.quantity }} credite au fost adăugate în contul tău. Le poți folosi oricând, de luni până vineri, în intervalul 06:00–20:00.</p>
+<p style="margin:0 0 14px;font-size:15px;">Îți mulțumim că ai ales serviciul nostru de navetism. Îți stăm la dispoziție pentru orice nelămurire.</p>
 {% else %}
 <h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Credite rezervate, {{ params.firstName }}</h1>
 <p style="margin:0 0 14px;font-size:15px;">Ai ales să plătești la sosire. Cele <strong>{{ params.quantity }} credite</strong> sunt rezervate pentru tine, dar vor fi activate doar după ce plătești <strong>{{ params.totalAmount }} lei</strong> (cash sau card) la parcare.</p>
@@ -65,7 +66,7 @@
 </table>
 {% endif %}
 
-<p style="margin:24px 0 0;font-size:14px;color:#666;">Creditele nu expiră — folosești când ai nevoie.</p>
+<p style="margin:24px 0 0;font-size:14px;color:#666;">Creditele nu expiră — le folosești oricând ai nevoie.</p>
 </td></tr>
 
 <tr><td style="padding:20px 32px;background:#FFF8E8;border-top:1px solid #EDE3CC;font-size:12px;color:#666;line-height:1.6;">

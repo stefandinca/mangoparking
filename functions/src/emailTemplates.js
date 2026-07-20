@@ -14,7 +14,7 @@
 // Falls back to RO when an EN template is missing (or vice-versa) so a
 // missing locale never blocks the send.
 
-const TEMPLATES = {
+export const TEMPLATES = {
   // Account
   'signup-welcome-ro':              4,   
   'signup-welcome-en':              5,

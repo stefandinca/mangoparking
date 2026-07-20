@@ -16,12 +16,12 @@
 </td></tr>
 
 <tr><td style="padding:32px;">
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Your refund has been processed, {{ params.firstName }}</h1>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Your refund has been processed successfully, {{ params.firstName }}</h1>
 
 {% if params.channel == "cash" %}
-<p style="margin:0 0 14px;font-size:15px;">We returned <strong>{{ params.totalAmount }} RON</strong> in cash on-site. Thanks for choosing Mango Parking.</p>
+<p style="margin:0 0 14px;font-size:15px;">The amount of <strong>{{ params.totalAmount }} RON</strong> has been returned to you in cash at the ManGO Parking location. Thank you for choosing us to be part of your journey!</p>
 {% else %}
-<p style="margin:0 0 14px;font-size:15px;">We've initiated a <strong>{{ params.totalAmount }} RON</strong> refund to the card you paid with. The funds typically land in <strong>3–5 business days</strong>, depending on your issuing bank.</p>
+<p style="margin:0 0 14px;font-size:15px;">We have initiated a refund of <strong>{{ params.totalAmount }} RON</strong> to the card you used for payment. The funds will reach your account within <strong>3–5 business days</strong>, depending on your bank. Thank you for your understanding and for choosing us to be part of your journey.</p>
 {% endif %}
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
@@ -50,9 +50,9 @@
 </table>
 
 {% if params.channel != "cash" %}
-<p style="margin:24px 0 0;font-size:14px;color:#666;">If the refund doesn't show up on your statement within 5 business days, reply to this email or message us on WhatsApp and we'll look into it together.</p>
+<p style="margin:24px 0 0;font-size:14px;color:#666;">If the refund does not appear in your statement within the next 5 business days, please reply to this email or contact us on WhatsApp and we will sort it out together.</p>
 {% else %}
-<p style="margin:24px 0 0;font-size:14px;color:#666;">Hope to see you again soon. For any questions, reply to this email or message us on WhatsApp.</p>
+<p style="margin:24px 0 0;font-size:14px;color:#666;">We hope to see you again soon. For any questions, feel free to reply to this email or contact us on WhatsApp.</p>
 {% endif %}
 </td></tr>
 

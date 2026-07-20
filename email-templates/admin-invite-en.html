@@ -16,19 +16,26 @@
 </td></tr>
 
 <tr><td style="padding:32px;">
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Welcome aboard, {{ params.firstName }}!</h1>
-<p style="margin:0 0 14px;font-size:15px;">{{ params.invitedByName }} has created an account for you at Mango Parking. Click the button below to finish setup and choose your password.</p>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Welcome to Mango Parking, {{ params.firstName }}! ✈️</h1>
+<p style="margin:0 0 14px;font-size:15px;">{{ params.invitedByName }} has created a Mango Parking account for you, where you can find all your booking details and more. You can activate it with just one click.</p>
+
+<p style="margin:20px 0 8px;font-size:15px;font-weight:700;color:#0F2D66;">🚀 What you get with your account</p>
+<ul style="margin:0 0 14px;padding-left:20px;font-size:15px;">
+<li style="margin:0 0 6px;"><strong>Faster bookings</strong> — your details are already saved</li>
+<li style="margin:0 0 6px;"><strong>Access to offers and vouchers</strong> — we can add discounts and special benefits directly to your account</li>
+<li style="margin:0;"><strong>All your history in one place</strong> — easy to track for future trips</li>
+</ul>
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
 <tr><td style="background:#FDBB30;border-radius:12px;">
-<a href="{{ params.signupLink }}" style="display:inline-block;padding:14px 28px;color:#1A1A1A;font-weight:600;text-decoration:none;font-size:15px;">Activate account</a>
+<a href="{{ params.signupLink }}" style="display:inline-block;padding:14px 28px;color:#1A1A1A;font-weight:600;text-decoration:none;font-size:15px;">Activate your account</a>
 </td></tr>
 </table>
 
 <p style="margin:0 0 14px;font-size:14px;color:#666;">If the button doesn't work, copy this link into your browser:</p>
 <p style="margin:0 0 14px;font-size:12px;color:#1E5BD6;word-break:break-all;">{{ params.signupLink }}</p>
 
-<p style="margin:24px 0 0;font-size:13px;color:#999;border-top:1px solid #EDE3CC;padding-top:16px;">The link is valid for 7 days and works once. If it has expired, just reply and we'll send a new invitation.</p>
+<p style="margin:24px 0 0;font-size:13px;color:#999;border-top:1px solid #EDE3CC;padding-top:16px;">The link is valid for 7 days and can only be used once. If it expires, just contact us and we'll send you a new invitation.</p>
 </td></tr>
 
 <tr><td style="padding:20px 32px;background:#FFF8E8;border-top:1px solid #EDE3CC;font-size:12px;color:#666;line-height:1.6;">

@@ -16,12 +16,12 @@
 </td></tr>
 
 <tr><td style="padding:32px;">
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Rambursarea a fost procesată, {{ params.firstName }}</h1>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Rambursarea ta a fost procesată cu succes, {{ params.firstName }}</h1>
 
 {% if params.channel == "cash" %}
-<p style="margin:0 0 14px;font-size:15px;">Ți-am returnat <strong>{{ params.totalAmount }} lei</strong> în numerar la fața locului. Mulțumim că ai ales Mango Parking.</p>
+<p style="margin:0 0 14px;font-size:15px;">Suma de <strong>{{ params.totalAmount }} lei</strong> ți-a fost returnată, cash, la sediul ManGO Parking. Îți mulțumim că ne-ai ales să fim parte din experiența ta!</p>
 {% else %}
-<p style="margin:0 0 14px;font-size:15px;">Am inițiat rambursarea de <strong>{{ params.totalAmount }} lei</strong> către cardul cu care ai plătit. Banii ajung în cont în <strong>3–5 zile lucrătoare</strong>, în funcție de banca emitentă.</p>
+<p style="margin:0 0 14px;font-size:15px;">Am inițiat rambursarea de <strong>{{ params.totalAmount }} lei</strong> către cardul cu care ai plătit. Banii ajung în cont în <strong>3–5 zile lucrătoare</strong>, în funcție de banca emitentă. Îți mulțumim pentru înțelegere și pentru că ne-ai ales să fim parte din experiența ta.</p>
 {% endif %}
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
@@ -50,7 +50,7 @@
 </table>
 
 {% if params.channel != "cash" %}
-<p style="margin:24px 0 0;font-size:14px;color:#666;">Dacă rambursarea nu apare în extrasul tău în 5 zile lucrătoare, răspunde la acest email sau scrie-ne pe WhatsApp și ne uităm împreună.</p>
+<p style="margin:24px 0 0;font-size:14px;color:#666;">Dacă rambursarea nu apare în extrasul tău în următoarele 5 zile lucrătoare, răspunde la acest email sau scrie-ne pe WhatsApp și rezolvăm împreună.</p>
 {% else %}
 <p style="margin:24px 0 0;font-size:14px;color:#666;">Sperăm să te revedem curând. Pentru orice nelămurire, răspunde la acest email sau scrie-ne pe WhatsApp.</p>
 {% endif %}

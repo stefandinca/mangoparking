@@ -64,7 +64,7 @@ every template with an ID:
 
 `listMissing()` (`emailTemplates.js:70`) reports any still-`null` entries.
 
-### The HTML source files & the re-paste caveat
+### The HTML source files & the sync script
 
 The template bodies live as source in **`email-templates/*.html`** (repo root, 26
 files — one per name × locale):
@@ -79,14 +79,29 @@ reminder-commuter-7pm-{ro,en}.html   signup-welcome-{ro,en}.html
 voucher-assigned-{ro,en}.html
 ```
 
-**Caveat — these files are source of record, not what Brevo sends.** Brevo renders
-from templates stored **in the Brevo dashboard**, keyed by the numeric IDs in
-`emailTemplates.js`. Editing a `.html` file in the repo changes nothing until you
-**paste the updated HTML into Brevo's template editor and save** (the ID stays the
-same on an in-place edit — no code change needed). Only bump the ID in the map if you
-delete + recreate the template. A brand-new template must be pasted into Brevo, its
-assigned ID dropped into the map, before its send stops returning `{ skipped:
-'no-template-id' }`.
+**The repo is the source of truth, synced to Brevo via API** (since 2026-07-20).
+Brevo renders from templates stored in its dashboard, keyed by the numeric IDs in
+`emailTemplates.js` — but editing a `.html` file here no longer means hand-pasting:
+**`scripts/sync-brevo-templates.mjs`** pushes the files over Brevo's template API
+(`PUT /v3/smtp/templates/{id}`). Each file's line-1 `<!-- subject: ... -->` comment
+is the subject of record — `push` sends `htmlContent` + `subject` + `templateName`
+(= the map key); sender, reply-to and active state stay as configured in Brevo.
+
+```powershell
+$env:BREVO_API_KEY = (firebase functions:secrets:access BREVO_API_KEY)
+node scripts/sync-brevo-templates.mjs list    # remote inventory vs the ID map
+node scripts/sync-brevo-templates.mjs diff    # html/subject/name drift per template
+node scripts/sync-brevo-templates.mjs push --all          # or: push <key> [...]
+node scripts/sync-brevo-templates.mjs pull <key>           # remote HTML -> local file
+```
+
+Run `diff` before `push` — if someone edited a template in the Brevo UI, `pull` it
+(or port the change by hand) first, otherwise `push` overwrites it. A brand-new
+template still needs `POST /v3/smtp/templates` (or a dashboard create) and its
+assigned ID dropped into the map before its send stops returning `{ skipped:
+'no-template-id' }`; only bump an ID if you delete + recreate. One-shot wording
+rounds live in `email-templates/wording-edits/` (source .docx from the team; the
+2026-07 round is applied).
 
 ---
 

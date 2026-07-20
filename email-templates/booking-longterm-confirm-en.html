@@ -16,34 +16,30 @@
 </td></tr>
 
 <tr><td style="padding:32px;">
-{% if params.paid %}
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Thanks, {{ params.firstName }}!</h1>
-<p style="margin:0 0 14px;font-size:15px;">Your reservation is confirmed and payment is processed. See you at the lot.</p>
-{% else %}
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Reservation registered, {{ params.firstName }}</h1>
-<p style="margin:0 0 14px;font-size:15px;">You've chosen to pay on arrival. Please have <strong>{{ params.totalAmount }} lei</strong> ready (cash or card) when you reach the lot.</p>
-{% endif %}
+<p style="margin:0 0 12px;"><span style="display:inline-block;padding:4px 14px;background:#4FBD4612;border:1px solid #4FBD4640;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0F2D66;">Parking ✓</span></p>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">See you soon, {{ params.firstName }}! ✈️</h1>
+<p style="margin:0 0 14px;font-size:15px;">{{ params.firstName }}, please keep this email. It contains everything you need to know about your departure day.</p>
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
 <tr><td style="padding:20px;">
-<p style="margin:0 0 4px;font-size:11px;color:#1E5BD6;font-weight:700;letter-spacing:.05em;text-transform:uppercase;">Reservation code</p>
-<p style="margin:0 0 16px;font-family:'JetBrains Mono',Consolas,monospace;font-size:22px;font-weight:700;color:#1A1A1A;line-height:1;">{{ params.code }}</p>
+<p style="margin:0 0 4px;font-size:11px;color:#1E5BD6;font-weight:700;letter-spacing:.05em;text-transform:uppercase;">Booking details</p>
+<p style="margin:0 0 16px;font-family:'JetBrains Mono',Consolas,monospace;font-size:22px;font-weight:700;color:#1A1A1A;line-height:1;">📋 {{ params.code }}</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
 <tr>
-<td style="padding:8px 0;font-size:14px;color:#666;width:50%;">License plate</td>
-<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-family:'JetBrains Mono',Consolas,monospace;font-weight:600;text-align:right;">{{ params.plate }}</td>
+<td style="padding:8px 0;font-size:14px;color:#666;width:50%;">📅 Check-in</td>
+<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;">{{ params.dropoffAt }}</td>
 </tr>
 <tr>
-<td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">Drop-off</td>
-<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.dropoffAt }}</td>
-</tr>
-<tr>
-<td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">Pick-up</td>
+<td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">📅 Check-out</td>
 <td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.pickupAt }}</td>
 </tr>
 <tr>
-<td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">Duration</td>
-<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.days }} days</td>
+<td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">🚗 Vehicle</td>
+<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-family:'JetBrains Mono',Consolas,monospace;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.plate }}</td>
+</tr>
+<tr>
+<td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">💳 Payment</td>
+<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{% if params.paid %}Paid online{% else %}Pay on arrival{% endif %}</td>
 </tr>
 <tr>
 <td style="padding:12px 0 4px;font-size:14px;color:#666;border-top:1px solid #EDE3CC;font-weight:600;">Total {% if params.paid %}paid{% else %}due on arrival{% endif %}</td>
@@ -63,20 +59,35 @@
 </table>
 {% endif %}
 
-<p style="margin:24px 0 0;font-size:15px;color:#444;">Find us at <strong>Strada Radarului 1, Corbeanca</strong>. Our free shuttle takes you to the airport terminal. Questions? Reply to this email or message us on WhatsApp.</p>
+<h2 style="margin:24px 0 8px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:16px;color:#0F2D66;">📍 How to find us</h2>
+<p style="margin:0 0 14px;font-size:14px;color:#666;"><strong>Radarului 1, Corbeanca, Ilfov</strong> — 5 minutes from Henri Coandă Airport</p>
 
 <!-- Directions button (#15) -->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0 0;"><tr><td>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px;"><tr><td>
 <a href="https://www.google.com/maps/dir/?api=1&destination=Strada%20Radarului%201%2C%20Corbeanca%2C%20Ilfov" style="display:inline-block;padding:12px 22px;background:#FDBB30;color:#1A1A1A;font-weight:700;text-decoration:none;font-size:15px;border-radius:8px;">📍 Open in Google Maps</a>
 </td></tr></table>
 
-<!-- Congestion disclaimer (#16) -->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0 0;background:#FDBB3015;border-radius:12px;border:1px solid #FDBB3050;"><tr><td style="padding:16px 20px;">
-<p style="margin:0;font-size:15px;color:#1A1A1A;">⚠️ <strong>Heads-up:</strong> At certain times the lot entrance can get busy. We recommend planning your arrival 2.5 hours before your flight.</p>
+<!-- Arrival-planning recommendation (#16, rewritten) -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px;background:#FDBB3015;border-radius:12px;border:1px solid #FDBB3050;"><tr><td style="padding:16px 20px;">
+<p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#0F2D66;">Our recommendation:</p>
+<p style="margin:0;font-size:14px;color:#666;">Plan your arrival 2–3 hours before your flight and allow an extra 20 minutes for our service. Even though we are only 5 minutes from the airport, some periods — weekends and holiday seasons — can be busier than usual.</p>
 </td></tr></table>
+
+<h2 style="margin:24px 0 8px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:16px;color:#0F2D66;">Arrival process</h2>
+<p style="margin:0 0 8px;font-size:14px;color:#666;">1. 🚗 <strong>Enter the parking area.</strong> A team member will welcome you at the entrance, and your luggage goes directly into the Mangobus.</p>
+<p style="margin:0 0 8px;font-size:14px;color:#666;">2. 🅿️ <strong>Park your car</strong> — we will guide you to your spot, or park it for you if you prefer.</p>
+<p style="margin:0 0 8px;font-size:14px;color:#666;">3. ✈️ <strong>Head to the terminal.</strong> The Mangobus takes you directly to the airport terminal (approx. 5 minutes).</p>
+<p style="margin:0 0 14px;font-size:14px;color:#666;">4. 🥭 <strong>We pick you up on return.</strong> When you land, call us from the departures terminal and we will come and collect you.</p>
+
+<p style="margin:16px 0 0;font-size:15px;color:#1A1A1A;">We take care of your car — the rest is your holiday. <strong>Have a great trip! ✈️</strong></p>
+
+<h2 style="margin:24px 0 8px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:16px;color:#0F2D66;">Need help?</h2>
+<p style="margin:0;font-size:14px;color:#666;">📲 WhatsApp &amp; Phone: <a href="https://wa.me/40769064721" style="color:#1E5BD6;text-decoration:none;font-weight:600;">+40 769 064 721</a> — we are here for you</p>
 </td></tr>
 
 <tr><td style="padding:20px 32px;background:#FFF8E8;border-top:1px solid #EDE3CC;font-size:12px;color:#666;line-height:1.6;">
+<p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0F2D66;">ManGO Parking 🥭</p>
+<p style="margin:0 0 10px;">Create your ManGO account and get faster bookings, history access, and exclusive offers.</p>
 <p style="margin:0 0 6px;">Mango Parking · Strada Radarului 1, Corbeanca, Ilfov county</p>
 <p style="margin:0 0 6px;">+40 769 064 721 · <a href="mailto:rezervari@mangoparking.ro" style="color:#1E5BD6;text-decoration:none;">rezervari@mangoparking.ro</a></p>
 <p style="margin:0;color:#999;">TRIO SERVICES COMPACT SRL · CUI RO32705476 · J2014000079041</p>
