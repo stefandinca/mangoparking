@@ -80,7 +80,10 @@ paid**, so an unpaid no-show never orphans a spot.
 - `cash` → `admin-cash`, records a cashbook entry (`recordCashEntry`).
 - `card` → `admin-card`, no cashbook (terminal reconciles).
 - `broker` → `broker` marker + `source: 'broker'`, stores `brokerName`, no
-  cashbook (money collected off-lot, e.g. ParkVia).
+  cashbook (money collected off-lot, e.g. ParkVia). **No billing, no SmartBill
+  documents** (2026-07-21): the broker bills the customer, so the admin modal
+  hides the billing block, the booking stores `billing: null`, and
+  `adminCreateLongtermBooking` skips proforma issuance for `paidBy: 'broker'`.
 - `later` → unpaid reservation; creates a `pendingOrders` doc so it rides the
   same pay-at-pickup rails (online repay or collect at lot).
 `autoCheckIn` flips the fresh booking to `active`, marks the spot `occupied`, and

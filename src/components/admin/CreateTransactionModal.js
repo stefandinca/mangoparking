@@ -359,8 +359,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
 
       <!-- Billing (invoice) details — mandatory for admin-created long-term
            reservations and credit-pack sales so the customer can be invoiced.
-           Shown for those two paths only (hidden for transfers + credit
-           check-in). Pre-filled from a matched customer's saved billing. -->
+           Shown for those two paths only (hidden for transfers, credit
+           check-in and broker/prepaid reservations — the broker bills the
+           customer, no SmartBill document is issued for us to invoice).
+           Pre-filled from a matched customer's saved billing. -->
       <div data-billing-wrap class="space-y-2.5 rounded-xl bg-frost border border-frost-deep p-3">
         <p class="text-[12px] uppercase tracking-wider text-dim font-mono">${t('transactions.billingSection')}</p>
         <div class="grid grid-cols-2 gap-2" data-billing-type-toggle>
@@ -610,8 +612,11 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     // credits or when recording a transfer (no money moves here).
     paidbyWrap?.classList.toggle('hidden', useExisting || isTransfer);
     // Billing is required only for invoiceable admin sales: a long-term
-    // reservation or selling new credits. Not for credit check-in or transfers.
-    const billingNeeded = isLT || (isCredit && !useExisting);
+    // reservation or selling new credits. Not for credit check-in or transfers,
+    // and not for broker/prepaid reservations — the broker (ParkVia et al.)
+    // bills the customer, so no SmartBill document is ever issued for them.
+    const isBrokerLT = isLT && paidBySelect?.value === 'broker';
+    const billingNeeded = (isLT && !isBrokerLT) || (isCredit && !useExisting);
     billingWrap?.classList.toggle('hidden', !billingNeeded);
     // Broker/prepaid and pay-later are long-term-only payment routes. Hide
     // both options on the credit funnel (grantCreditsForCash only takes
@@ -1109,9 +1114,12 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     }
 
     // Billing is mandatory for admin-created sales (long-term + credit packs).
-    // Credit check-in against existing credits already returned above, so at
-    // this point the sale is always invoiceable.
-    const billingRes = readCtBilling();
+    // Credit check-in against existing credits already returned above. The one
+    // exception: broker/prepaid reservations issue no SmartBill document (the
+    // broker bills the customer), so no invoice identity is captured — the
+    // billing block is hidden and null is sent.
+    const skipBilling = type === 'longterm' && paidBy === 'broker';
+    const billingRes = skipBilling ? { billing: null } : readCtBilling();
     if (billingRes.error) {
       errEl.textContent = billingRes.error;
       errEl.classList.remove('hidden');

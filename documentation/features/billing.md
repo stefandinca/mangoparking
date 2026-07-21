@@ -73,8 +73,11 @@ Prenume / Adresă / CNP(optional)** and PJ is **Company / CUI / Company address*
 with the same debounced CUI autofill.
 
 - **Mandatory** on admin-created long-term reservations and credit-pack sales
-  (`billingNeeded = isLT || (isCredit && !useExisting)`, `:604`); hidden for
-  transfers and credit *check-in* (no money → no invoice).
+  (`billingNeeded = (isLT && !isBrokerLT) || (isCredit && !useExisting)`);
+  hidden for transfers, credit *check-in* (no money → no invoice) and
+  **broker/prepaid reservations** (2026-07-21: the broker — ParkVia et al. —
+  bills the customer and no SmartBill document is issued, so the modal hides
+  the block and submits `billing: null`).
 - `readCtBilling()` (`:754`) validates and returns `{ billing }`. Here PF
   produces `name: "${nume} ${prenume}"` (last + first) with
   `firstName`/`lastName` split out; CUI is **optional** at the desk (validated if
@@ -90,7 +93,10 @@ Every callable that accepts billing runs it through `sanitizeBilling(raw)`
 200 chars, drops unknown keys, emits no `undefined` (Firestore rejects it), and
 falls back to a bare `{ type: 'PF' }` when nothing usable is provided. It's
 called by `adminCreateLongtermBooking` (`:2310`) and `grantCreditsForCash`
-(`:2505`).
+(`:2505`). Exception: `adminCreateLongtermBooking` only sanitizes when a
+billing object was actually sent — an absent billing (broker/prepaid
+reservations) stays **`null`** on the booking instead of becoming a hollow PF
+record.
 
 The sanitized billing is written onto:
 - the `bookings` doc (`billing` field, via `createBookingFromOrder` /
@@ -99,7 +105,9 @@ The sanitized billing is written onto:
 - and **cached onto `users/{uid}.billing`** (`{ merge: true }`) for future
   prefill — done by `creditTokens` (`index.js:181`),
   `createBookingFromOrder` (`:293`) and `adminCreateLongtermBooking` (`:2418`),
-  for logged-in customers only (guests have no profile).
+  for logged-in customers only (guests have no profile), and only when billing
+  was actually captured — a broker reservation's `null` never overwrites a
+  previously saved record.
 
 ## Key files
 
@@ -133,8 +141,9 @@ ANAF results are cached in `lookupCache/{cui_*}` for 24h.
 
 ## Gotchas / edge cases
 
-- **Capture-only.** No SmartBill call exists — the data sits waiting for
-  invoicing. Don't assume an invoice was produced.
+- **Broker/prepaid reservations carry no billing** (`billing: null`, 2026-07-21)
+  — the broker bills the customer and no SmartBill document is issued for them.
+  Don't assume every booking has an invoice identity.
 - **Public PJ requires CUI; the admin desk makes CUI optional.** `readBilling`
   (public) rejects an empty/invalid CUI; `readCtBilling` (admin) accepts a blank
   CUI and only validates a non-empty one.

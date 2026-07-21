@@ -4,7 +4,9 @@
 > Phase 2 is live and client-verified: `createPayment` issues a **proforma** on
 > every order, `netopiaCallback` issues the **fiscal invoice** on online payment
 > confirm (bookings, repays, credit packs), `adminCreateLongtermBooking`
-> (non-broker) + `grantCreditsForCash` issue proformas for desk sales. All via
+> (non-broker) + `grantCreditsForCash` issue proformas for desk sales. Broker/
+> prepaid reservations issue nothing and (2026-07-21) capture no billing at
+> all — the admin modal hides the block and the booking stores `billing: null`. All via
 > `smartbillIssueSafe` (best-effort — a SmartBill failure stamps
 > `smartbill.status='failed'` + `lastError`, never breaks a money flow). The
 > `smartbill` field is rules-protected (server-written only). Phase 3 as

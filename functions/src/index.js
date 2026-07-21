@@ -2756,7 +2756,13 @@ export const adminCreateLongtermBooking = onCall(
     if (!['cash', 'card', 'broker', 'later'].includes(paidBy)) {
       throw new HttpsError('invalid-argument', 'paidBy must be cash, card, broker or later');
     }
-    const billingClean = sanitizeBilling(billing);
+    // Broker/prepaid reservations legitimately carry no billing identity —
+    // the broker (ParkVia et al.) bills the customer and no SmartBill document
+    // is issued for them — so absent billing stays null rather than the hollow
+    // PF record sanitizeBilling would fabricate.
+    const billingClean = billing && typeof billing === 'object'
+      ? sanitizeBilling(billing)
+      : null;
     const payerEmailNorm = normalizeEmail(payerEmail);
     // Server-side account linking: when the UI didn't match a customer (its
     // picker only links on an EXACT datalist match — staff often just type
@@ -2896,8 +2902,10 @@ export const adminCreateLongtermBooking = onCall(
     });
 
     // Cache billing on the customer profile for future pre-fill (mirrors the
-    // online-purchase path in creditTokens). Only for a registered account.
-    if (linkedCustomerId) {
+    // online-purchase path in creditTokens). Only for a registered account,
+    // and only when billing was actually captured — a broker reservation's
+    // null must not wipe a previously saved record.
+    if (linkedCustomerId && billingClean) {
       await db.collection('users').doc(linkedCustomerId)
         .set({ billing: billingClean }, { merge: true })
         .catch((err) => console.warn('billing profile cache failed:', err?.message));
