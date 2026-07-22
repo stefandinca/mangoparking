@@ -1,6 +1,6 @@
 # External Integrations
 
-> Status: 🟡 Partial (2 shipped, 1 of them dormant; 2 planned) · Last verified: 2026-07-09
+> Status: 🟡 Partial (3 shipped, 1 of them dormant; 1 planned) · Last verified: 2026-07-22
 
 Overview of the third-party integrations wired into the backend, and the planned ones
 that are not built yet. Payments (Netopia) and email (Brevo) are large enough to have
@@ -15,7 +15,7 @@ This doc covers the rest:
 |---|---|---|
 | **ANAF CUI lookup** | ✅ Shipped | `functions/src/cui.js`, `src/services/cuiService.js` |
 | **Flight-status lookup** | ✅ Shipped, **dormant** (needs API key) | `functions/src/flightStatus.js`, `src/services/flightStatusService.js` |
-| **SmartBill invoicing** | 📋 Planned — not built | [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md) |
+| **SmartBill invoicing** | ✅ Shipped (v1.2 Phase 2/4 live; e-Factura + retry queue planned) | `functions/src/smartbill.js`, `src/services/invoiceService.js` |
 | **ANPR cameras** | 📋 Planned — not built | [../roadmap/v.1.3_anpr.md](../roadmap/v.1.3_anpr.md) |
 
 ---
@@ -56,8 +56,10 @@ never sees a broken state.
 
 > Note: the file's header comment still calls the function "future / Phase A infra" —
 > that comment is stale; the callable **is** deployed and live. `isVatPayer` /
-> `vatPayer` is captured today and is the field the planned SmartBill e-Factura branch
-> would key off (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
+> `vatPayer` is captured today and is the field the (still-planned) SmartBill e-Factura
+> branch — v1.2 Phase 8 — will key off (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
+> ⚠️ `readBilling` does **not** currently persist `isVatPayer` on stored PJ billing;
+> Phase 8 needs it captured at booking time.
 
 ---
 
@@ -123,18 +125,50 @@ returning `configured: true`.
 
 ---
 
-## SmartBill invoicing — 📋 Planned (not built)
+## SmartBill invoicing — ✅ Shipped (v1.2 Phase 2/4 live)
 
-Romanian fiscal invoices (facturi / chitanțe / e-Factura) auto-issued from every paid
-order. **None of it is in the codebase** — no `functions/src/smartbill.js`, no
-`smartbill` field on any doc, no SmartBill API call. The **only** part that exists
-today is capture of billing identity at checkout (PF/PJ split, CUI via the ANAF lookup
-above) on `bookings` / `pendingOrders` / `tokenTransactions`; that data is stored for
-future invoicing but never sent anywhere.
+Romanian fiscal invoices (facturi) auto-issued from paid orders, backed by the captured
+billing identity (PF/PJ split, CUI via the ANAF lookup above) on `bookings` /
+`pendingOrders` / `tokenTransactions`.
 
-Full plan (8 phases: wrapper, auto-issue on online/cash/card, storno on cancel,
-customer/admin PDF access, email attachment, retry queue, e-Factura for B2B VAT
-payers): [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
+**Two-document model (live, client-verified 2026-07-17):**
+- Every order issues a **proforma** up front (SmartBill "estimate", non-fiscal) —
+  `createPayment` (skipped when a voucher covers the full amount), plus desk sales via
+  `adminCreateLongtermBooking` (non-broker) and `grantCreditsForCash`.
+- Online-paid orders additionally get a **fiscal invoice** once payment confirms —
+  `netopiaCallback` (new bookings, repays at `repayAmount`, credit packs).
+- **Pay-at-location fiscal invoices stay manual** in the SmartBill UI (locked decision):
+  `adminMarkOrderPaid` issues nothing.
+- **Broker/prepaid** reservations capture no billing and issue nothing.
+
+**Wrapper** — `functions/src/smartbill.js`: HTTP Basic auth against
+`https://ws.smartbill.ro/SBORO/api`, 10s hard timeout, `errorText`-on-HTTP-200 failure
+handling. Two series pinned case-insensitively — invoices `Mango` (type `f`), proformas
+`MANGO` (type `p`); VAT 21%. Secrets `SMARTBILL_{USERNAME,TOKEN,CIF}`.
+
+**Orchestration** — `smartbillIssueSafe` / `smartbillDeleteProformaSafe` /
+`smartbillCancelInvoiceSafe` (`index.js`), all **best-effort**: a SmartBill failure
+stamps `smartbill.status='failed'` + `lastError` and **never breaks a money flow**. The
+`smartbill.{proforma,invoice,status,lastError}` field is server-written only
+(rules-protected).
+
+**Invalidation (Phase 4, live)** — cancellation deletes the proforma and issues a
+**storno, always** (`/invoice/reverse`, no same-day anulare) of any auto-issued invoice;
+reprice/overstay differences add proformas or partial stornos. Wired into
+`cancelBookingWithRefund`, `cancelPendingCreditOrder`, `adminRepriceBooking`,
+`adminChargeOverstay`, and the scheduled `markNoShows` / `expireStaleHolds` (unpaid docs
+only — paid no-shows forfeit and keep their invoice).
+
+**Admin diagnostics** — `smartbillHealthcheck` + `smartbillTestIssue` callables, surfaced
+on `/admin/pricing` (`AdminPricing.js`).
+
+**Documents are NOT surfaced** in the app or emails (client decision 2026-07-17) — staff
+consult SmartBill directly.
+
+**Still planned** — Phase 7 (retry queue for `smartbill.status='failed'` docs) and Phase 8
+(e-Factura / ANAF SPV submission for B2B VAT payers). Full plan + phase history:
+[../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md); working snapshot:
+[../smartbill-doc.md](../smartbill-doc.md).
 
 ---
 
@@ -160,5 +194,8 @@ retention, admin live page, reconciliation, GDPR signage):
 - **ANAF** — live, cached 24h, degrades to manual entry, feeds PJ billing capture.
 - **Flight status** — live but dormant; flip on with one env var / secret + redeploy,
   cached 15 min, staff-only.
-- **SmartBill / ANPR** — design docs only; billing capture (SmartBill) and overstay
-  detection + `markNoShows` (ANPR-adjacent) are the sole shipped fragments.
+- **SmartBill** — live (v1.2 Phase 2/4): proforma on every order, fiscal invoice on
+  online-payment confirm, storno on cancel; best-effort, never breaks a money flow.
+  e-Factura + retry queue (Phase 7/8) still planned.
+- **ANPR** — design docs only; overstay detection + `markNoShows` (ANPR-adjacent) are the
+  sole shipped fragments, the camera layer is not built.

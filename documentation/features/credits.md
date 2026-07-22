@@ -187,9 +187,15 @@ shared Netopia/booking plumbing.
 - **Credit check-in pick-up is the same-day 20:00 cutoff**, not 24h — commuters
   are expected to leave by 8 PM.
 
+## Invoicing (SmartBill, live)
+
+- **Credit *sales* are invoiced** (v1.2 Phase 2): a **proforma** issues on every credit
+  order and, for online purchases, a **fiscal invoice** on IPN confirm (`netopiaCallback`);
+  cash desk sales via `grantCreditsForCash` get a proforma (fiscal invoice issued manually).
+  Invoice line: `Credite parcare ManGO — N credite`. See [billing](billing.md) and
+  [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
+- **Credit *check-ins* are never invoiced** — no money changes hands (see the caveat above).
+
 ## Planned / not built
 
-- **SmartBill invoicing** for credit sales — billing identity is captured but no
-  invoice is issued. See [billing](billing.md) and
-  [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
 - **ANPR auto check-in/out** by plate — [roadmap/v.1.3_anpr.md](../roadmap/v.1.3_anpr.md).

@@ -207,10 +207,19 @@ Check-in/out, cancel+refund, no-show and overstay are covered in the
 - **`totalPrice` on the wire is always the standard price.** The server applies
   discount + voucher; never trust a client-sent net.
 
+## Invoicing (SmartBill, live)
+
+- Long-term orders are invoiced (v1.2 Phase 2): a **proforma** at order time and, for
+  online-paid bookings, a **fiscal invoice** on IPN confirm; pay-at-location fiscal
+  invoices stay manual; broker/prepaid capture no billing and issue nothing. Cancellation
+  deletes the proforma and **stornos** any auto-issued invoice; reprice/overstay
+  differences add proformas or partial stornos. Invoice line:
+  `Servicii parcare conform rezervării {code}`. See
+  [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
+
 ## Planned / not built
 
 - **Automated refunds** — cancellation refunds are a manual admin queue; Netopia
   has no refund API in the current integration.
   [roadmap/v.1.4_netopia_v2_migration.md](../roadmap/v.1.4_netopia_v2_migration.md).
-- **SmartBill invoicing** — [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
 - **ANPR auto check-in/out** — [roadmap/v.1.3_anpr.md](../roadmap/v.1.3_anpr.md).

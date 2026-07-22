@@ -135,7 +135,12 @@ for charging.
 - **0-lei price tolerance.** Any client/server price disagreement is rejected
   loudly (logged + HTTP 400) rather than silently coerced.
 
+## Shipped downstream
+
+- **SmartBill invoicing consumes these prices** (v1.2 Phase 2, live) — the
+  server-authoritative charged total becomes the single VAT-inclusive invoice line.
+  See [billing](billing.md) and [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
+
 ## Planned / not built
 
-- **SmartBill invoicing** consuming these prices — [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
 - No dynamic / demand-based pricing beyond the manual seasonal overlays.

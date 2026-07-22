@@ -51,8 +51,9 @@ Two products run side by side:
   (no programmatic refund); the JSON-REST migration that would automate them is
   planned, not built (see `documentation/roadmap/v.1.4_netopia_v2_migration.md`)
 - **Email**: Brevo transactional templates
-- **Invoicing**: SmartBill — billing data captured (PF/PJ, CUI via ANAF lookup); API
-  integration not yet wired
+- **Invoicing**: SmartBill — **live** (v1.2 Phase 2/4): proforma on every order, fiscal
+  invoice on online-payment confirm, storno on cancel. Best-effort (never breaks a money
+  flow); pay-at-location invoices stay manual. e-Factura + retry queue planned
 - **Fonts**: Nunito (headings), DM Sans (body), JetBrains Mono (mono)
 - **Colors**: mango `#FDBB30`, blueberry `#1E5BD6` / hover `#1947A8` / deep `#0F2D66`,
   leaf `#4FBD46`, charcoal `#1A1A1A`, frost `#FFF8E8` / deep `#EDE3CC`
@@ -223,9 +224,18 @@ no-shows are explicit flows.
   also sends inline-HTML ops alerts to rezervari@ on signup / reservation /
   cancellation / no-show / refund / credit purchase / password-reset — customer and
   staff-initiated, no Brevo template. Secret: `BREVO_API_KEY`.
-- **SmartBill:** billing identity (PF: name/CNP/CI; PJ: company/CUI via ANAF `lookupCui`,
-  24h-cached) is captured on orders/bookings for future invoice generation — no SmartBill
-  API calls exist yet.
+- **SmartBill (live, v1.2 Phase 2/4):** the captured billing identity (PF: name/CNP/CI;
+  PJ: company/CUI/regCom via ANAF `lookupCui`, 24h-cached; Județ+Localitate mandatory)
+  is consumed to issue fiscal documents. Every order gets a **proforma** up front
+  (`createPayment`, desk sales); online-paid orders add a **fiscal invoice** on IPN
+  confirm (`netopiaCallback`). Pay-at-location fiscal invoices stay manual in SmartBill;
+  broker/prepaid capture no billing. Cancellation deletes the proforma and issues a
+  **storno** of any auto-issued invoice. All via `smartbillIssueSafe` /
+  `smartbillCancelInvoiceSafe` (`functions/src/smartbill.js` + `index.js`) — best-effort:
+  a failure stamps `smartbill.status='failed'` and never breaks a money flow. Documents
+  aren't surfaced in-app (staff use SmartBill directly). Secrets: `SMARTBILL_USERNAME`,
+  `SMARTBILL_TOKEN`, `SMARTBILL_CIF`. e-Factura (B2B) + a failed-doc retry queue are the
+  remaining Phase 7/8 work (`documentation/roadmap/v.1.2_smartbill.md`).
 
 ---
 

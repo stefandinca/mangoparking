@@ -1,6 +1,6 @@
 # Security Rules
 
-> Status: ✅ Shipped · Last verified: 2026-07-09
+> Status: ✅ Shipped · Last verified: 2026-07-22
 
 How [`firestore.rules`](../../firestore.rules) and [`storage.rules`](../../storage.rules)
 gate access. Sibling docs: [data-model.md](./data-model.md) · [cloud-functions.md](./cloud-functions.md).
@@ -69,14 +69,18 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
 
 ### tokenTransactions (line 113) — append-only
 - **read:** `isStaff()` or the owning customer (`resource.data.customerId == uid`).
-- **create:** `if request.resource.data.type != 'use'` — clients may seed purchase/checkout/refund
-  rows but **not `use`** (those originate from staff actions via the admin SDK; allowing client
-  `use` rows would spam the `credit-used` email trigger).
+- **create:** `if request.resource.data.type != 'use'` **and no `smartbill` key** — clients
+  may seed purchase/checkout/refund rows but **not `use`** (those originate from staff actions
+  via the admin SDK; allowing client `use` rows would spam the `credit-used` email trigger),
+  and never the server-written `smartbill` fiscal-document block.
 - **update/delete:** denied.
 
 ### bookings (line 154)
 - **read:** `isStaff()` or the owning customer (`resource.data.customerId == uid`).
-- **create/update:** `isStaff()`. **delete:** `isAdmin()`.
+- **create/update:** `isStaff()`, **and neither may touch `smartbill`** — create rejects a
+  `smartbill` key, update rejects it in `affectedKeys()`. The fiscal-document trail is
+  server-written only (via `smartbillIssueSafe` etc.), so staff client flows (check-in/out,
+  edit details) can't clobber it. **delete:** `isAdmin()`.
 - Staff client-updates cover contact/plate/date edits and check-in/out; creation and all
   paid-state transitions go through Cloud Functions. Customers have **no** direct writes —
   self-cancel uses the `cancelBookingWithRefund` callable. *2026-07 hardening:* the old

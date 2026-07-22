@@ -1,6 +1,6 @@
 # Firestore Data Model
 
-> Status: ✅ Shipped · Last verified: 2026-07-09
+> Status: ✅ Shipped · Last verified: 2026-07-22
 
 Every Firestore collection in use, verified against `functions/src/index.js`,
 `src/services/*.js`, `src/firebase/db.js`, [`firestore.rules`](../../firestore.rules),
@@ -80,6 +80,11 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
   - `brokerName` string|null · `notes` string|null · `createdBy` uid
   - Idempotency: `confirmEmailSentAt`, `reminderCheckinSentAt`, `reminderCheckoutSentAt`,
     `adminNotifiedAt`, `adminCancelNotifiedAt`, `adminRefundNotifiedAt`
+  - `smartbill` **server-written only** (see [SmartBill invoicing](./integrations.md)):
+    `{ proforma?:{series,number,issuedAt}, invoice?:{...}, storno?:{...,documentViewUrl},
+    status:'proforma-issued'|'invoiced'|'storno'|'cancelled'|'cancel-failed'|'failed',
+    lastError, proformaDeleted?, extraProformas?[], partialStornos?[] }`. Written via
+    dot-path updates. Rules reject any client write touching `smartbill`.
 - **Access:** staff read all; customer reads own (`customerId`). Delete admin-only.
 
 ## tokenBalances
@@ -109,6 +114,8 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
   - `spotId` / `bookingId` string|null
   - `timestamp` ISO · `source` (`'netopia' | 'admin-cash' | 'admin-gift' | 'manual' | 'walk-in' | 'gift-voucher' | 'overstay' | 'reprice' | 'admin-adjust'`)
   - `paidBy` · `grantedBy` uid|null · `billing` object · `voucherCode` (gift redemptions)
+  - `smartbill` — server-written invoice/proforma block (same shape as on `bookings`);
+    stamped on `purchase` rows for credit-pack sales. Client creates rejecting any `smartbill`.
   - Idempotency: `emailSentAt`, `adminNotifiedAt`
 - **Access:** staff read all; customer reads own (`customerId`). No update/delete.
 - **Index:** composite `(customerId ASC, timestamp DESC)`.
@@ -132,6 +139,10 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
   - `paidAt` / `paidBy` / `bookingId` / `balanceDocId` (set on fulfilment)
   - `netopiaAction` / `netopiaErrorCode` · repay: `repayInProgress`, `repayAmount`, `repayStartedAt`
   - `collectedByUid`, `payerDetails`, `reversedAt/By`, `cancelledAt/By`, `expiredAt`
+  - `bookingCode` — reservation code minted at order time (so the order-time proforma
+    already carries it); reused by `createBookingFromOrder`
+  - `ipnProcessingAt` — transactional IPN lease (5-min expiry) preventing double-fulfilment
+  - `smartbill` — server-written invoice/proforma block, same shape as on `bookings` (above)
 - **Access:** **public read by orderId** (the `/booking/return` poller); writes denied to all clients.
 - **Index:** composite `(paymentStatus ASC, createdAt ASC)`.
 
@@ -418,3 +429,9 @@ server-side.
 - **`promoVouchers.featured`** — admin toggle to feature one voucher on the promotions page.
 - **`promoVouchers` type `'credits'`** (v1.10) — gift-card vouchers redeemed via
   `redeemCreditVoucher`, plus the `credit-voucher-assigned` email template.
+- **`smartbill`** (v1.2 Phase 2/4) — server-written invoice/proforma block on `bookings`,
+  `pendingOrders`, and `tokenTransactions`. Rules-protected (client writes touching it are
+  rejected). Written best-effort by `smartbillIssueSafe` / `smartbillCancelInvoiceSafe`;
+  see [SmartBill invoicing](./integrations.md).
+- **`pendingOrders.ipnProcessingAt` / `pendingOrders.bookingCode`** — the IPN
+  double-fulfilment lease and the order-time reservation code (see `pendingOrders` above).

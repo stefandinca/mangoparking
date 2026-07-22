@@ -158,8 +158,16 @@ ANAF results are cached in `lookupCache/{cui_*}` for 24h.
 - **Credit *check-in* captures no billing** — the credits were already paid for,
   so no invoice is due (the admin modal hides the block for that sub-mode).
 
+## Shipped downstream
+
+- **SmartBill fiscal invoicing consumes this captured identity** (v1.2 Phase 2/4, live):
+  proforma on every order, fiscal invoice on online-payment confirm, storno on cancel.
+  `checkBillingComplete()` (server) validates the mandatory PF/PJ fields before issuing;
+  a record that fails it stamps `smartbill.status='failed'` instead. See
+  [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
+
 ## Planned / not built
 
-- **SmartBill fiscal invoicing / e-Factura** consuming this captured identity —
-  [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md). This is the
-  reason the status banner is 🟡 Partial rather than ✅ Shipped.
+- **e-Factura (ANAF SPV) submission** for B2B VAT payers — v1.2 Phase 8. Keys off
+  `isVatPayer`, which `readBilling` does not yet persist on stored PJ billing.
+  [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).

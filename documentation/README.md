@@ -38,7 +38,7 @@ or feedback round.** The goal is that a fresh session can read this folder and
 - [backend/security-rules.md](backend/security-rules.md) — Firestore/Storage rules and the "server-only writes" principle.
 - [backend/payments-netopia.md](backend/payments-netopia.md) — Netopia Mobilpay (legacy crypto-envelope flow; **refunds are manual**).
 - [backend/email-brevo.md](backend/email-brevo.md) — Brevo transactional emails + ops alerts.
-- [backend/integrations.md](backend/integrations.md) — ANAF CUI lookup, flight-status lookup (dormant), planned SmartBill/ANPR.
+- [backend/integrations.md](backend/integrations.md) — ANAF CUI lookup, flight-status lookup (dormant), SmartBill invoicing (live), planned ANPR.
 - [backend/i18n-and-permissions.md](backend/i18n-and-permissions.md) — the i18n system and the roles/permissions model.
 
 ## Features
@@ -47,7 +47,7 @@ or feedback round.** The goal is that a fresh session can read this folder and
 - [features/long-term-bookings.md](features/long-term-bookings.md) — date-range reservations.
 - [features/pricing.md](features/pricing.md) — tiers, seasonal periods, online discount, server-authoritative recompute.
 - [features/vouchers.md](features/vouchers.md) — promo / signup / credit / days vouchers.
-- [features/billing.md](features/billing.md) — PF/PJ invoice capture + CUI/ANAF (capture-only; SmartBill not wired).
+- [features/billing.md](features/billing.md) — PF/PJ invoice capture + CUI/ANAF (consumed by live SmartBill invoicing).
 - [features/cashbook-refunds.md](features/cashbook-refunds.md) — cash drawer + manual refund queue.
 - [features/capacity.md](features/capacity.md) — spots/zones, live occupancy, the capacity map.
 - [features/transfers.md](features/transfers.md) — door-to-airport passenger transfers.
@@ -70,10 +70,11 @@ current reference:
 - [v.1.8_credit_checkin.md](v.1.8_credit_checkin.md) — manual commuter check-in against credits.
 - [v.1.9_days_vouchers.md](v.1.9_days_vouchers.md) — splittable "free days" vouchers.
 - [v.1.10_credit_vouchers.md](v.1.10_credit_vouchers.md) — credit gift vouchers + admin credit grants.
+- [roadmap/v.1.2_smartbill.md](roadmap/v.1.2_smartbill.md) — SmartBill fiscal invoicing (Phases 1–4 **shipped**; the doc keeps the full phase history + the remaining Phase 7/8 plan). Working snapshot: [smartbill-doc.md](smartbill-doc.md).
 
 ## Roadmap (planned / not built)
 
-- [roadmap/v.1.2_smartbill.md](roadmap/v.1.2_smartbill.md) — SmartBill fiscal invoicing.
+- [roadmap/v.1.2_smartbill.md](roadmap/v.1.2_smartbill.md) — **Phase 7/8 only** (retry queue + e-Factura); Phases 1–4 are live.
 - [roadmap/v.1.3_anpr.md](roadmap/v.1.3_anpr.md) — ANPR camera auto check-in/out.
 - [roadmap/v.1.4_netopia_v2_migration.md](roadmap/v.1.4_netopia_v2_migration.md) — Netopia v2 REST (automated refunds/voids).
 - [roadmap/cloud-switch.md](roadmap/cloud-switch.md) — move the Firebase project to the client's account.
@@ -85,6 +86,6 @@ current reference:
 ## Big integrations at a glance
 
 - **Payments (Netopia)** — live, on the legacy crypto-envelope flow. **Refunds are manual** (admin refund queue). v2 REST automation is [planned](roadmap/v.1.4_netopia_v2_migration.md).
-- **Invoicing (SmartBill)** — **not built.** Billing identity is captured at checkout but no invoice is issued. [Plan](roadmap/v.1.2_smartbill.md).
+- **Invoicing (SmartBill)** — **live** (v1.2 Phase 2/4): proforma on every order, fiscal invoice on online-payment confirm, storno on cancel. Best-effort — a failure stamps `smartbill.status='failed'` and never breaks a money flow. Pay-at-location invoices are issued manually; documents aren't surfaced in-app. e-Factura + retry queue (Phase 7/8) [planned](roadmap/v.1.2_smartbill.md).
 - **ANPR cameras** — **not built.** (The overstay/no-show pieces that plan referenced did ship independently.) [Plan](roadmap/v.1.3_anpr.md).
 - **Flight status** — code shipped but **dormant** until a flight-API key is configured. See [backend/integrations.md](backend/integrations.md).
