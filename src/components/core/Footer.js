@@ -1,38 +1,13 @@
-import { html, escapeHtml } from '../../utils/dom.js';
+import { html } from '../../utils/dom.js';
 import { t, localePath } from '../../i18n/index.js';
 import {
   CONTACT_PHONE, CONTACT_EMAIL, CONTACT_ADDRESS,
   COMPANY_LEGAL_NAME, CUI, REG_COM, COMPANY_ADDRESS,
   ANPC_SAL_URL, ANPC_SOL_URL,
 } from '../../utils/constants.js';
-import { getOpeningHours, OPENING_DAYS } from '../../services/openingHoursService.js';
 
 // Strip everything except digits — for tel:/wa.me URLs.
 const PHONE_DIGITS = CONTACT_PHONE.replace(/[^\d]/g, '');
-
-// Collapse the per-day opening hours into grouped footer lines: contiguous days
-// sharing the same hours render as one "Monday–Friday: 09:00–18:00" line, with
-// the Sat+Sun run labelled "Weekends". Showing the whole week (vs only today)
-// stops a closed day from reading as permanently closed.
-function groupedHoursLines(hours) {
-  const groups = [];
-  for (const k of OPENING_DAYS) {
-    const d = hours[k] || {};
-    const value = d.closed ? t('openingHours.closed') : `${d.open}–${d.close}`;
-    const prev = groups[groups.length - 1];
-    if (prev && prev.value === value) prev.days.push(k);
-    else groups.push({ value, days: [k] });
-  }
-  return groups.map((g) => {
-    const first = g.days[0];
-    const last = g.days[g.days.length - 1];
-    let label;
-    if (g.days.length === 1) label = t('openingHours.' + first);
-    else if (first === 'sat' && last === 'sun') label = t('openingHours.weekend');
-    else label = `${t('openingHours.' + first)}–${t('openingHours.' + last)}`;
-    return { label, value: g.value };
-  });
-}
 
 export function Footer() {
   const year = new Date().getFullYear();
@@ -86,8 +61,8 @@ export function Footer() {
               <p><a class="hover:text-blueberry transition-colors" href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></p>
               <p>${CONTACT_ADDRESS}</p>
               <p class="pt-2">${t('footer.parking247')}</p>
-              <div data-footer-hours class="space-y-0.5"><p>${t('openingHours.office')}</p></div>
               <p>${t('footer.shuttleEvery15')}</p>
+              <p class="pt-1 text-charcoal/70">${t('openingHours.callNote')} <a class="font-medium text-blueberry hover:text-blueberry-hover transition-colors whitespace-nowrap" href="tel:${PHONE_DIGITS}">${CONTACT_PHONE}</a></p>
             </div>
           </div>
         </div>
@@ -154,19 +129,6 @@ export function Footer() {
       </div>
     </div>
   `;
-
-  // Patch the office block with the full grouped week once loaded (cached
-  // service) — not just today, which read as permanently closed on a closed day.
-  const hoursEl = footer.querySelector('[data-footer-hours]');
-  if (hoursEl) {
-    getOpeningHours().then((hours) => {
-      const lines = groupedHoursLines(hours);
-      hoursEl.innerHTML = `<p class="text-charcoal/70">${escapeHtml(t('openingHours.office'))}:</p>`
-        + lines.map((l) => `<p>${escapeHtml(l.label)}: ${escapeHtml(l.value)}</p>`).join('')
-        + `<p class="pt-1.5 text-charcoal/70">${escapeHtml(t('openingHours.callNote'))}`
-        + ` <a class="font-medium text-blueberry hover:text-blueberry-hover transition-colors whitespace-nowrap" href="tel:${PHONE_DIGITS}">${escapeHtml(CONTACT_PHONE)}</a></p>`;
-    }).catch(() => {});
-  }
 
   return footer;
 }
