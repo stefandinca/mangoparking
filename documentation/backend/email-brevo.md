@@ -53,7 +53,7 @@ every template with an ID:
 | `admin-invite` | 8 / 1 | `adminSendInvite` |
 | `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail` |
 | `booking-refunded` | 22 / 21 | `sendRefundIssuedEmail` |
-| `booking-repriced` | null / null (set after Brevo create) | `sendBookingRepricedEmail`, `sendExtensionPaidEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up. Deploy-safe: skips until the ids are set. |
+| `booking-repriced` | 28 / 27 | `sendBookingRepricedEmail`, `sendExtensionPaidEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up. |
 | `credit-purchase` | 3 / 10 | `handlePurchase` (token purchase) |
 | `credit-used` | 11 / 12 | `handleUse` |
 | `low-credit-warning` | 13 / 14 | `handleUse` (crossing ≤2 credits) |
