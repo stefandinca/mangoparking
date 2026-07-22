@@ -50,6 +50,58 @@ body {
   display: none;
 }
 
+/* ===== Custom scrollbars =====
+ * Replace the chunky system scrollbars in overflowing UI (modals, the admin
+ * sidebar) with a thin, rounded, on-brand pill. Two variants by surface:
+ *   .scrollbar-custom      — light surfaces (white modals): charcoal-tint thumb
+ *   .scrollbar-custom-dark — dark surfaces (bg-blueberry-deep sidebar): white thumb
+ * The transparent border + background-clip insets the thumb so it reads as a
+ * slim pill with breathing room, not a solid 8px bar. Firefox uses the
+ * scrollbar-width/color properties (it ignores ::-webkit-*). */
+.scrollbar-custom {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 26, 26, 0.22) transparent;
+}
+.scrollbar-custom::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scrollbar-custom::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-custom::-webkit-scrollbar-thumb {
+  background: rgba(26, 26, 26, 0.18);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.scrollbar-custom::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 26, 26, 0.32);
+  background-clip: content-box;
+}
+
+.scrollbar-custom-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+.scrollbar-custom-dark::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scrollbar-custom-dark::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-custom-dark::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.24);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.scrollbar-custom-dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.42);
+  background-clip: content-box;
+}
+
 /* ===== Solid containers (glassmorphism removed per brand update) ===== */
 .glass {
   background: #FFFFFF;

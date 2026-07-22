@@ -53,7 +53,7 @@ export function AdminLayout(activePath, contentHtml) {
           <span class="text-white font-heading font-bold text-lg">${t('admin.mangoAdmin')}</span>
         </a>
       </div>
-      <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav class="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-custom-dark">
         ${sidebarLinks(activePath)}
       </nav>
       <div class="p-4 border-t border-white/10">

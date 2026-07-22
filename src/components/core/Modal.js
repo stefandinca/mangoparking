@@ -12,7 +12,7 @@ export function openModal(content, { onClose, dismissible = true, maxWidth = 'ma
   const overlay = html`
     <div class="fixed inset-0 z-[90] flex items-center justify-center p-4" data-modal-overlay>
       <div class="absolute inset-0 bg-charcoal/60" data-modal-bg></div>
-      <div class="relative bg-white rounded-3xl shadow-2xl ${maxWidth} w-full max-h-[90vh] overflow-y-auto p-8" data-modal-content></div>
+      <div class="relative bg-white rounded-3xl shadow-2xl ${maxWidth} w-full max-h-[90vh] overflow-y-auto scrollbar-custom p-8" data-modal-content></div>
     </div>
   `;
 
