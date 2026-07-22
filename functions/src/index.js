@@ -37,7 +37,7 @@ import {
   crcError,
 } from './netopia.js';
 import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
-import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendExtensionPaidEmail } from './emails.js';
+import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendBookingRequoteEmail, sendExtensionPaidEmail } from './emails.js';
 import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 import {
@@ -4002,7 +4002,15 @@ export const adminRepriceBooking = onCall(
           label: `requote ${bookingId}`,
         });
       }
-      return { ok: true, requote: true, difference, days: newCalc.days, perDay: newCalc.perDay, newTotal: newCalc.expected };
+      // The cost changed on a booking the customer hasn't paid yet — tell them
+      // the new total, with the usual pay-online (discounted) / pay-at-arrival
+      // options. Best-effort, like every customer email.
+      let emailed = false;
+      if (difference !== 0) {
+        try { emailed = (await sendBookingRequoteEmail(bookingId))?.ok === true; }
+        catch (err) { console.warn('requote email failed:', err?.message); }
+      }
+      return { ok: true, requote: true, emailed, difference, days: newCalc.days, perDay: newCalc.perDay, newTotal: newCalc.expected };
     }
 
     // Paid → settle the difference (mirrors adminChargeOverstay). Three ways to

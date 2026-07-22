@@ -17,8 +17,8 @@
 
 <tr><td style="padding:32px;">
 <p style="margin:0 0 12px;"><span style="display:inline-block;padding:4px 14px;background:#1E5BD612;border:1px solid #1E5BD640;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0F2D66;">Rezervare actualizată</span></p>
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">Am prelungit rezervarea ta, {{ params.firstName }}! 🗓️</h1>
-<p style="margin:0 0 14px;font-size:15px;">Ți-am actualizat rezervarea cu noile date{% if params.addedDays %} (+{{ params.addedDays }} zile){% endif %}. Mai jos găsești detaliile și opțiunile de plată pentru diferență.</p>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">{% if params.requote %}Ți-am actualizat rezervarea, {{ params.firstName }}! 🗓️{% else %}Am prelungit rezervarea ta, {{ params.firstName }}! 🗓️{% endif %}</h1>
+{% if params.requote %}<p style="margin:0 0 14px;font-size:15px;">Ți-am actualizat rezervarea cu noile date. Mai jos găsești detaliile și noul total de plată.</p>{% else %}<p style="margin:0 0 14px;font-size:15px;">Ți-am actualizat rezervarea cu noile date{% if params.addedDays %} (+{{ params.addedDays }} zile){% endif %}. Mai jos găsești detaliile și opțiunile de plată pentru diferență.</p>{% endif %}
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
 <tr><td style="padding:20px;">
@@ -38,7 +38,7 @@
 <td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-family:'JetBrains Mono',Consolas,monospace;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.plate }}</td>
 </tr>
 <tr>
-<td style="padding:12px 0 4px;font-size:14px;color:#666;border-top:1px solid #EDE3CC;font-weight:600;">Diferență de plată</td>
+<td style="padding:12px 0 4px;font-size:14px;color:#666;border-top:1px solid #EDE3CC;font-weight:600;">{% if params.requote %}Total de plată{% else %}Diferență de plată{% endif %}</td>
 <td style="padding:12px 0 4px;font-size:18px;color:#0F2D66;font-weight:700;text-align:right;border-top:1px solid #EDE3CC;">{{ params.differenceAmount }} lei</td>
 </tr>
 </table>
@@ -48,10 +48,14 @@
 {% if params.paid == false %}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FDBB3015;border-radius:12px;border:1px solid #FDBB3050;">
 <tr><td style="padding:16px 20px;">
-<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0F2D66;">💳 Cum plătești diferența</p>
+<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0F2D66;">{% if params.requote %}💳 Cum plătești{% else %}💳 Cum plătești diferența{% endif %}</p>
+{% if params.payOnlineLink %}
 <p style="margin:0 0 6px;font-size:14px;color:#666;"><strong>Online</strong> — plătește acum <strong>{{ params.onlineAmount }} lei</strong> și economisești {{ params.discountPct }}%.</p>
 <a href="{{ params.payOnlineLink }}" style="display:inline-block;margin:6px 0 14px;padding:10px 20px;background:#1E5BD6;color:#fff;font-weight:600;text-decoration:none;font-size:14px;border-radius:8px;">Plătește online acum</a>
 <p style="margin:0;font-size:14px;color:#666;">Sau <strong>la sosire</strong> — achiți {{ params.differenceAmount }} lei numerar sau card la parcare.</p>
+{% else %}
+<p style="margin:0;font-size:14px;color:#666;"><strong>La sosire</strong> — achiți {{ params.differenceAmount }} lei numerar sau card la parcare.</p>
+{% endif %}
 </td></tr>
 </table>
 {% endif %}

@@ -353,6 +353,56 @@ export async function sendBookingRepricedEmail(bookingId, extOrderId) {
       discountPct,
       payOnlineLink: `${SITE_URL}/pay?orderId=${extOrderId}`,
       paid: false,
+      requote: false,
+    },
+  });
+  return result?.ok ? { ok: true, recipient: recipient.email } : { ok: false, reason: result?.reason || 'unknown' };
+}
+
+// Called from adminRepriceBooking when staff move the dates of an UNPAID
+// (pay-at-pickup / pay-later) booking and the total changes. Nothing extra is
+// owed on top — the whole re-quoted total is still unpaid — so the email shows
+// the NEW TOTAL with the usual options: pay online (discounted, via the
+// booking's own pending order → repayOrder) or pay at arrival. Same Brevo
+// template as the paid-extension request, switched to "new total" wording via
+// requote:true. Bookings without a linked order (legacy) get no pay link —
+// the template then shows only the pay-at-arrival line.
+export async function sendBookingRequoteEmail(bookingId) {
+  const db = getFirestore();
+  const snap = await db.collection('bookings').doc(bookingId).get();
+  if (!snap.exists) return { ok: false, reason: 'booking-not-found' };
+  const booking = snap.data();
+
+  const recipient = await resolveRecipient({
+    customerId: booking.customerId,
+    licensePlate: booking.licensePlate,
+    contact: booking.contact,
+  });
+  if (!recipient) return { ok: false, reason: 'no-recipient' };
+
+  const totalAmount = Number(booking.totalPrice) || 0;     // new STANDARD total
+  const discountPct = await getOnlineDiscount();
+  const onlineAmount = Math.round(totalAmount * (1 - discountPct / 100));
+
+  const result = await sendBrevoEmail({
+    to: recipient.email,
+    name: recipient.name,
+    templateName: 'booking-repriced',
+    locale: recipient.locale,
+    params: {
+      firstName: recipient.firstName,
+      code: booking.code || `LT-${bookingId.slice(0, 5).toUpperCase()}`,
+      plate: booking.licensePlate,
+      dropoffAt: fmtDateTime(booking.dropoffAt || booking.startDate, recipient.locale),
+      pickupAt: fmtDateTime(booking.pickupAt || booking.endDate, recipient.locale),
+      days: booking.days,
+      addedDays: null,
+      differenceAmount: totalAmount,
+      onlineAmount,
+      discountPct,
+      payOnlineLink: booking.paymentId ? `${SITE_URL}/pay?orderId=${booking.paymentId}` : '',
+      paid: false,
+      requote: true,
     },
   });
   return result?.ok ? { ok: true, recipient: recipient.email } : { ok: false, reason: result?.reason || 'unknown' };
@@ -391,6 +441,7 @@ export async function sendExtensionPaidEmail(bookingId, extOrderId) {
       discountPct: 0,
       payOnlineLink: '',
       paid: true,
+      requote: false,
     },
   });
 }

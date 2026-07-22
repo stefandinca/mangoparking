@@ -17,8 +17,8 @@
 
 <tr><td style="padding:32px;">
 <p style="margin:0 0 12px;"><span style="display:inline-block;padding:4px 14px;background:#1E5BD612;border:1px solid #1E5BD640;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0F2D66;">Booking updated</span></p>
-<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">We've extended your booking, {{ params.firstName }}! 🗓️</h1>
-<p style="margin:0 0 14px;font-size:15px;">Your booking has been updated with the new dates{% if params.addedDays %} (+{{ params.addedDays }} days){% endif %}. Below are the details and your options to pay the difference.</p>
+<h1 style="margin:0 0 16px;font-family:Nunito,Georgia,serif;font-weight:700;font-size:24px;color:#0F2D66;line-height:1.2;">{% if params.requote %}We've updated your booking, {{ params.firstName }}! 🗓️{% else %}We've extended your booking, {{ params.firstName }}! 🗓️{% endif %}</h1>
+{% if params.requote %}<p style="margin:0 0 14px;font-size:15px;">Your booking has been updated with the new dates. Below are the details and the new total to pay.</p>{% else %}<p style="margin:0 0 14px;font-size:15px;">Your booking has been updated with the new dates{% if params.addedDays %} (+{{ params.addedDays }} days){% endif %}. Below are the details and your options to pay the difference.</p>{% endif %}
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FFF8E8;border-radius:12px;border:1px solid #EDE3CC;">
 <tr><td style="padding:20px;">
@@ -48,10 +48,14 @@
 {% if params.paid == false %}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background:#FDBB3015;border-radius:12px;border:1px solid #FDBB3050;">
 <tr><td style="padding:16px 20px;">
-<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0F2D66;">💳 How to pay the difference</p>
+<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0F2D66;">{% if params.requote %}💳 How to pay{% else %}💳 How to pay the difference{% endif %}</p>
+{% if params.payOnlineLink %}
 <p style="margin:0 0 6px;font-size:14px;color:#666;"><strong>Online</strong> — pay <strong>{{ params.onlineAmount }} lei</strong> now and save {{ params.discountPct }}%.</p>
 <a href="{{ params.payOnlineLink }}" style="display:inline-block;margin:6px 0 14px;padding:10px 20px;background:#1E5BD6;color:#fff;font-weight:600;text-decoration:none;font-size:14px;border-radius:8px;">Pay online now</a>
 <p style="margin:0;font-size:14px;color:#666;">Or <strong>on arrival</strong> — pay {{ params.differenceAmount }} lei by cash or card at the car park.</p>
+{% else %}
+<p style="margin:0;font-size:14px;color:#666;"><strong>On arrival</strong> — pay {{ params.differenceAmount }} lei by cash or card at the car park.</p>
+{% endif %}
 </td></tr>
 </table>
 {% endif %}

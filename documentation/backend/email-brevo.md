@@ -53,7 +53,7 @@ every template with an ID:
 | `admin-invite` | 8 / 1 | `adminSendInvite` |
 | `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail` |
 | `booking-refunded` | 22 / 21 | `sendRefundIssuedEmail` |
-| `booking-repriced` | 28 / 27 | `sendBookingRepricedEmail`, `sendExtensionPaidEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up. |
+| `booking-repriced` | 28 / 27 | `sendBookingRepricedEmail`, `sendExtensionPaidEmail`, `sendBookingRequoteEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up; with `requote:true`, the unpaid-re-quote variant showing the new total instead of a difference. |
 | `credit-purchase` | 3 / 10 | `handlePurchase` (token purchase) |
 | `credit-used` | 11 / 12 | `handleUse` |
 | `low-credit-warning` | 13 / 14 | `handleUse` (crossing ≤2 credits) |
@@ -141,6 +141,15 @@ Reusable senders (not triggers themselves — called from callables / the IPN):
   options (online at the discounted amount via `/pay?orderId=<extOrderId>`, or standard
   at arrival); the second is the paid follow-up from `netopiaCallback` when the extension
   is paid online.
+- **`sendBookingRequoteEmail(bookingId)`** (`emails.js`) — **`booking-repriced`**
+  with `requote:true`, which flips the template copy from "difference owed" to
+  "new total". Sent automatically from `adminRepriceBooking` when an **unpaid**
+  booking's dates change the total (any direction): shows the re-quoted total
+  with pay-online (discounted, `/pay?orderId=<paymentId>` — the booking's own
+  pending order, i.e. the `repayOrder` path) or pay-at-arrival. Bookings without
+  a linked order get no pay link (the template hides the online block via
+  `{% if params.payOnlineLink %}`). Best-effort; the callable returns
+  `emailed:true/false` so the admin toast can say whether the client was notified.
 
 Two more customer templates are sent from callables in `functions/src/index.js`:
 

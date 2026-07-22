@@ -1291,7 +1291,9 @@ function openEditBookingDialog({ booking }) {
           const diff = Number(difference) || 0;
           let line; let cls;
           if (!isPaid) {
-            line = t('checkins.repriceRequote', { amount: newTotal });
+            // A changed total on an unpaid booking triggers the re-quote email
+            // (server-side) — tell staff so the client contact isn't a surprise.
+            line = t(diff !== 0 ? 'checkins.repriceRequoteEmail' : 'checkins.repriceRequote', { amount: newTotal });
             cls = 'text-charcoal';
           } else {
             line = diff > 0 ? t('checkins.repriceCollect', { amount: diff })
@@ -1376,8 +1378,8 @@ function openEditBookingDialog({ booking }) {
           const adj = await adminRepriceBookingFn({ bookingId: booking.id, newDropoffAt: newDropoff, newPickupAt: newPickup, paidBy });
           const out = adj?.data || {};
           const diff = Number(out.difference) || 0;
-          repriceMsg = out.emailed ? t('checkins.repriceEmailed', { amount: out.owed })
-            : out.requote ? t('checkins.repriceRequoted', { amount: out.newTotal })
+          repriceMsg = out.requote ? t(out.emailed ? 'checkins.repriceRequotedEmailed' : 'checkins.repriceRequoted', { amount: out.newTotal })
+            : out.emailed ? t('checkins.repriceEmailed', { amount: out.owed })
             : diff > 0 ? t('checkins.repriceCollected', { amount: diff })
             : diff < 0 ? t('checkins.repriceRefundQueued', { amount: Math.abs(diff) })
             : t('checkins.repriceUpdated');
