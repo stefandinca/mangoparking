@@ -130,6 +130,15 @@ upcoming ──check-in──▶ active ──check-out──▶ completed
    └── no-show (markNoShows scheduled detector)
 ```
 
+- **Reprice / extension** — staff move a booking's dates on `/admin/checkins`
+  (`adminRepriceBooking`). Unpaid → re-quote (collected at pick-up). Paid + more
+  days → collect the difference now (cash/card), **or `email` the client a payment
+  request**: the new dates apply immediately, the difference is tracked as owed
+  (`extensionOwed`), and a `kind:'extension'` `pendingOrders` doc + a
+  `booking-repriced` email let the client pay **online (with the online discount)**
+  or **at arrival**. Both settle via `applyExtensionSettlement` (accrues
+  `extensionPrice`, never re-marks the booking paid). Paid + fewer days → refund
+  queue. Full mechanics in [backend/cloud-functions.md](../backend/cloud-functions.md).
 - **Overstay** — a late pick-up is charged via the `adminChargeOverstay`
   callable; the rate is `settings/commuterPolicy.latePickupDailyRate`
   (default 49), applied per started day past the planned end

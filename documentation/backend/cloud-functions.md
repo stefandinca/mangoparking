@@ -109,7 +109,7 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 | `adminCreateLongtermBooking` | 2279 | `assertStaff` | Desk-created longTerm booking (cash/card/broker/pay-later) bypassing Netopia. Creates a paid (or pay-later + pendingOrder) booking, reserves a spot, records cash (cash only), optionally auto-checks-in (walk-in), audit-logs. When the UI didn't match a customer, resolves the (lowercased) payer email against Firebase Auth and stamps `customerId` if an account exists — so the reservation appears in that customer's profile. |
 | `adminChargeOverstay` | 2947 | `assertAgent` | Adds a late-pickup charge to `latePrice`; writes a `lateFee` ledger row; records cash (cash only); audit-logs. |
 | `previewBookingReprice` | 3020 | `assertStaff` | Read-only re-price of a longTerm booking to new dates; returns `{ days, perDay, newTotal, oldTotal, difference, paid }`. No writes. |
-| `adminRepriceBooking` | 3068 | `assertAgent` | Moves a booking's dates and re-prices. Unpaid → re-quote (keeps pendingOrder in sync). Paid extension → collects the diff (cash → cashbook) into `extensionPrice` + `extension` ledger row; shortening → `pendingRefundAmount`. Audit-logs. |
+| `adminRepriceBooking` | 3068 | `assertAgent` | Moves a booking's dates and re-prices. Unpaid → re-quote (keeps pendingOrder in sync). Paid extension → collect the diff at the desk (`cash`/`card`) into `extensionPrice` + `extension` ledger row, **or `email` the client a payment request** (see below); shortening → `pendingRefundAmount`. Audit-logs. Binds `BREVO_API_KEY` (email mode). |
 | `adminResolvePendingRefund` | 3204 | `assertAgent` | Clears a reprice-shortening partial refund on a booking (money movement is manual). Audit-logs. |
 
 ### Credits & vouchers
@@ -176,6 +176,24 @@ re-quote replaces the proforma; paid extension and `adminChargeOverstay` append
 a difference proforma (`smartbill.extraProformas`); paid shortening appends a
 **partial storno** (negative-line invoice, `smartbill.partialStornos`) when the
 original was auto-issued. Statuses: `cancelled` | `storno` | `cancel-failed`.
+
+**Extension "email the client" flow** — a paid booking extended via
+`adminRepriceBooking` with `paidBy:'email'` applies the new dates immediately,
+tracks the owed difference on the booking (`extensionOwed` + `extensionOrderId`),
+and creates a **`pendingOrders` doc with `kind:'extension'`, `extensionOf:<bookingId>`,
+`paymentMethod:'pay-at-pickup'`** (so `repayOrder`/IPN engage) for the difference,
+plus a proforma and a `booking-repriced` email offering pay-online (discounted, via
+`/pay?orderId=`) or pay-at-arrival. Both settle paths route through the shared
+**`applyExtensionSettlement(bookingRef, booking, order, {chargedAmount, paidBy, via})`**
+(index.js): the IPN (`netopiaCallback`, extension branch before `isRepay`) settles at
+the online-discounted `repayAmount` and issues a fiscal invoice for the difference
+(`smartbill.extraInvoices`); `adminMarkOrderPaid` (extension branch) settles at the
+standard amount (cash → cashbook `longterm-extension`). Neither re-marks the booking
+paid / reserves a spot / rewrites `totalPrice` — it only accrues `extensionPrice` +
+an `extension` ledger row and clears the owed flags (idempotent). Re-extending
+supersedes the prior pending request (carries its owed forward, one live pay link);
+shortening while a request is outstanding is blocked; cancelling the booking cancels
+the extension order + drops its proforma.
 
 ---
 

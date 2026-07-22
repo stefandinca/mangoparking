@@ -302,6 +302,14 @@ function typeBadge(b) {
   return `<span class="${base} bg-mango/15 text-charcoal">${planeIcon}${t('checkins.typeLongTerm')}</span>`;
 }
 
+// Outstanding-extension chip — an emailed payment request the client hasn't
+// paid yet (adminRepriceBooking paidBy:'email'). Warns staff there's money due.
+function owedBadge(b) {
+  const owed = Number(b.extensionOwed) || 0;
+  if (owed <= 0) return '';
+  return `<span class="ml-1 inline-flex items-center text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-mango/20 text-mango-deep">${escapeHtml(t('checkins.extensionOwed', { amount: owed }))}</span>`;
+}
+
 // ── Row builders ────────────────────────────────────────────────────────
 
 function tabPill(key, activeKey, label, count) {
@@ -396,7 +404,7 @@ function rowHtml(b, { tab, locale, canCancel }) {
         <div class="text-[12px] text-dim font-mono mt-0.5">→ ${fmtDateTime(pickup, locale)}</div>
       </td>
       <td class="px-4 py-3 align-top text-[13px]">
-        <div class="mb-1">${typeBadge(b)}</div>
+        <div class="mb-1">${typeBadge(b)}${owedBadge(b)}</div>
         <div class="font-medium">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name })}</div>
         <div class="text-[11px] text-dim truncate" title="${escapeHtml(b.contact?.email || '')}">${escapeHtml(b.contact?.email || '')}</div>
         ${b.notes ? `<div class="text-[11px] text-blueberry mt-0.5 flex items-start gap-1 max-w-[16rem]" title="${escapeHtml(b.notes)}"><svg class="w-3 h-3 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg><span class="truncate">${escapeHtml(b.notes)}</span></div>` : ''}
@@ -446,7 +454,7 @@ function overdueRowHtml(b, { locale, canCancel }) {
         <div class="flex items-center gap-3 min-w-0 flex-1">
           <span class="font-mono text-[14px] font-bold text-blueberry-deep">${escapeHtml(code)}</span>
           <span class="font-mono text-[14px] text-charcoal">${escapeHtml(b.licensePlate || '—')}</span>
-          ${typeBadge(b)}
+          ${typeBadge(b)}${owedBadge(b)}
           <span class="text-[13px] text-charcoal/70 truncate">${escapeHtml(b.contact?.name || b.contact?.email || '—')}</span>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -1210,7 +1218,7 @@ function openEditBookingDialog({ booking }) {
         <div data-reprice-preview class="text-[13px]"></div>
         <div data-reprice-pay class="hidden">
           <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('checkins.paidBy')}</label>
-          <div class="grid grid-cols-2 gap-2" data-reprice-paidby>
+          <div class="grid grid-cols-3 gap-2" data-reprice-paidby>
             <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-mango bg-mango/5 cursor-pointer">
               <input type="radio" name="repricePaidBy" value="cash" checked class="accent-mango">
               <span class="text-[14px] font-medium">${t('checkins.payCash')}</span>
@@ -1219,7 +1227,12 @@ function openEditBookingDialog({ booking }) {
               <input type="radio" name="repricePaidBy" value="card" class="accent-mango">
               <span class="text-[14px] font-medium">${t('checkins.payCard')}</span>
             </label>
+            <label class="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-frost-deep cursor-pointer">
+              <input type="radio" name="repricePaidBy" value="email" class="accent-mango">
+              <span class="text-[14px] font-medium">${t('checkins.payEmail')}</span>
+            </label>
           </div>
+          <p data-reprice-email-note class="hidden text-[12px] text-dim mt-2">${t('checkins.repriceEmailNote')}</p>
         </div>
       </div>` : (!showLogistics ? `<p class="text-[12px] text-dim">${t('checkins.editActiveNote')}</p>` : '')}
       <div>
@@ -1257,6 +1270,7 @@ function openEditBookingDialog({ booking }) {
       const previewEl = qs('[data-reprice-preview]', form);
       const payEl = qs('[data-reprice-pay]', form);
       const paidbyWrap = qs('[data-reprice-paidby]', form);
+      const emailNoteEl = qs('[data-reprice-email-note]', form);
       paidbyWrap?.addEventListener('change', (e) => {
         if (!e.target.matches('input[name="repricePaidBy"]')) return;
         paidbyWrap.querySelectorAll('label').forEach((lbl) => {
@@ -1265,6 +1279,7 @@ function openEditBookingDialog({ booking }) {
           lbl.classList.toggle('bg-mango/5', inp.checked);
           lbl.classList.toggle('border-frost-deep', !inp.checked);
         });
+        emailNoteEl?.classList.toggle('hidden', e.target.value !== 'email');
       });
       const runPreview = async () => {
         const { newDropoff, newPickup, changed } = readDates();
@@ -1285,7 +1300,10 @@ function openEditBookingDialog({ booking }) {
             cls = diff > 0 ? 'text-mango' : diff < 0 ? 'text-leaf' : 'text-dim';
           }
           previewEl.innerHTML = `<div class="text-dim">${escapeHtml(t('transactions.priceComputed', { total: newTotal, days, perDay }))}</div><div class="mt-1 font-semibold ${cls}">${escapeHtml(line)}</div>`;
-          payEl.classList.toggle('hidden', !(isPaid && diff > 0));
+          const showPay = isPaid && diff > 0;
+          payEl.classList.toggle('hidden', !showPay);
+          const emailSelected = form.querySelector('input[name="repricePaidBy"]:checked')?.value === 'email';
+          emailNoteEl?.classList.toggle('hidden', !(showPay && emailSelected));
         } catch (err) {
           previewEl.textContent = err?.message || t('common.error');
           payEl.classList.add('hidden');
@@ -1345,8 +1363,10 @@ function openEditBookingDialog({ booking }) {
             const pv = await previewBookingRepriceFn({ bookingId: booking.id, newDropoffAt: newDropoff, newPickupAt: newPickup });
             const diffNow = Number(pv?.data?.difference) || 0;
             if (diffNow > 0) {
-              const methodLabel = paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard');
-              const ok = await confirmModal(t('checkins.collectConfirm', { amount: diffNow, method: methodLabel }), { confirmText: t('checkins.repriceConfirm') });
+              const confirmMsg = paidBy === 'email'
+                ? t('checkins.repriceEmailConfirm', { amount: diffNow })
+                : t('checkins.collectConfirm', { amount: diffNow, method: paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard') });
+              const ok = await confirmModal(confirmMsg, { confirmText: t('checkins.repriceConfirm') });
               if (!ok) { showToast(t('checkins.editSaved'), 'success'); modal.close(); resolve(); return; }
             } else if (diffNow < 0) {
               const ok = await confirmModal(t('checkins.repriceRefundConfirm', { amount: Math.abs(diffNow) }), { confirmText: t('checkins.repriceConfirm') });
@@ -1356,7 +1376,8 @@ function openEditBookingDialog({ booking }) {
           const adj = await adminRepriceBookingFn({ bookingId: booking.id, newDropoffAt: newDropoff, newPickupAt: newPickup, paidBy });
           const out = adj?.data || {};
           const diff = Number(out.difference) || 0;
-          repriceMsg = out.requote ? t('checkins.repriceRequoted', { amount: out.newTotal })
+          repriceMsg = out.emailed ? t('checkins.repriceEmailed', { amount: out.owed })
+            : out.requote ? t('checkins.repriceRequoted', { amount: out.newTotal })
             : diff > 0 ? t('checkins.repriceCollected', { amount: diff })
             : diff < 0 ? t('checkins.repriceRefundQueued', { amount: Math.abs(diff) })
             : t('checkins.repriceUpdated');

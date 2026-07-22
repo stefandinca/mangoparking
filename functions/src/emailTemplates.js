@@ -28,6 +28,11 @@ export const TEMPLATES = {
   'booking-longterm-confirm-en':    9,
   'booking-refunded-ro':            22,
   'booking-refunded-en':            21,
+  // Extension payment request — paste email-templates/booking-repriced-*.html
+  // into Brevo, then drop the numeric IDs here. Until set, the send skips
+  // gracefully (deploy-safe), same rollout as the voucher templates.
+  'booking-repriced-ro':            null,
+  'booking-repriced-en':            null,
 
   // Credit packs
   'credit-purchase-ro':             3,

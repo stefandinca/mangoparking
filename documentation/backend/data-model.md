@@ -75,6 +75,10 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
   - `checkinTimestamp` / `completedAt` / `checkoutTimestamp` ISO|null
   - Overstay/reprice: `overstayChargedAt/By`, `extensionPrice`, `extensionPaidBy`,
     `pendingRefundAmount`, `pendingRefundReason`, `checkoutRefundedAt/By/Via/Amount`
+  - Emailed extension (owed until paid): `extensionOwed` (RON), `extensionOrderId`
+    (the `pendingOrders` extension doc), `extensionRequestedAt/By`, `extensionOwedReason`,
+    `extensionSettledAt` — set by `adminRepriceBooking` `paidBy:'email'`, cleared on
+    settlement (`applyExtensionSettlement`). See [cloud-functions.md](./cloud-functions.md).
   - Refund: `refundRequestedAt`, `refundedAt/By/Via`, `refundNotes`, `refundEmail` block
   - No-show: `noShowAt`, `noShowDetectedBy` (`'scheduled' | 'admin-cancel'`)
   - `brokerName` string|null · `notes` string|null · `createdBy` uid
@@ -139,7 +143,12 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
   - `amount` RON (authoritative, method-correct: online = discounted − voucher, pickup = standard − voucher)
   - `voucherId` / `voucherAmount` / `promoVoucherCode` / `voucherDaysUsed`
   - `paymentMethod` `'online' | 'pay-at-pickup'` · `paymentStatus` `'unpaid' | 'paid' | 'refund-pending' | 'refunded'`
-  - `status` `'pending' | 'paid' | 'cancelled' | 'expired' | <netopia action>`
+  - `status` `'pending' | 'paid' | 'cancelled' | 'expired' | 'superseded' | <netopia action>`
+  - **Extension top-up orders** (staff extended a paid booking, emailed a pay request):
+    `kind: 'extension'`, `extensionOf: <bookingId>`, `addedDays`, `paymentMethod: 'pay-at-pickup'`,
+    `amount` = the STANDARD owed difference. Paid via `repayOrder`/IPN (online, discounted) or
+    `adminMarkOrderPaid` (arrival) → `applyExtensionSettlement`. `superseded` marks a request
+    replaced by a later re-price.
   - `paidAt` / `paidBy` / `bookingId` / `balanceDocId` (set on fulfilment)
   - `netopiaAction` / `netopiaErrorCode` · repay: `repayInProgress`, `repayAmount`, `repayStartedAt`
   - `collectedByUid`, `payerDetails`, `reversedAt/By`, `cancelledAt/By`, `expiredAt`

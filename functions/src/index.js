@@ -36,8 +36,8 @@ import {
   crcSuccess,
   crcError,
 } from './netopia.js';
-import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
-import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail } from './emails.js';
+import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
+import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendExtensionPaidEmail } from './emails.js';
 import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 import {
@@ -1134,7 +1134,7 @@ export const createPayment = onRequest(
 export const netopiaCallback = onRequest(
   {
     cors: false,
-    secrets: [NETOPIA_PRIVATE_KEY, ...SMARTBILL_SECRETS],
+    secrets: [NETOPIA_PRIVATE_KEY, ...SMARTBILL_SECRETS, BREVO_API_KEY],
   },
   async (req, res) => {
     if (req.method !== 'POST') {
@@ -1211,6 +1211,36 @@ export const netopiaCallback = onRequest(
         const nowIso = new Date().toISOString();
         const isRepay = pending.paymentMethod === 'pay-at-pickup' && pending.bookingId;
         if (pending.orderType === 'longTerm') {
+          // Extension top-up: staff extended a PAID booking and emailed a pay
+          // request; this IPN is the client paying the difference online. Settle
+          // it onto the existing booking (accrue extensionPrice + fiscal invoice
+          // for the difference) WITHOUT re-marking it paid, reserving a spot, or
+          // rewriting totalPrice — the booking was already paid.
+          if (pending.kind === 'extension' && pending.extensionOf) {
+            const bref = db.collection('bookings').doc(pending.extensionOf);
+            const bsnap = await bref.get();
+            // repayOrder stamps the online-discounted amount; fall back to the
+            // standard owed if it's somehow missing so money is never unapplied.
+            const chargedNow = Number(pending.repayAmount) || Number(pending.amount) || 0;
+            if (bsnap.exists) {
+              await applyExtensionSettlement(bref, bsnap.data(), { ...pending, id: orderId },
+                { chargedAmount: chargedNow, paidBy: 'netopia', via: 'online' });
+            }
+            await orderRef.update({
+              status: 'paid',
+              paymentStatus: 'paid',
+              paidAt: nowIso,
+              paidBy: 'netopia',
+              netopiaAction: action,
+              bookingId: pending.extensionOf,
+              ...(Number.isFinite(chargedNow) && chargedNow > 0 ? { amount: chargedNow } : {}),
+              repayInProgress: FieldValue.delete(),
+              ipnProcessingAt: FieldValue.delete(),
+            });
+            try { await sendExtensionPaidEmail(pending.extensionOf, orderId); }
+            catch (err) { console.warn('extension paid email failed:', err?.message); }
+            return res.status(200).send(crcSuccess());
+          }
           // Repay path: a pay-at-pickup booking was already created at
           // order time; this IPN is the online repay coming through.
           // Update the existing booking instead of creating a duplicate.
@@ -1633,6 +1663,93 @@ async function recordCashEntry({
   return ref.id;
 }
 
+// Settle a booking EXTENSION payment — the difference owed after staff added
+// days and chose to bill the client (adminRepriceBooking paidBy:'email') rather
+// than collect at the desk. Called by BOTH the Netopia IPN (online, discounted
+// amount) and adminMarkOrderPaid (pay-at-arrival, standard amount). Unlike a
+// full-booking payment it must NOT touch the booking's paymentStatus / spotId /
+// totalPrice — it only accrues `extensionPrice`, writes an `extension` ledger
+// row, settles the fiscal document for the difference, and clears the owed
+// flags. Idempotent: a replay finds the order already paid OR the owed pointer
+// cleared and no-ops. The CALLER flips the order doc to paid afterwards.
+async function applyExtensionSettlement(bookingRef, booking, order, { chargedAmount, paidBy, via, actorUid = null }) {
+  const db = getFirestore();
+  const nowIso = new Date().toISOString();
+  const charged = Number(chargedAmount);
+  if (!Number.isFinite(charged) || charged <= 0) return { ok: false, reason: 'bad-amount' };
+  // Idempotency — either signal means this extension already settled.
+  if (order.status === 'paid' || booking.extensionOrderId !== order.id) {
+    return { ok: true, alreadyApplied: true };
+  }
+  const storedPaidBy = paidBy === 'cash' ? 'admin-cash'
+    : paidBy === 'card' ? 'admin-card'
+    : 'netopia';
+
+  await bookingRef.update({
+    extensionPrice: (Number(booking.extensionPrice) || 0) + charged,
+    extensionPaidBy: storedPaidBy,
+    extensionOwed: FieldValue.delete(),
+    extensionOrderId: FieldValue.delete(),
+    extensionOwedReason: FieldValue.delete(),
+    extensionSettledAt: nowIso,
+  });
+
+  await db.collection('tokenTransactions').add({
+    customerId: booking.customerId || null,
+    licensePlate: booking.licensePlate || null,
+    bookingId: bookingRef.id,
+    type: 'extension',
+    amount: charged,
+    paidBy: storedPaidBy,
+    timestamp: nowIso,
+    source: via === 'online' ? 'reprice-online' : 'reprice-markpaid',
+  });
+
+  // Cash physically collected at arrival → cashbook (card via terminal / online
+  // via Netopia never enter the drawer).
+  if (paidBy === 'cash') {
+    await recordCashEntry({
+      agentUid: actorUid,
+      amount: charged,
+      source: 'longterm-extension',
+      plate: booking.licensePlate || null,
+      payerName: booking.contact?.name || null,
+      bookingId: bookingRef.id,
+      orderId: order.id,
+    });
+  }
+
+  // SmartBill: online money gets a fiscal invoice for the difference (appended
+  // as an extraInvoices entry, statusOnSuccess:null so it never masks the
+  // booking's own invoice/paid status). The extension proforma issued at reprice
+  // time stays as the (non-fiscal) estimate. Pay-at-arrival money issues no auto
+  // invoice — the fiscal invoice is created manually, same as every desk sale.
+  if (via === 'online') {
+    await smartbillIssueSafe({
+      kind: 'invoice',
+      field: 'extraInvoices',
+      append: true,
+      statusOnSuccess: null,
+      billing: booking.billing,
+      email: booking.contact?.email,
+      items: [{ name: `Servicii parcare conform rezervării ${booking.code || bookingRef.id} - extindere`, quantity: 1, price: charged, code: 'PARK-LT' }],
+      refs: [bookingRef],
+      label: `extension paid ${bookingRef.id}`,
+    });
+  }
+
+  await db.collection('auditLog').add({
+    action: 'booking_extension_settled',
+    entityType: 'booking',
+    entityId: bookingRef.id,
+    actorUid: actorUid || 'netopia',
+    payload: { orderId: order.id, chargedAmount: charged, paidBy: storedPaidBy, via },
+    timestamp: nowIso,
+  });
+
+  return { ok: true, chargedAmount: charged };
+}
+
 // ── Admin auth gates ────────────────────────────────────────────────────
 // Roles: admin > agent (was 'staff') > driver > customer.
 // `assertStaff` is the most permissive backoffice gate — allows any role
@@ -1723,6 +1840,19 @@ export const adminMarkOrderPaid = onCall(
       });
       await orderRef.update({ ...paymentMark, balanceDocId: docId });
     } else if (pending.orderType === 'longTerm') {
+      // Extension top-up paid AT ARRIVAL: staff extended a paid booking and
+      // emailed a request; the client pays cash/card at the desk instead of
+      // online. Settle the STANDARD difference onto the existing booking without
+      // reserving a spot or re-marking the whole booking paid.
+      if (pending.kind === 'extension' && pending.extensionOf) {
+        const bref = db.collection('bookings').doc(pending.extensionOf);
+        const bsnap = await bref.get();
+        if (!bsnap.exists) throw new HttpsError('not-found', 'Booking not found');
+        await applyExtensionSettlement(bref, bsnap.data(), { ...pending, id: orderId },
+          { chargedAmount: Number(pending.amount) || 0, paidBy, via: 'arrival', actorUid: uid });
+        await orderRef.update({ ...paymentMark, bookingId: pending.extensionOf });
+        return { ok: true, extension: true };
+      }
       // If the booking was pre-created at order time (pay-at-pickup
       // longTerm path), flip its payment fields. Otherwise create it now.
       const bookingId = pending.bookingId || await createBookingFromOrder(orderId, pending);
@@ -2404,6 +2534,26 @@ export const cancelBookingWithRefund = onCall(
           ...(refundOutcome !== 'none' ? { paymentStatus: 'refund-pending', refundRequestedAt: nowIso } : {}),
         })
         .catch((err) => console.warn('pendingOrders cancel mirror failed:', err?.message));
+    }
+
+    // If an emailed extension payment request is still outstanding, cancel it
+    // too: kill the order, drop its proforma, clear the owed flags. Best-effort.
+    if (booking.extensionOrderId) {
+      try {
+        const extRef = db.collection('pendingOrders').doc(booking.extensionOrderId);
+        const extSnap = await extRef.get();
+        if (extSnap.exists && extSnap.data().status === 'pending') {
+          await extRef.update({ status: 'cancelled', cancelledAt: nowIso }).catch(() => {});
+          await smartbillDeleteProformaSafe({ sb: extSnap.data().smartbill, refs: [extRef], label: `cancel ext ${bookingId}` });
+        }
+        await bookingRef.update({
+          extensionOwed: FieldValue.delete(),
+          extensionOrderId: FieldValue.delete(),
+          extensionOwedReason: FieldValue.delete(),
+        }).catch(() => {});
+      } catch (err) {
+        console.warn('cancelBookingWithRefund: extension cleanup failed', err?.message);
+      }
     }
 
     // v1.2 Phase 4: invalidate the SmartBill documents. The (non-fiscal)
@@ -3750,7 +3900,7 @@ export const previewBookingReprice = onCall(
 //     queue (`pendingRefundAmount`). The booking stays check-out-able.
 // Money op → agent gate (drivers excluded).
 export const adminRepriceBooking = onCall(
-  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
+  { region: 'europe-west1', cors: true, secrets: [...SMARTBILL_SECRETS, BREVO_API_KEY] },
   async (request) => {
     const { uid } = await assertAgent(request);
     const { bookingId, newDropoffAt, newPickupAt, paidBy = 'cash' } = request.data || {};
@@ -3781,6 +3931,28 @@ export const adminRepriceBooking = onCall(
     const difference = newCalc.expected - oldTotal;
 
     const nowIso = new Date().toISOString();
+
+    // A booking carries at most ONE outstanding emailed extension (a pending
+    // payment request). If one exists and we're extending FURTHER, supersede it
+    // (mark the order stale, drop its proforma) and carry its owed amount
+    // forward so the new request covers everything still owed. SHORTENING while
+    // a request is outstanding would mean refunding money never collected — that
+    // is blocked; staff wait for payment or cancel the booking.
+    let carriedOwed = 0;
+    if (b.paymentStatus === 'paid' && b.extensionOrderId) {
+      const priorRef = db.collection('pendingOrders').doc(b.extensionOrderId);
+      const priorSnap = await priorRef.get();
+      if (priorSnap.exists && priorSnap.data().status === 'pending') {
+        if (difference <= 0) {
+          throw new HttpsError('failed-precondition',
+            'This booking has a pending extension payment request — wait for it to be paid or cancel the booking before shortening it.');
+        }
+        carriedOwed = Number(b.extensionOwed) || 0;
+        await priorRef.update({ status: 'superseded', supersededAt: nowIso }).catch(() => {});
+        await smartbillDeleteProformaSafe({ sb: priorSnap.data().smartbill, refs: [priorRef], label: `supersede ext ${bookingId}` });
+      }
+    }
+
     const patch = {
       dropoffAt: newDropoff,
       startDate: String(newDropoff).slice(0, 10),
@@ -3833,14 +4005,112 @@ export const adminRepriceBooking = onCall(
       return { ok: true, requote: true, difference, days: newCalc.days, perDay: newCalc.perDay, newTotal: newCalc.expected };
     }
 
-    // Paid → settle the difference (mirrors adminChargeOverstay).
+    // Paid → settle the difference (mirrors adminChargeOverstay). Three ways to
+    // handle the extra owed: collect now (cash/card), or 'email' the client a
+    // payment request (pay online with the discount, or at arrival).
     if (difference > 0) {
-      if (!['cash', 'card'].includes(paidBy)) {
-        throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
+      if (!['cash', 'card', 'email'].includes(paidBy)) {
+        throw new HttpsError('invalid-argument', 'paidBy must be cash, card or email');
       }
+
+      // ── Bill the client by email (deferred settlement) ──
+      // Apply the new dates NOW; track the difference as OWED (never touch
+      // extensionPrice/cashbook yet). Create a pay-at-pickup "extension" order
+      // for the difference so the client can pay online (repayOrder discounts
+      // it) or at arrival (adminMarkOrderPaid) — both settle via
+      // applyExtensionSettlement. `owed` folds in any carried-over amount from a
+      // superseded earlier request so one link covers everything still owed.
+      if (paidBy === 'email') {
+        const owed = carriedOwed + difference;
+        const extOrderId = db.collection('pendingOrders').doc().id;
+        const addedDays = newCalc.days - (Number(b.days) || 0);
+        patch.extensionOwed = owed;
+        patch.extensionOrderId = extOrderId;
+        patch.extensionRequestedAt = nowIso;
+        patch.extensionRequestedBy = uid;
+        patch.extensionOwedReason = 'reprice-extension';
+        await ref.update(patch);
+
+        const extOrderRef = db.collection('pendingOrders').doc(extOrderId);
+        await extOrderRef.set({
+          orderType: 'longTerm',
+          kind: 'extension',
+          extensionOf: bookingId,
+          paymentMethod: 'pay-at-pickup',
+          status: 'pending',
+          paymentStatus: 'unpaid',
+          amount: owed,             // STANDARD; repayOrder applies the online discount
+          totalPrice: owed,
+          days: newCalc.days,
+          addedDays,
+          bookingCode: b.code || null,
+          bookingId,
+          dropoffAt: newDropoff,
+          pickupAt: newPickupAt,
+          startDate: patch.startDate,
+          endDate: patch.endDate,
+          customerData: {
+            customerId: b.customerId || null,
+            licensePlate: b.licensePlate || null,
+            name: b.contact?.name || '',
+            email: b.contact?.email || '',
+            phone: b.contact?.phone || '',
+            billing: b.billing || null,
+          },
+          createdAt: nowIso,
+          createdBy: uid,
+        });
+
+        // Proforma for the owed difference (the payment request). The fiscal
+        // invoice follows only if paid online (IPN → applyExtensionSettlement);
+        // pay-at-arrival stays a manual invoice, like every desk sale.
+        await smartbillIssueSafe({
+          kind: 'proforma',
+          field: 'extraProformas',
+          append: true,
+          statusOnSuccess: null,
+          billing: b.billing,
+          email: b.contact?.email,
+          items: [{ name: `Servicii parcare conform rezervării ${b.code || bookingId} - extindere`, quantity: 1, price: owed, code: 'PARK-LT' }],
+          refs: [ref, extOrderRef],
+          label: `extension email ${bookingId}`,
+        });
+
+        // Customer email (pay-online + pay-at-arrival) + ops alert — best-effort.
+        try { await sendBookingRepricedEmail(bookingId, extOrderId); }
+        catch (err) { console.warn('reprice email failed:', err?.message); }
+        try {
+          await sendBrevoRaw({
+            to: 'rezervari@mangoparking.ro',
+            subject: `Extindere rezervare ${b.code || bookingId} — plată solicitată`,
+            html: `<p>Rezervarea <b>${b.code || bookingId}</b> a fost extinsă (${addedDays} zile). Diferență de <b>${owed} lei</b> solicitată clientului prin email (plată online cu discount sau la sosire).</p>`,
+          });
+        } catch (err) { console.warn('reprice ops alert failed:', err?.message); }
+
+        await db.collection('auditLog').add({
+          action: 'booking_reprice_email_requested',
+          entityType: 'booking',
+          entityId: bookingId,
+          actorUid: uid,
+          payload: { extOrderId, owed, difference, carriedOwed, addedDays, newDropoff, newPickupAt },
+          timestamp: nowIso,
+        });
+
+        return { ok: true, emailed: true, difference, owed, days: newCalc.days, perDay: newCalc.perDay, newTotal: newCalc.expected, extOrderId };
+      }
+
+      // ── Collect now at the desk (cash/card) ──
+      // Fold in any carried owed from a superseded emailed request so the desk
+      // collects everything still outstanding in one go.
+      const collectNow = carriedOwed + difference;
       const storedPaidBy = paidBy === 'cash' ? 'admin-cash' : 'admin-card';
-      patch.extensionPrice = (Number(b.extensionPrice) || 0) + difference;
+      patch.extensionPrice = (Number(b.extensionPrice) || 0) + collectNow;
       patch.extensionPaidBy = storedPaidBy;
+      if (carriedOwed > 0) {
+        patch.extensionOwed = FieldValue.delete();
+        patch.extensionOrderId = FieldValue.delete();
+        patch.extensionOwedReason = FieldValue.delete();
+      }
       await ref.update(patch);
 
       await db.collection('tokenTransactions').add({
@@ -3848,7 +4118,7 @@ export const adminRepriceBooking = onCall(
         licensePlate: b.licensePlate || null,
         bookingId,
         type: 'extension',
-        amount: difference,
+        amount: collectNow,
         paidBy: storedPaidBy,
         timestamp: nowIso,
         source: 'reprice',
@@ -3857,7 +4127,7 @@ export const adminRepriceBooking = onCall(
       if (paidBy === 'cash') {
         await recordCashEntry({
           agentUid: uid,
-          amount: difference,
+          amount: collectNow,
           source: 'longterm-extension',
           plate: b.licensePlate || null,
           payerName: b.contact?.name || null,
@@ -3874,7 +4144,7 @@ export const adminRepriceBooking = onCall(
         statusOnSuccess: null,
         billing: b.billing,
         email: b.contact?.email,
-        items: [{ name: `Servicii parcare conform rezervării ${b.code || bookingId} - extindere`, quantity: 1, price: difference, code: 'PARK-LT' }],
+        items: [{ name: `Servicii parcare conform rezervării ${b.code || bookingId} - extindere`, quantity: 1, price: collectNow, code: 'PARK-LT' }],
         refs: [ref],
         label: `extension ${bookingId}`,
       });
@@ -4875,6 +5145,11 @@ export const repayOrder = onRequest(
     if (pending.paymentStatus === 'paid' || pending.status === 'paid') {
       return res.status(409).json({ error: 'already_paid' });
     }
+    // A superseded extension request (staff re-priced again before payment) or a
+    // cancelled/expired order is no longer payable — its pay link is stale.
+    if (['superseded', 'cancelled', 'expired'].includes(pending.status)) {
+      return res.status(410).json({ error: 'no_longer_payable' });
+    }
     if (pending.paymentMethod !== 'pay-at-pickup') {
       return res.status(400).json({ error: 'not_repayable' });
     }
@@ -4893,9 +5168,11 @@ export const repayOrder = onRequest(
     }
 
     const cd = pending.customerData || {};
-    const details = pending.orderType === 'longTerm'
-      ? `Mango Parking — parcare pe termen lung (${pending.days} zile)`
-      : `Mango Parking — pachet ${pending.quantity} credite`;
+    const details = pending.kind === 'extension'
+      ? `Mango Parking — extindere parcare (${pending.addedDays || ''} zile)`
+      : pending.orderType === 'longTerm'
+        ? `Mango Parking — parcare pe termen lung (${pending.days} zile)`
+        : `Mango Parking — pachet ${pending.quantity} credite`;
 
     const [firstName, ...rest] = (cd.name || 'Customer').trim().split(/\s+/);
     const lastName = rest.join(' ') || firstName;

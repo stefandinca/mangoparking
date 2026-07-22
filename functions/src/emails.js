@@ -311,6 +311,90 @@ export async function sendRepayPaidEmail(bookingId) {
   });
 }
 
+// Called from adminRepriceBooking when staff extend a PAID booking and choose
+// to bill the client by email (paidBy:'email'). Sends the modified reservation
+// plus payment options for the difference: pay online (discounted) via the
+// extension order's /pay link, or pay the standard amount at arrival.
+export async function sendBookingRepricedEmail(bookingId, extOrderId) {
+  const db = getFirestore();
+  const snap = await db.collection('bookings').doc(bookingId).get();
+  if (!snap.exists) return { ok: false, reason: 'booking-not-found' };
+  const booking = snap.data();
+  const orderSnap = await db.collection('pendingOrders').doc(extOrderId).get();
+  if (!orderSnap.exists) return { ok: false, reason: 'order-not-found' };
+  const order = orderSnap.data();
+
+  const recipient = await resolveRecipient({
+    customerId: booking.customerId,
+    licensePlate: booking.licensePlate,
+    contact: booking.contact,
+  });
+  if (!recipient) return { ok: false, reason: 'no-recipient' };
+
+  const differenceAmount = Number(order.amount) || 0;      // STANDARD owed
+  const discountPct = await getOnlineDiscount();
+  const onlineAmount = Math.round(differenceAmount * (1 - discountPct / 100));
+
+  const result = await sendBrevoEmail({
+    to: recipient.email,
+    name: recipient.name,
+    templateName: 'booking-repriced',
+    locale: recipient.locale,
+    params: {
+      firstName: recipient.firstName,
+      code: booking.code || `LT-${bookingId.slice(0, 5).toUpperCase()}`,
+      plate: booking.licensePlate,
+      dropoffAt: fmtDateTime(booking.dropoffAt || booking.startDate, recipient.locale),
+      pickupAt: fmtDateTime(booking.pickupAt || booking.endDate, recipient.locale),
+      days: booking.days,
+      addedDays: order.addedDays || null,
+      differenceAmount,
+      onlineAmount,
+      discountPct,
+      payOnlineLink: `${SITE_URL}/pay?orderId=${extOrderId}`,
+      paid: false,
+    },
+  });
+  return result?.ok ? { ok: true, recipient: recipient.email } : { ok: false, reason: result?.reason || 'unknown' };
+}
+
+// Follow-up when the extension difference is paid ONLINE (from the IPN). Mirrors
+// sendRepayPaidEmail: same template, paid:true, no pay link.
+export async function sendExtensionPaidEmail(bookingId, extOrderId) {
+  const db = getFirestore();
+  const snap = await db.collection('bookings').doc(bookingId).get();
+  if (!snap.exists) return;
+  const booking = snap.data();
+  const orderSnap = await db.collection('pendingOrders').doc(extOrderId).get();
+  const order = orderSnap.exists ? orderSnap.data() : {};
+  const recipient = await resolveRecipient({
+    customerId: booking.customerId,
+    licensePlate: booking.licensePlate,
+    contact: booking.contact,
+  });
+  if (!recipient) return;
+  await sendBrevoEmail({
+    to: recipient.email,
+    name: recipient.name,
+    templateName: 'booking-repriced',
+    locale: recipient.locale,
+    params: {
+      firstName: recipient.firstName,
+      code: booking.code || `LT-${bookingId.slice(0, 5).toUpperCase()}`,
+      plate: booking.licensePlate,
+      dropoffAt: fmtDateTime(booking.dropoffAt || booking.startDate, recipient.locale),
+      pickupAt: fmtDateTime(booking.pickupAt || booking.endDate, recipient.locale),
+      days: booking.days,
+      addedDays: order.addedDays || null,
+      differenceAmount: Number(order.amount) || 0,
+      onlineAmount: 0,
+      discountPct: 0,
+      payOnlineLink: '',
+      paid: true,
+    },
+  });
+}
+
 // Called from adminMarkRefunded (auto) or adminResendRefundEmail (manual).
 // Tells the customer the refund has been issued and to expect the funds
 // on their card / in cash within the usual settlement window.

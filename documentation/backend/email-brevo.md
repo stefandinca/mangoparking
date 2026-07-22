@@ -53,6 +53,7 @@ every template with an ID:
 | `admin-invite` | 8 / 1 | `adminSendInvite` |
 | `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail` |
 | `booking-refunded` | 22 / 21 | `sendRefundIssuedEmail` |
+| `booking-repriced` | null / null (set after Brevo create) | `sendBookingRepricedEmail`, `sendExtensionPaidEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up. Deploy-safe: skips until the ids are set. |
 | `credit-purchase` | 3 / 10 | `handlePurchase` (token purchase) |
 | `credit-used` | 11 / 12 | `handleUse` |
 | `low-credit-warning` | 13 / 14 | `handleUse` (crossing ≤2 credits) |
@@ -134,6 +135,12 @@ Reusable senders (not triggers themselves — called from callables / the IPN):
   Called by `adminMarkRefunded` (auto) or a manual resend. Picks channel copy from
   `refundedVia` (`cash` vs `card`) and persists a `refundEmail` status block on the
   booking so the admin refund history can show sent/failed and offer a resend.
+- **`sendBookingRepricedEmail(bookingId, extOrderId)`** / **`sendExtensionPaidEmail(...)`**
+  (`emails.js`) — **`booking-repriced`**. The first is sent from `adminRepriceBooking`
+  (`paidBy:'email'`) with the modified dates + the owed difference and both payment
+  options (online at the discounted amount via `/pay?orderId=<extOrderId>`, or standard
+  at arrival); the second is the paid follow-up from `netopiaCallback` when the extension
+  is paid online.
 
 Two more customer templates are sent from callables in `functions/src/index.js`:
 
