@@ -5,6 +5,7 @@ import { getAllTokenPacks, createTokenPack, updateTokenPack, deleteTokenPack } f
 import { getLongTermRates, saveLongTermRates, getCommuterPolicy, saveCommuterPolicy } from '../../services/longTermService.js';
 import { getOnlineDiscountPercent, saveOnlineDiscountPercent } from '../../services/discountService.js';
 import { smartbillHealthcheck, smartbillTestIssue } from '../../services/invoiceService.js';
+import { parkviaHealthcheck, parkviaSyncNow } from '../../services/parkviaService.js';
 import {
   listSeasonalPeriods,
   createSeasonalPeriod,
@@ -167,7 +168,75 @@ export default async function AdminPricing(container) {
           <p class="text-dim text-[12px] mt-2">${t('smartbill.testIssueHint')}</p>
           <div data-smartbill-result class="mt-4 text-[14px]"></div>
         </section>
+
+        <section class="glass rounded-2xl p-6 mt-8">
+          <h2 class="font-heading text-xl font-bold text-blueberry-deep mb-1">${t('parkvia.title')}</h2>
+          <p class="text-dim text-[14px] mb-5">${t('parkvia.hint')}</p>
+          <div class="flex flex-wrap gap-3">
+            <button type="button" data-parkvia-check class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('parkvia.checkBtn')}</button>
+            <button type="button" data-parkvia-sync class="bg-white hover:bg-frost text-blueberry border border-blueberry font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('parkvia.syncBtn')}</button>
+          </div>
+          <p class="text-dim text-[12px] mt-2">${t('parkvia.syncHint')}</p>
+          <div data-parkvia-result class="mt-4 text-[14px]"></div>
+        </section>
   `);
+
+  // ParkVia (ParkCloud) auto-import diagnostics. Dormant until credentials are
+  // configured — the callables return { configured:false } and we show a badge.
+  const parkviaNotConfigured = () =>
+    `<div class="rounded-xl border border-frost-deep bg-frost p-4 text-charcoal/70">${t('parkvia.notConfigured')}</div>`;
+
+  delegate(page, 'click', '[data-parkvia-check]', async (e, btn) => {
+    const out = page.querySelector('[data-parkvia-result]');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = t('common.loading');
+    out.innerHTML = '';
+    try {
+      const r = await parkviaHealthcheck();
+      if (!r || r.configured === false) { out.innerHTML = parkviaNotConfigured(); return; }
+      const reachBadge = r.reachable
+        ? `<span class="text-leaf font-semibold">${t('parkvia.reachable')}</span>`
+        : `<span class="text-mango font-semibold">${escapeHtml(r.error || t('parkvia.unreachable'))}</span>`;
+      out.innerHTML = `
+        <div class="rounded-xl border border-frost-deep bg-white p-4 space-y-1.5">
+          <div>${t('parkvia.connection')}: ${reachBadge}</div>
+          <div class="text-charcoal/80">${t('parkvia.parkingId')}: <span class="font-mono">${escapeHtml(String(r.parkingId || '—'))}</span></div>
+          <div class="text-charcoal/80">${t('parkvia.lastSync')}: <span class="font-mono">${escapeHtml(r.lastSyncAt || '—')}</span></div>
+        </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">${escapeHtml(err?.message || t('common.error'))}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  delegate(page, 'click', '[data-parkvia-sync]', async (e, btn) => {
+    const out = page.querySelector('[data-parkvia-result]');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = t('common.loading');
+    out.innerHTML = '';
+    try {
+      const r = await parkviaSyncNow();
+      if (!r || r.configured === false) { out.innerHTML = parkviaNotConfigured(); return; }
+      out.innerHTML = `
+        <div class="rounded-xl border border-frost-deep bg-white p-4">
+          <div class="text-leaf font-semibold mb-1">${t('parkvia.syncDone')}</div>
+          <div class="text-charcoal/80">${t('parkvia.syncResult', {
+            imported: r.imported ?? 0,
+            cancelled: r.cancelled ?? 0,
+            errors: r.errors ?? 0,
+          })}</div>
+        </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">${escapeHtml(err?.message || t('common.error'))}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
 
   // SmartBill connection healthcheck (Phase 1 diagnostic).
   delegate(page, 'click', '[data-smartbill-check]', async (e, btn) => {

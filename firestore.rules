@@ -168,11 +168,12 @@ service cloud.firestore {
     // check in.
     match /bookings/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
-      // `smartbill` (fiscal document trail) is server-written only — staff
-      // client flows (check-in/out, edit details) must not touch it.
-      allow create: if isStaff() && !request.resource.data.keys().hasAny(['smartbill']);
+      // `smartbill` (fiscal document trail) and `parkvia` (broker-import trail)
+      // are server-written only — staff client flows (check-in/out, edit
+      // details) must not touch them.
+      allow create: if isStaff() && !request.resource.data.keys().hasAny(['smartbill', 'parkvia']);
       allow update: if isStaff()
-                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['smartbill']);
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['smartbill', 'parkvia']);
       allow delete: if isAdmin();
     }
 
@@ -259,6 +260,21 @@ service cloud.firestore {
     // ANAF CUI lookup cache - admin SDK only (lookupCui callable)
     match /lookupCache/{key} {
       allow read, write: if false;
+    }
+
+    // ParkVia (ParkCloud) auto-import dedup ledger — one doc per ParkVia
+    // booking reference. Staff read (so an admin tool can show import history);
+    // all writes go through the runParkviaSync server code (admin SDK).
+    match /parkviaImports/{ref} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // ParkVia sync cursor/state (last watermark + last result). Staff read for
+    // the admin card; server-written only.
+    match /parkviaSync/{doc} {
+      allow read: if isStaff();
+      allow write: if false;
     }
 
     // Legal pages — public read so the customer-facing /terms, /privacy,

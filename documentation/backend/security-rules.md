@@ -77,10 +77,11 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
 
 ### bookings (line 154)
 - **read:** `isStaff()` or the owning customer (`resource.data.customerId == uid`).
-- **create/update:** `isStaff()`, **and neither may touch `smartbill`** — create rejects a
-  `smartbill` key, update rejects it in `affectedKeys()`. The fiscal-document trail is
-  server-written only (via `smartbillIssueSafe` etc.), so staff client flows (check-in/out,
-  edit details) can't clobber it. **delete:** `isAdmin()`.
+- **create/update:** `isStaff()`, **and neither may touch `smartbill` or `parkvia`** — create
+  rejects those keys, update rejects them in `affectedKeys()`. The fiscal-document trail
+  (`smartbill`, via `smartbillIssueSafe` etc.) and the ParkVia import trail (`parkvia`, via
+  `runParkviaSync`) are server-written only, so staff client flows (check-in/out, edit details)
+  can't clobber them. **delete:** `isAdmin()`.
 - Staff client-updates cover contact/plate/date edits and check-in/out; creation and all
   paid-state transitions go through Cloud Functions. Customers have **no** direct writes —
   self-cancel uses the `cancelBookingWithRefund` callable. *2026-07 hardening:* the old
@@ -139,6 +140,9 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
 - `lookupCache` (line 242): `read, write: if false` — ANAF cache, `lookupCui` only.
 - `flightStatusCache`: no explicit rule → **default-deny** to clients; written only by
   `lookupFlightStatuses` (admin SDK).
+- `parkviaImports` / `parkviaSync`: `read: if isStaff(); write: if false` — ParkVia auto-import
+  dedup ledger + poll cursor, written only by `runParkviaSync` (admin SDK). Staff-readable so an
+  admin tool can show import history.
 
 ## Storage rules (`storage.rules`)
 

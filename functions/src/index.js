@@ -57,6 +57,14 @@ import {
   deleteEstimate,
   reverseInvoice,
 } from './smartbill.js';
+import {
+  PARKVIA_SECRETS,
+  PARKVIA_BROKER_NAME,
+  parkviaConfig,
+  listParkviaBookings,
+  mapParkviaBookingToImport,
+  parkviaRefDocId,
+} from './parkvia.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
 export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated, onPromoVoucherAssigned } from './emails.js';
@@ -77,8 +85,9 @@ export { lookupCui } from './cui.js';
 // Dormant until a flight API key is configured (see flightStatus.js).
 export { lookupFlightStatuses } from './flightStatus.js';
 
-// Scheduled jobs (Phase F).
-export { daily24hReminders, commuter7PMCheck, expireStaleHolds, markNoShows } from './scheduled.js';
+// Scheduled jobs (Phase F). `pollParkviaBookings` is dormant until ParkCloud
+// credentials are configured (see parkvia.js).
+export { daily24hReminders, commuter7PMCheck, expireStaleHolds, markNoShows, pollParkviaBookings } from './scheduled.js';
 
 initializeApp();
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
@@ -280,6 +289,143 @@ async function reserveAvailableSpot(bookingId) {
     console.warn('reserveAvailableSpot transaction failed:', err?.message);
     return null;
   }
+}
+
+// Shared broker/prepaid booking primitive. Broker money is collected off-lot
+// (ParkVia et al. bill the customer), so a broker booking is created
+// paid-immediately with NO billing identity, NO SmartBill document, NO cashbook
+// entry — see documentation/features/long-term-bookings.md. Both the manual
+// desk flow (adminCreateLongtermBooking) and the ParkVia auto-import
+// (runParkviaSync) route through here so the two produce byte-identical docs.
+//
+// The onBookingCreated trigger (emails.js) sends the customer confirmation and
+// adminNotifyBookingCreated sends the rezervari@ ops alert automatically on the
+// doc create — this helper deliberately sends no email.
+//
+// Returns { bookingId, code, spotId, checkedIn }.
+export async function createBrokerBookingCore({
+  plate,
+  dropoffAt,
+  pickupAt,
+  days,
+  totalPrice,
+  contact = {},              // { name, email, phone }
+  brokerName,                // e.g. 'ParkVia'
+  customerId = null,         // pre-known account uid (optional)
+  parkvia = null,            // { ref, importedAt, lastStatus } | null (import trail)
+  notes = null,
+  passengers = null,
+  flightNumberDropoff = null,
+  flightNumberPickup = null,
+  autoCheckIn = false,       // walk-in: car is at the gate now
+  actorUid,                  // admin uid | 'scheduled'
+}) {
+  const db = getFirestore();
+  const nowIso = new Date().toISOString();
+  const normPlate = normalizePlate(plate);
+  const payerEmailNorm = normalizeEmail(contact.email);
+
+  // Server-side account linking: prefer an explicit customerId, else resolve the
+  // payer email to a registered account so the booking shows in their profile.
+  let linkedCustomerId = customerId || null;
+  if (!linkedCustomerId && payerEmailNorm) {
+    try {
+      const userRec = await getAuth().getUserByEmail(payerEmailNorm);
+      linkedCustomerId = userRec?.uid || null;
+    } catch (_) { /* no account with this email — stays a guest booking */ }
+  }
+
+  const bookingCode = generateBookingCode('longTerm');
+  const bookingRef = await db.collection('bookings').add({
+    code: bookingCode,
+    type: 'longTerm',
+    customerId: linkedCustomerId,
+    licensePlate: normPlate,
+    startDate: dropoffAt,
+    endDate: pickupAt,
+    dropoffAt,
+    pickupAt,
+    days: Number(days),
+    passengers: sanitizePassengers(passengers),
+    flightNumberDropoff: sanitizeFlight(flightNumberDropoff),
+    flightNumberPickup: sanitizeFlight(flightNumberPickup),
+    basePrice: Number(totalPrice),
+    latePrice: 0,
+    totalPrice: Number(totalPrice),
+    status: 'upcoming',
+    contact: {
+      name: contact.name || '',
+      email: payerEmailNorm,
+      phone: contact.phone || '',
+    },
+    billing: null,                        // broker: no fiscal identity captured
+    notes: String(notes || '').trim() || null,
+    paymentId: null,
+    paymentMethod: 'broker',
+    paymentStatus: 'paid',                // prepaid off-lot
+    paidAt: nowIso,
+    paidBy: 'broker',
+    brokerName: String(brokerName || '').trim() || null,
+    spotId: null,
+    createdAt: nowIso,
+    completedAt: null,
+    source: 'broker',
+    ...(parkvia ? { parkvia } : {}),      // ParkVia import trail (server-written)
+    createdBy: actorUid,
+  });
+
+  // Reserve a spot immediately (paid reservation → blue tile on the map).
+  let spotId = await reserveAvailableSpot(bookingRef.id);
+  if (spotId) await bookingRef.update({ spotId });
+
+  await addPlateToProfile(linkedCustomerId, plate);
+
+  await db.collection('auditLog').add({
+    action: 'booking_created',
+    entityType: 'booking',
+    entityId: bookingRef.id,
+    actorUid,
+    payload: {
+      plate: normPlate, days: Number(days), totalPrice: Number(totalPrice),
+      paidBy: 'broker', spotId, source: 'broker',
+      brokerName: brokerName || null,
+      parkviaRef: parkvia?.ref || null,
+    },
+    timestamp: nowIso,
+  });
+
+  // Walk-in shortcut (rare for broker, but the manual desk allows it): flip to
+  // active, occupy the reserved spot, write the activeCheckIns row.
+  let checkedIn = false;
+  if (autoCheckIn) {
+    const checkinIso = new Date().toISOString();
+    await bookingRef.update({ status: 'active', checkinTimestamp: checkinIso });
+    if (spotId) {
+      await db.collection('spots').doc(spotId)
+        .update({ status: 'occupied', currentBookingId: bookingRef.id })
+        .catch((err) => console.warn('broker walk-in spot occupy failed:', err?.message));
+    }
+    await db.collection('activeCheckIns').doc(normPlate).set({
+      plate: normPlate,
+      bookingId: bookingRef.id,
+      type: 'longTerm',
+      customerId: linkedCustomerId,
+      checkinTime: checkinIso,
+      checkinTimestamp: checkinIso,
+      source: 'walk-in',
+    }).catch((err) => console.warn('broker walk-in activeCheckIns write failed:', err?.message));
+    await db.collection('auditLog').add({
+      action: 'booking_checkin',
+      entityType: 'booking',
+      entityId: bookingRef.id,
+      actorUid,
+      payload: { plate: normPlate, spotId, source: 'walk-in' },
+      timestamp: checkinIso,
+    });
+    checkedIn = true;
+  }
+
+  return { bookingId: bookingRef.id, code: bookingCode, spotId, checkedIn };
 }
 
 async function createBookingFromOrder(orderId, order) {
@@ -2756,6 +2902,19 @@ export const adminCreateLongtermBooking = onCall(
     if (!['cash', 'card', 'broker', 'later'].includes(paidBy)) {
       throw new HttpsError('invalid-argument', 'paidBy must be cash, card, broker or later');
     }
+    // Broker/prepaid reservations route through the shared primitive so manual
+    // desk entry and ParkVia auto-import (runParkviaSync) produce byte-identical
+    // docs. It handles account linking, spot reservation, audit and the optional
+    // walk-in check-in, and deliberately skips billing/SmartBill/cashbook.
+    if (paidBy === 'broker') {
+      return await createBrokerBookingCore({
+        plate, dropoffAt, pickupAt, days: d, totalPrice: total,
+        contact: { name: payerName, email: payerEmail, phone: payerPhone },
+        brokerName, customerId: customerId || null,
+        notes, passengers, flightNumberDropoff, flightNumberPickup,
+        autoCheckIn, actorUid: uid,
+      });
+    }
     // Broker/prepaid reservations legitimately carry no billing identity —
     // the broker (ParkVia et al.) bills the customer and no SmartBill document
     // is issued for them — so absent billing stays null rather than the hollow
@@ -4082,6 +4241,268 @@ export const smartbillTestIssue = onCall(
       && report.proformaCompany.issued === true
       && report.invoice.issued === true;
     return report;
+  }
+);
+
+// ── ParkVia (ParkCloud) auto-import ─────────────────────────────────────
+// Pulls reservations from the ParkCloud Operator API and turns them into
+// broker bookings (via createBrokerBookingCore) so staff don't re-type them,
+// reconciling cancellations on each run. See functions/src/parkvia.js and
+// documentation/roadmap/v.1.x_parkvia.md.
+//
+// DORMANT until ParkCloud credentials are configured (parkviaConfig().configured
+// === false → this is a no-op returning { configured: false }). Shared by the
+// scheduled poller (scheduled.js → pollParkviaBookings) and the admin "Sync now"
+// button (parkviaSyncNow). Best-effort per reservation: one bad row is counted
+// as an error and skipped, never aborting the batch.
+//
+// Cursor lives in parkviaSync/state (server-only). Dedup is the authoritative
+// parkviaImports/{ref} ledger, claimed transactionally before a booking is made.
+const PARKVIA_SYNC_DOC = 'parkviaSync/state';
+const PARKVIA_BACKFILL_MS = 24 * 60 * 60 * 1000;   // first run looks back 24h
+
+export async function runParkviaSync(actorUid = 'scheduled') {
+  const cfg = parkviaConfig();
+  if (!cfg.configured) return { configured: false };
+
+  const db = getFirestore();
+  const nowIso = new Date().toISOString();
+  const summary = { configured: true, imported: 0, skipped: 0, cancelled: 0, amended: 0, errors: 0 };
+
+  // Cursor: modified-since watermark. Default to a short backfill on first run.
+  const [syncColl, syncId] = PARKVIA_SYNC_DOC.split('/');
+  const syncRef = db.collection(syncColl).doc(syncId);
+  const syncSnap = await syncRef.get();
+  const since = syncSnap.exists && syncSnap.data().lastSyncAt
+    ? syncSnap.data().lastSyncAt
+    : new Date(Date.now() - PARKVIA_BACKFILL_MS).toISOString();
+
+  let raw = [];
+  try {
+    ({ raw } = await listParkviaBookings({ since }));
+  } catch (err) {
+    console.warn('runParkviaSync: list failed', err?.message);
+    await syncRef.set({ lastRunAt: nowIso, lastError: String(err?.message || err) }, { merge: true });
+    return { ...summary, errors: 1, error: String(err?.message || err) };
+  }
+
+  for (const node of raw) {
+    let imp;
+    try {
+      imp = mapParkviaBookingToImport(node);
+    } catch (err) {
+      summary.errors++;
+      console.warn('runParkviaSync: map failed', err?.message);
+      continue;
+    }
+
+    const ledgerRef = db.collection('parkviaImports').doc(parkviaRefDocId(imp.ref));
+    try {
+      // Atomic claim: create the ledger doc iff it doesn't exist. A losing
+      // racer (poller vs. "Sync now") throws and falls through to reconcile.
+      let claimed = false;
+      await db.runTransaction(async (tx) => {
+        const existing = await tx.get(ledgerRef);
+        if (existing.exists) return;                 // already imported → reconcile below
+        tx.set(ledgerRef, {
+          ref: imp.ref,
+          bookingId: null,
+          importedAt: nowIso,
+          lastStatus: imp.rawStatus,
+          lastSeenAt: nowIso,
+          lastRaw: node,
+        });
+        claimed = true;
+      });
+
+      if (claimed) {
+        // Brand-new reservation. Skip creating a booking for one that already
+        // arrived cancelled — just record the ledger row.
+        if (imp.rawStatus === 'cancelled') {
+          summary.skipped++;
+          continue;
+        }
+        const res = await createBrokerBookingCore({
+          plate: imp.plate,
+          dropoffAt: imp.dropoffAt,
+          pickupAt: imp.pickupAt,
+          days: imp.days,
+          totalPrice: imp.totalPrice,
+          contact: imp.contact,
+          brokerName: imp.brokerName || PARKVIA_BROKER_NAME,
+          parkvia: { ref: imp.ref, importedAt: nowIso, lastStatus: 'active' },
+          actorUid,
+        });
+        await ledgerRef.update({ bookingId: res.bookingId, lastSeenAt: nowIso });
+        summary.imported++;
+        continue;
+      }
+
+      // Already known → reconcile against current ParkVia state.
+      const ledger = (await ledgerRef.get()).data() || {};
+      await ledgerRef.update({ lastSeenAt: nowIso, lastRaw: node });
+      const changed = await reconcileParkviaBooking(imp, ledger, actorUid);
+      if (changed === 'cancelled') summary.cancelled++;
+      else if (changed === 'amended') summary.amended++;
+      else summary.skipped++;
+    } catch (err) {
+      summary.errors++;
+      console.warn('runParkviaSync: import/reconcile failed', imp?.ref, err?.message);
+    }
+  }
+
+  await syncRef.set({
+    lastSyncAt: nowIso,
+    lastRunAt: nowIso,
+    lastError: null,
+    lastResult: summary,
+  }, { merge: true });
+
+  return summary;
+}
+
+// Reconcile an already-imported ParkVia reservation against its current state.
+// Returns 'cancelled' | 'amended' | 'unchanged'. SAFE-BY-DEFAULT (see the plan):
+// only 'upcoming' bookings are auto-cancelled; a car already on the lot
+// (active/completed) is flagged for manual review, never silently released.
+async function reconcileParkviaBooking(imp, ledger, actorUid) {
+  const db = getFirestore();
+  const nowIso = new Date().toISOString();
+  if (!ledger.bookingId) return 'unchanged';
+
+  const bookingRef = db.collection('bookings').doc(ledger.bookingId);
+  const snap = await bookingRef.get();
+  if (!snap.exists) return 'unchanged';
+  const booking = snap.data();
+
+  // ── Cancellation ──────────────────────────────────────────────────────────
+  if (imp.rawStatus === 'cancelled' && booking.status !== 'cancelled') {
+    if (booking.status !== 'upcoming') {
+      // Car already checked in / trip done — do NOT auto-release. Flag it.
+      await bookingRef.update({ 'parkvia.lastStatus': 'cancelled-needs-review' });
+      await ledgerRef_update(ledger, 'cancelled-needs-review');
+      await db.collection('auditLog').add({
+        action: 'parkvia_cancel_needs_review',
+        entityType: 'booking', entityId: ledger.bookingId, actorUid,
+        payload: { ref: imp.ref, bookingStatus: booking.status },
+        timestamp: nowIso,
+      });
+      return 'unchanged';
+    }
+    await bookingRef.update({
+      status: 'cancelled',
+      cancelledAt: nowIso,
+      cancelledBy: actorUid,
+      spotId: null,
+      'parkvia.lastStatus': 'cancelled',
+    });
+    // Release the reserved/occupied spot back to available.
+    if (booking.spotId) {
+      try {
+        const spotRef = db.collection('spots').doc(booking.spotId);
+        const spotSnap = await spotRef.get();
+        if (spotSnap.exists && ['reserved', 'occupied'].includes(spotSnap.data().status)) {
+          await spotRef.update({ status: 'available', currentBookingId: null });
+        }
+      } catch (err) {
+        console.warn('reconcileParkviaBooking: spot release failed', err?.message);
+      }
+    }
+    await ledgerRef_update(ledger, 'cancelled');
+    await db.collection('auditLog').add({
+      action: 'booking_cancelled',
+      entityType: 'booking', entityId: ledger.bookingId, actorUid,
+      payload: { ref: imp.ref, via: 'parkvia' },
+      timestamp: nowIso,
+    });
+    return 'cancelled';
+  }
+
+  // ── Amendment (PROVISIONAL) ────────────────────────────────────────────────
+  // ParkCloud's amendment signalling is unknown, so only SAFE fields are
+  // auto-applied (dates/flight/passengers) and only for still-upcoming bookings;
+  // price/plate changes are left for manual review.
+  if (booking.status === 'upcoming') {
+    const patch = {};
+    if (imp.dropoffAt && imp.dropoffAt !== booking.dropoffAt) {
+      patch.dropoffAt = imp.dropoffAt; patch.startDate = imp.dropoffAt;
+    }
+    if (imp.pickupAt && imp.pickupAt !== booking.pickupAt) {
+      patch.pickupAt = imp.pickupAt; patch.endDate = imp.pickupAt;
+    }
+    if ((patch.dropoffAt || patch.pickupAt) && Number(imp.days) && imp.days !== booking.days) {
+      patch.days = Number(imp.days);
+    }
+    if (Object.keys(patch).length) {
+      patch['parkvia.lastStatus'] = 'amended';
+      await bookingRef.update(patch);
+      await ledgerRef_update(ledger, 'amended');
+      await db.collection('auditLog').add({
+        action: 'booking_amended',
+        entityType: 'booking', entityId: ledger.bookingId, actorUid,
+        payload: { ref: imp.ref, via: 'parkvia', fields: Object.keys(patch) },
+        timestamp: nowIso,
+      });
+      return 'amended';
+    }
+  }
+  return 'unchanged';
+}
+
+// Small helper: stamp the ledger's lastStatus (kept terse — the ledger ref is
+// derived from the ref on the ledger record).
+async function ledgerRef_update(ledger, lastStatus) {
+  try {
+    await getFirestore().collection('parkviaImports').doc(parkviaRefDocId(ledger.ref))
+      .update({ lastStatus, lastSeenAt: new Date().toISOString() });
+  } catch (err) {
+    console.warn('parkvia ledger update failed', err?.message);
+  }
+}
+
+// Admin "Sync now" — runs one import pass on demand. Returns the summary, or
+// { configured: false } when ParkCloud isn't wired up yet.
+export const parkviaSyncNow = onCall(
+  { region: 'europe-west1', cors: true, secrets: PARKVIA_SECRETS },
+  async (request) => {
+    await assertAdmin(request);
+    return runParkviaSync(request.auth.uid);
+  }
+);
+
+// Admin connection check — confirms config + a cheap reachability probe, and
+// echoes the last sync result. { configured:false } when dormant.
+export const parkviaHealthcheck = onCall(
+  { region: 'europe-west1', cors: true, secrets: PARKVIA_SECRETS },
+  async (request) => {
+    await assertAdmin(request);
+    const cfg = parkviaConfig();
+    if (!cfg.configured) return { configured: false };
+
+    const db = getFirestore();
+    const [syncColl, syncId] = PARKVIA_SYNC_DOC.split('/');
+    const syncSnap = await db.collection(syncColl).doc(syncId).get();
+    const lastSync = syncSnap.exists ? syncSnap.data() : null;
+
+    let reachable = false;
+    let sampleCount = null;
+    let error = null;
+    try {
+      const { raw } = await listParkviaBookings({ since: new Date(Date.now() - 5 * 60 * 1000).toISOString() });
+      reachable = true;
+      sampleCount = raw.length;
+    } catch (err) {
+      error = String(err?.message || err);
+    }
+    return {
+      configured: true,
+      reachable,
+      sampleCount,
+      error,
+      parkingId: cfg.parkingId,
+      lastSyncAt: lastSync?.lastSyncAt || null,
+      lastResult: lastSync?.lastResult || null,
+    };
   }
 );
 

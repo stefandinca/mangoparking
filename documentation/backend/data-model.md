@@ -85,6 +85,10 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
     status:'proforma-issued'|'invoiced'|'storno'|'cancelled'|'cancel-failed'|'failed',
     lastError, proformaDeleted?, extraProformas?[], partialStornos?[] }`. Written via
     dot-path updates. Rules reject any client write touching `smartbill`.
+  - `parkvia` **server-written only** (ParkVia auto-import, dormant — see
+    [integrations.md](./integrations.md)): `{ ref, importedAt, lastStatus }` where
+    `lastStatus ∈ 'active' | 'cancelled' | 'amended' | 'cancelled-needs-review'`. Present only
+    on broker bookings imported from ParkVia. Rules reject client writes touching `parkvia`.
 - **Access:** staff read all; customer reads own (`customerId`). Delete admin-only.
 
 ## tokenBalances
@@ -397,6 +401,27 @@ server-side.
 - **Writer:** **server-only** (`lookupCui` callable).
 - **Shape:** `payload` `{ companyName, address, regCom, vatPayer, cui }`, `cachedAt`, `expiresAt`.
 - **Access:** all client read/write denied (admin SDK only).
+
+## parkviaImports (ParkVia auto-import — dormant)
+
+- **Purpose:** dedup ledger for the ParkVia (ParkCloud) auto-import — one doc per ParkVia
+  booking reference. Claimed transactionally before a booking is created, so the poller and a
+  concurrent admin "Sync now" can't double-import.
+- **ID:** the sanitized ParkVia booking reference (`parkviaRefDocId`).
+- **Writer:** **server-only** (`runParkviaSync`).
+- **Shape:** `ref`, `bookingId`|null, `importedAt`, `lastStatus`, `lastSeenAt`, `lastRaw` (the
+  raw reservation snapshot).
+- **Access:** staff read; no client writes.
+
+## parkviaSync (ParkVia poll cursor — dormant)
+
+- **Purpose:** the ParkVia poll cursor/state (single doc `state`).
+- **ID:** `state`.
+- **Writer:** **server-only** (`runParkviaSync`). A dedicated collection (not `settings/*`)
+  because the shared `settings/{doc}` rule allows admin client writes — a server cursor must not.
+- **Shape:** `lastSyncAt`, `lastRunAt`, `lastResult` (`{ imported, skipped, cancelled, amended,
+  errors }`), `lastError`.
+- **Access:** staff read; no client writes.
 
 ## flightStatusCache
 

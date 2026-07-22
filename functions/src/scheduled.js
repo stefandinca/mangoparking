@@ -19,6 +19,8 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
 import { SMARTBILL_SECRETS, deleteEstimate } from './smartbill.js';
+import { PARKVIA_SECRETS } from './parkvia.js';
+import { runParkviaSync } from './index.js';
 
 const REGION = 'europe-west1';
 const TZ = 'Europe/Bucharest';
@@ -407,5 +409,24 @@ export const expireStaleHolds = onSchedule(
       expired++;
     }
     console.log(`expireStaleHolds: expired=${expired} scanned=${snap.size}`);
+  }
+);
+
+// ── ParkVia auto-import poll ────────────────────────────────────────────
+// Pull new/changed ParkVia (ParkCloud) reservations and import them as broker
+// bookings, reconciling cancellations. DORMANT until ParkCloud credentials are
+// configured — runParkviaSync (index.js) returns { configured:false } and this
+// is a logged no-op. The real work + idempotency live in runParkviaSync; this
+// is just its schedule. The admin "Sync now" button calls the same function.
+export const pollParkviaBookings = onSchedule(
+  {
+    schedule: 'every 15 minutes',
+    timeZone: TZ,
+    region: REGION,
+    secrets: PARKVIA_SECRETS,
+  },
+  async () => {
+    const r = await runParkviaSync('scheduled');
+    console.log(`pollParkviaBookings: ${JSON.stringify(r)}`);
   }
 );

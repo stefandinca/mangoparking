@@ -224,6 +224,13 @@ re-run doesn't double-send. Secret `BREVO_API_KEY` where they email.
 | `commuter7PMCheck` | 191 | `0 19 * * *` | Sends `reminder-commuter-7pm` (1h-before-cutoff nudge) to every commuter still in `activeCheckIns` today. Marker: `reminderCommuterSentAt`. |
 | `markNoShows` | 274 | `every 60 minutes` | Flips upcoming longTerm bookings whose drop-off is >12h past with no `activeCheckIns` row → `no-show`; releases the spot; audit-logs. In-memory drop-off filter (handles `dropoffAt: null` web bookings). |
 | `expireStaleHolds` | 354 | `0 2 * * *` | Flips `pendingOrders` still `unpaid` after 14 days → `expired` (housekeeping; doesn't touch the booking). |
+| `pollParkviaBookings` | — | `every 15 minutes` | **Dormant** until ParkCloud credentials are set. Drives `runParkviaSync` (`index.js`): pulls ParkVia reservations, imports new ones as broker bookings via `createBrokerBookingCore`, reconciles cancellations. Binds `PARKVIA_SECRETS`. See [../roadmap/v.1.x_parkvia.md](../roadmap/v.1.x_parkvia.md). |
+
+**ParkVia auto-import (dormant)** — admin callables `parkviaSyncNow` / `parkviaHealthcheck`
+(`assertAdmin`, `index.js`) run/verify the same `runParkviaSync` pass on demand; surfaced on
+`/admin/pricing`. Everything returns `{ configured:false }` until the ParkCloud Operator API
+credentials are configured. The provisional XML→booking mapping lives in `functions/src/parkvia.js`
+(`mapParkviaBookingToImport`, unit-tested).
 
 ---
 

@@ -1,6 +1,6 @@
 # External Integrations
 
-> Status: 🟡 Partial (3 shipped, 1 of them dormant; 1 planned) · Last verified: 2026-07-22
+> Status: 🟡 Partial (4 shipped, 2 of them dormant; 1 planned) · Last verified: 2026-07-22
 
 Overview of the third-party integrations wired into the backend, and the planned ones
 that are not built yet. Payments (Netopia) and email (Brevo) are large enough to have
@@ -16,6 +16,7 @@ This doc covers the rest:
 | **ANAF CUI lookup** | ✅ Shipped | `functions/src/cui.js`, `src/services/cuiService.js` |
 | **Flight-status lookup** | ✅ Shipped, **dormant** (needs API key) | `functions/src/flightStatus.js`, `src/services/flightStatusService.js` |
 | **SmartBill invoicing** | ✅ Shipped (v1.2 Phase 2/4 live; e-Factura + retry queue planned) | `functions/src/smartbill.js`, `src/services/invoiceService.js` |
+| **ParkVia auto-import** | 🟡 Shipped, **dormant** (needs ParkCloud credentials + schema) | `functions/src/parkvia.js`, `src/services/parkviaService.js` |
 | **ANPR cameras** | 📋 Planned — not built | [../roadmap/v.1.3_anpr.md](../roadmap/v.1.3_anpr.md) |
 
 ---
@@ -172,6 +173,29 @@ consult SmartBill directly.
 
 ---
 
+## ParkVia auto-import — 🟡 Shipped, dormant
+
+Auto-imports reservations booked through **ParkVia** (the ParkCloud Operator API — REST/XML
+on Azure API Management, API-key auth, **pull/poll**) as broker bookings, so staff don't
+re-type them. **Dormant until ParkCloud credentials are configured** — same shape as
+flight-status: `parkviaConfig().configured === false` → the poller is a logged no-op, the
+callables return `{ configured:false }`, the admin card shows "not configured."
+
+- **Poller** `pollParkviaBookings` (`scheduled.js`, every 15 min) and admin **`parkviaSyncNow`**
+  / **`parkviaHealthcheck`** callables both drive `runParkviaSync` (`index.js`).
+- Imports route through **`createBrokerBookingCore`** (shared with the manual desk flow) →
+  ordinary broker bookings (`source:'broker'`, `paidBy:'broker'`, `billing:null`, no cashbook,
+  no SmartBill). Dedup is the **`parkviaImports/{ref}`** ledger (transactional claim); cursor is
+  **`parkviaSync/state`**; the booking carries a server-written **`parkvia`** trail field.
+- Cancellations reconcile safely (only `upcoming` bookings auto-release; active/completed are
+  flagged for manual review). Amendments auto-apply safe date fields only.
+- The unknown ParkCloud XML→booking mapping is quarantined in `mapParkviaBookingToImport`
+  (`parkvia.js`) and unit-tested (`functions/test/parkvia.mapper.test.js`).
+
+**Still PROVISIONAL** (partner-gated until we onboard): endpoints, XML field schema, datetime
+format, operator-key header, cancellation/amendment signal. Full plan + onboarding checklist:
+[../roadmap/v.1.x_parkvia.md](../roadmap/v.1.x_parkvia.md).
+
 ## ANPR cameras — 📋 Planned (not built)
 
 Two Hikvision ANPR cameras that auto check-in/out by plate. **Not built** — no
@@ -197,5 +221,7 @@ retention, admin live page, reconciliation, GDPR signage):
 - **SmartBill** — live (v1.2 Phase 2/4): proforma on every order, fiscal invoice on
   online-payment confirm, storno on cancel; best-effort, never breaks a money flow.
   e-Factura + retry queue (Phase 7/8) still planned.
+- **ParkVia** — scaffold shipped, dormant; poll-based import of ParkVia reservations as broker
+  bookings. Enable with ParkCloud credentials + finalizing the provisional XML mapping.
 - **ANPR** — design docs only; overstay detection + `markNoShows` (ANPR-adjacent) are the
   sole shipped fragments, the camera layer is not built.
