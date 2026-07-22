@@ -162,7 +162,9 @@ export function Footer() {
     getOpeningHours().then((hours) => {
       const lines = groupedHoursLines(hours);
       hoursEl.innerHTML = `<p class="text-charcoal/70">${escapeHtml(t('openingHours.office'))}:</p>`
-        + lines.map((l) => `<p>${escapeHtml(l.label)}: ${escapeHtml(l.value)}</p>`).join('');
+        + lines.map((l) => `<p>${escapeHtml(l.label)}: ${escapeHtml(l.value)}</p>`).join('')
+        + `<p class="pt-1.5 text-charcoal/70">${escapeHtml(t('openingHours.callNote'))}`
+        + ` <a class="font-medium text-blueberry hover:text-blueberry-hover transition-colors whitespace-nowrap" href="tel:${PHONE_DIGITS}">${escapeHtml(CONTACT_PHONE)}</a></p>`;
     }).catch(() => {});
   }
 

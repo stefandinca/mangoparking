@@ -1774,6 +1774,7 @@ export default {
     fri: 'Vineri',
     sat: 'Sâmbătă',
     sun: 'Duminică',
+    callNote: 'Pentru rezervări în afara programului, vă rugăm sunați înainte de sosire:',
   },
 
   // Admin activity feed (next 48h)

@@ -93,6 +93,8 @@ export default function Contact(container) {
                   <p class="text-[15px] mb-3">${t('footer.parking247')}</p>
                   <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('openingHours.office')}</p>
                   <table class="w-full text-[14px]"><tbody data-hours-tbody>${hoursRowsHtml(DEFAULT_HOURS)}</tbody></table>
+                  <p class="text-[13px] text-dim mt-3">${t('openingHours.callNote')}
+                    <a href="tel:${CONTACT_PHONE.replace(/\s/g, '')}" class="font-medium text-blueberry hover:text-mango transition-colors whitespace-nowrap">${CONTACT_PHONE}</a></p>
                 </div>
               </div>
             </div>

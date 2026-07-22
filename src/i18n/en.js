@@ -1758,6 +1758,7 @@ export default {
     fri: 'Friday',
     sat: 'Saturday',
     sun: 'Sunday',
+    callNote: 'For reservations outside working hours, please call before arriving:',
   },
 
   // Admin activity feed (next 48h)

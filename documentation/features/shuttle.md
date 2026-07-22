@@ -68,8 +68,11 @@ schedule doc (or mock) lacks `driver` / `capacity`.
   collapses contiguous same-hours days into lines like "Monday–Friday: 09:00–18:00"
   and labels a Sat+Sun run "Weekends". Showing the whole week (not just today)
   stops a closed day from reading as permanently closed. Patched in after the
-  cached service resolves.
-- **Contact page** (`src/pages/public/Contact.js`) — full weekly table.
+  cached service resolves. A **`t('openingHours.callNote')`** line + `tel:` link to
+  `CONTACT_PHONE` follows the hours ("for reservations outside working hours, please
+  call before arriving"). Site-wide, so it shows on every public page.
+- **Contact page** (`src/pages/public/Contact.js`) — full weekly table, with the same
+  `openingHours.callNote` + phone line below it.
 - **After-hours booking gate** (`src/pages/public/BookingLongTerm.js:929`) —
   `afterHoursGateBlocks()` fires when the drop-off is within `LAST_MINUTE_MS`
   **and** `isOutsideOpeningHoursNow()` is true: it opens a "call us" modal
