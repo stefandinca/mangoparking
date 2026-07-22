@@ -65,7 +65,7 @@ export function AdminLayout(activePath, contentHtml) {
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto">
+    <main class="flex-1 overflow-y-auto scrollbar-custom">
       <!-- Mobile admin nav -->
       <div class="md:hidden bg-blueberry-deep">
         <div class="flex items-center justify-between px-4 py-3">
