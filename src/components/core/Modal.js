@@ -5,11 +5,14 @@ import { t } from '../../i18n/index.js';
 // Escape key close the modal. Pass `dismissible: false` for a blocking modal
 // the user MUST act on (e.g. the complete-your-profile gate) — it can only be
 // closed programmatically via the returned `close()`.
-export function openModal(content, { onClose, dismissible = true } = {}) {
+// `maxWidth` is a Tailwind max-w-* class controlling the panel width (default
+// `max-w-lg`). Pass a wider one (e.g. `max-w-2xl`) for content-heavy modals like
+// the create-reservation form; the small confirm/alert dialogs keep the default.
+export function openModal(content, { onClose, dismissible = true, maxWidth = 'max-w-lg' } = {}) {
   const overlay = html`
     <div class="fixed inset-0 z-[90] flex items-center justify-center p-4" data-modal-overlay>
       <div class="absolute inset-0 bg-charcoal/60" data-modal-bg></div>
-      <div class="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-8" data-modal-content></div>
+      <div class="relative bg-white rounded-3xl shadow-2xl ${maxWidth} w-full max-h-[90vh] overflow-y-auto p-8" data-modal-content></div>
     </div>
   `;
 

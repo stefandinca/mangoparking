@@ -127,17 +127,17 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       <div data-user-picker>
         <label class="block text-[13px] font-medium text-charcoal/70 mb-2">${t('transactions.createUserLabel')}</label>
         <div class="grid grid-cols-2 gap-2 mb-2" data-mode-toggle>
-          <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-blueberry bg-blueberry/5 cursor-pointer">
-            <input type="radio" name="userMode" value="existing" checked class="accent-blueberry w-4 h-4">
+          <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-frost-deep cursor-pointer">
+            <input type="radio" name="userMode" value="existing" class="accent-blueberry w-4 h-4">
             <span class="text-[12px] font-medium">${t('transactions.createUserExisting')}</span>
           </label>
-          <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-frost-deep cursor-pointer">
-            <input type="radio" name="userMode" value="new" class="accent-blueberry w-4 h-4">
+          <label class="flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-blueberry bg-blueberry/5 cursor-pointer">
+            <input type="radio" name="userMode" value="new" checked class="accent-blueberry w-4 h-4">
             <span class="text-[12px] font-medium">${t('transactions.createUserNew')}</span>
           </label>
         </div>
 
-        <div data-existing-block>
+        <div data-existing-block class="hidden">
           <input list="users-options-ct" data-user-search type="text"
             placeholder="${t('transactions.createUserSearch')}"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
@@ -153,7 +153,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
           <div data-user-plates class="mt-2 hidden"></div>
         </div>
 
-        <div data-new-block class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div data-new-block class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <input type="text" name="newName" placeholder="${t('transactions.createNewName')}"
             class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           <input type="email" name="newEmail" placeholder="${t('transactions.createNewEmail')}"
@@ -443,7 +443,9 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     </div>
   `;
 
-  const { close, contentEl, setDismissible } = openModal(body);
+  // Wider panel than the default modal — this form is dense (two-column billing,
+  // date/time pickers, payer details) and reads better with more room.
+  const { close, contentEl, setDismissible } = openModal(body, { maxWidth: 'max-w-2xl' });
 
   // While a create request is in flight the modal must not be cancellable:
   // an HTTPS callable can't be aborted, so a backdrop tap / Cancel during
