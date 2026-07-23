@@ -14,7 +14,7 @@ src/seed.js
 netopia*keys*.md
 netopia*keys*.txt
 documentation/smartbill-creds.md
-documentation/parkcloud.md
+documentation/parkcloud*.md
 documentation/parkvia-response.txt
 *.pem
 *.key
@@ -29,3 +29,4 @@ locale_params.json
 
 # Raw client image masters — optimized web copies live in public/images/
 src/images/
+.vercel

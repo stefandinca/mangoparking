@@ -29,15 +29,10 @@
 //     bindings on the poller/callables, finalize the provisional bits, redeploy.
 
 import { parseStringPromise } from 'xml2js';
-// [SECRET] import { defineSecret } from 'firebase-functions/params';
-// [SECRET] export const PARKVIA_SUBSCRIPTION_KEY = defineSecret('PARKVIA_SUBSCRIPTION_KEY');
-// [SECRET] export const PARKVIA_OPERATOR_KEY = defineSecret('PARKVIA_OPERATOR_KEY');
-// [SECRET] export const PARKVIA_SECRETS = [PARKVIA_SUBSCRIPTION_KEY, PARKVIA_OPERATOR_KEY];
-
-// Until the [SECRET] lines above are enabled, PARKVIA_SECRETS is empty so
-// binding `secrets: PARKVIA_SECRETS` on a function is a harmless no-op and the
-// project deploys with no ParkCloud config present.
-export const PARKVIA_SECRETS = [];
+import { defineSecret } from 'firebase-functions/params';
+export const PARKVIA_SUBSCRIPTION_KEY = defineSecret('PARKVIA_SUBSCRIPTION_KEY');
+export const PARKVIA_OPERATOR_KEY = defineSecret('PARKVIA_OPERATOR_KEY');
+export const PARKVIA_SECRETS = [PARKVIA_SUBSCRIPTION_KEY, PARKVIA_OPERATOR_KEY];
 
 // Hard timeout — this runs inside a scheduled job and an admin callable; a hung
 // ParkCloud request must not stall the function until the platform kill.
