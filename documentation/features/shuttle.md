@@ -68,16 +68,15 @@ schedule doc (or mock) lacks `driver` / `capacity`.
   collapses contiguous same-hours days into lines like "Monday–Friday: 09:00–18:00"
   and labels a Sat+Sun run "Weekends". Showing the whole week (not just today)
   stops a closed day from reading as permanently closed. Patched in after the
-  cached service resolves. A **`t('openingHours.callNote')`** line + `tel:` link to
-  `CONTACT_PHONE` follows the hours ("for reservations outside working hours, please
-  call before arriving"), then a **`t('openingHours.nightWeekendNote')`** line
-  ("if you need us at night or on the weekend, call us:") + the same phone.
-  Site-wide, so it shows on every public page.
-- **Contact page** (`src/pages/public/Contact.js`) — full weekly table, with the same
-  `openingHours.callNote` + phone line below it, followed by the
-  `nightWeekendNote` line. The Home contact card (`Home.js`) shows the
-  `nightWeekendNote` under its phone entry too, and the same sentence appears
-  under the WhatsApp/phone contact block of the customer email templates
+  cached service resolves. A **`t('openingHours.nightWeekendNote')`** line
+  ("if you need us at night or on the weekend, call us:") + `tel:` link to
+  `CONTACT_PHONE` follows the hours. (The older `callNote` "call before
+  arriving" line was removed 2026-07-23 at the client's request.) Site-wide,
+  so it shows on every public page.
+- **Contact page** (`src/pages/public/Contact.js`) — full weekly table, with the
+  `nightWeekendNote` + phone line below it. The Home contact card (`Home.js`)
+  shows the `nightWeekendNote` under its phone entry too, and the same sentence
+  appears under the WhatsApp/phone contact block of the customer email templates
   (`booking-longterm-confirm`, `booking-repriced`, `booking-cancelled`,
   `signup-welcome`, both locales).
 - **After-hours booking gate** (`src/pages/public/BookingLongTerm.js:929`) —

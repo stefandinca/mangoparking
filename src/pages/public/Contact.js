@@ -78,9 +78,7 @@ export default function Contact(container) {
                 <div>
                   <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1.5">${t('contact.hoursLabel')}</p>
                   <p class="text-[15px] mb-3">${t('footer.parking247')}</p>
-                  <p class="text-[13px] text-dim">${t('openingHours.callNote')}
-                    <a href="tel:${CONTACT_PHONE.replace(/\s/g, '')}" class="font-medium text-blueberry hover:text-mango transition-colors whitespace-nowrap">${CONTACT_PHONE}</a></p>
-                  <p class="text-[13px] text-dim mt-1.5">${t('openingHours.nightWeekendNote')}
+                  <p class="text-[13px] text-dim">${t('openingHours.nightWeekendNote')}
                     <a href="tel:${CONTACT_PHONE.replace(/\s/g, '')}" class="font-medium text-blueberry hover:text-mango transition-colors whitespace-nowrap">${CONTACT_PHONE}</a></p>
                 </div>
               </div>
