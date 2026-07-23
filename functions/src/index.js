@@ -61,8 +61,9 @@ import {
   PARKVIA_SECRETS,
   PARKVIA_BROKER_NAME,
   parkviaConfig,
-  listParkviaBookings,
+  listParkviaEvents,
   listParkviaOperators,
+  getParkviaBookingDetails,
   mapParkviaBookingToImport,
   parkviaRefDocId,
 } from './parkvia.js';
@@ -4545,7 +4546,7 @@ export const smartbillTestIssue = onCall(
 // Cursor lives in parkviaSync/state (server-only). Dedup is the authoritative
 // parkviaImports/{ref} ledger, claimed transactionally before a booking is made.
 const PARKVIA_SYNC_DOC = 'parkviaSync/state';
-const PARKVIA_BACKFILL_MS = 24 * 60 * 60 * 1000;   // first run looks back 24h
+const PARKVIA_BACKFILL_HOURS = 720;   // first run: 30 days of events (verified live)
 
 export async function runParkviaSync(actorUid = 'scheduled') {
   const cfg = parkviaConfig();
@@ -4555,30 +4556,75 @@ export async function runParkviaSync(actorUid = 'scheduled') {
   const nowIso = new Date().toISOString();
   const summary = { configured: true, imported: 0, skipped: 0, cancelled: 0, amended: 0, errors: 0 };
 
-  // Cursor: modified-since watermark. Default to a short backfill on first run.
+  // Cursor: the last-processed EVENT ID. ParkCloud is event-based (NEW / AMEND /
+  // CANCEL / NOSHOW rows with increasing ids) — we poll "events since {id}".
+  //
+  // FIRST RUN PRIMES, NEVER IMPORTS (go-live decision 2026-07-23): the account
+  // already held ~3 weeks of reservations that staff had entered manually at
+  // the desk, so a historical backfill would duplicate them. The first pass
+  // records the newest event id and stops; only bookings created/changed after
+  // go-live import automatically.
   const [syncColl, syncId] = PARKVIA_SYNC_DOC.split('/');
   const syncRef = db.collection(syncColl).doc(syncId);
   const syncSnap = await syncRef.get();
-  const since = syncSnap.exists && syncSnap.data().lastSyncAt
-    ? syncSnap.data().lastSyncAt
-    : new Date(Date.now() - PARKVIA_BACKFILL_MS).toISOString();
+  const state = syncSnap.exists ? syncSnap.data() : {};
 
-  let raw = [];
+  let events = [];
   try {
-    ({ raw } = await listParkviaBookings({ since }));
+    if (!state.primedAt) {
+      const seen = await listParkviaEvents({ hours: PARKVIA_BACKFILL_HOURS });
+      const maxId = seen.reduce((m, e) => Math.max(m, e.id), 0);
+      const result = { ...summary, primed: true, seenEvents: seen.length };
+      await syncRef.set({
+        lastEventId: maxId,
+        primedAt: nowIso,
+        lastSyncAt: nowIso,
+        lastRunAt: nowIso,
+        lastError: null,
+        lastResult: result,
+      }, { merge: true });
+      return result;
+    }
+    const lastEventId = Number(state.lastEventId) || 0;
+    // since/0 semantics are unknown — if the prime saw an empty account, use a
+    // small age window instead; the parkviaImports ledger dedups any overlap.
+    events = lastEventId > 0
+      ? await listParkviaEvents({ sinceId: lastEventId })
+      : await listParkviaEvents({ hours: 24 });
   } catch (err) {
-    console.warn('runParkviaSync: list failed', err?.message);
+    console.warn('runParkviaSync: events fetch failed', err?.message);
     await syncRef.set({ lastRunAt: nowIso, lastError: String(err?.message || err) }, { merge: true });
     return { ...summary, errors: 1, error: String(err?.message || err) };
   }
 
-  for (const node of raw) {
+  // One pass per booking: several events for the same reference collapse to a
+  // single details-fetch (Get Booking Details always returns the CURRENT state,
+  // so replaying intermediate events would be redundant). Processed in event-id
+  // order; the cursor advances over the whole batch even when a row errors —
+  // best-effort per reservation, a poisoned row must not wedge the cursor.
+  const byRef = new Map();
+  let maxEventId = Number(state.lastEventId) || 0;
+  for (const ev of events.sort((a, b) => a.id - b.id)) {
+    byRef.set(ev.ref, ev);
+    maxEventId = Math.max(maxEventId, ev.id);
+  }
+
+  for (const ev of byRef.values()) {
+    let node;
     let imp;
     try {
+      node = await getParkviaBookingDetails(ev.ref);
       imp = mapParkviaBookingToImport(node);
     } catch (err) {
       summary.errors++;
-      console.warn('runParkviaSync: map failed', err?.message);
+      console.warn('runParkviaSync: fetch/map failed', ev.ref, err?.message);
+      continue;
+    }
+
+    // ENQUIRY = not a confirmed booking yet. Skip WITHOUT claiming the ledger
+    // so a later CONFIRMED event can still import it.
+    if (imp.rawStatus === 'enquiry') {
+      summary.skipped++;
       continue;
     }
 
@@ -4616,6 +4662,14 @@ export async function runParkviaSync(actorUid = 'scheduled') {
           totalPrice: imp.totalPrice,
           contact: imp.contact,
           brokerName: imp.brokerName || PARKVIA_BROKER_NAME,
+          passengers: imp.passengers,
+          flightNumberDropoff: imp.flightNumberDropoff,
+          flightNumberPickup: imp.flightNumberPickup,
+          // Pay-on-arrival ParkVia bookings carry money the desk must still
+          // collect — surface it where staff will see it at check-in.
+          notes: imp.amountDue > 0
+            ? `ParkVia: de încasat ${imp.amountDue} ${imp.currency} la sosire`
+            : null,
           parkvia: { ref: imp.ref, importedAt: nowIso, lastStatus: 'active' },
           actorUid,
         });
@@ -4638,6 +4692,7 @@ export async function runParkviaSync(actorUid = 'scheduled') {
   }
 
   await syncRef.set({
+    lastEventId: maxEventId,
     lastSyncAt: nowIso,
     lastRunAt: nowIso,
     lastError: null,

@@ -28,7 +28,7 @@
 //   • uncomment the [SECRET] lines below + the `secrets: PARKVIA_SECRETS`
 //     bindings on the poller/callables, finalize the provisional bits, redeploy.
 
-import { parseStringPromise } from 'xml2js';
+import { parseStringPromise, processors } from 'xml2js';
 import { defineSecret } from 'firebase-functions/params';
 export const PARKVIA_SUBSCRIPTION_KEY = defineSecret('PARKVIA_SUBSCRIPTION_KEY');
 export const PARKVIA_OPERATOR_KEY = defineSecret('PARKVIA_OPERATOR_KEY');
@@ -99,9 +99,32 @@ async function parkviaRequest(path, { method = 'GET', body } = {}) {
   if (!res.ok) {
     throw new Error(`ParkVia HTTP ${res.status}${text ? `: ${String(text).slice(0, 200)}` : ''}`);
   }
-  // explicitArray:false collapses single-element nodes to plain values, which
-  // makes the mapper (below) readable. Matches netopia.js's IPN XML parsing.
-  return parseStringPromise(text, { explicitArray: false, trim: true });
+  return parseParkviaXml(text);
+}
+
+// Shared XML→object parse — exported so the mapper tests parse fixtures with
+// EXACTLY the runtime options. stripPrefix matters: ParkCloud namespaces child
+// elements (e.g. <d2p1:Registration> inside <Vehicle>) with arbitrary prefixes,
+// and nil attributes arrive as i:nil.
+export function parseParkviaXml(text) {
+  return parseStringPromise(text, {
+    explicitArray: false,
+    trim: true,
+    tagNameProcessors: [processors.stripPrefix],
+    attrNameProcessors: [processors.stripPrefix],
+  });
+}
+
+// Nil-aware text extraction. ParkCloud renders empty fields two ways: an empty
+// element (→ '') and an explicit <Field i:nil="true"/> (→ { $: { nil: 'true' } }
+// after parsing) — String() on the latter would yield "[object Object]".
+export function xmlText(v) {
+  if (v == null) return '';
+  if (typeof v === 'object') {
+    if (v.$ && String(v.$.nil).toLowerCase() === 'true') return '';
+    return typeof v._ === 'string' ? v._.trim() : '';
+  }
+  return String(v).trim();
 }
 
 // ── Endpoints ───────────────────────────────────────────────────────────────
@@ -118,83 +141,92 @@ export async function listParkviaOperators() {
     .map((o) => ({ id: String(o.Id ?? '').trim(), name: String(o.Name ?? '').trim() }));
 }
 
-// List reservations changed since a cursor. PROVISIONAL: the real endpoint,
-// the `since` query-param name/format, pagination, and the response envelope
-// are all unknown (probed guesses 404 — needs the portal's operation list).
-// Returns { raw: [...] } — an array of raw reservation nodes for the mapper.
-export async function listParkviaBookings({ since } = {}) {
+// CONFIRMED (2026-07-23): booking-change events — the sync driver. ParkCloud
+// is event-based: NEW / AMEND / CANCEL / NOSHOW rows, each with a
+// monotonically-increasing Id that serves as the poll cursor
+// (…/bookings/events/since/{id}). First run backfills by age
+// (…/bookings/events/age/{hours} — verified up to 720h).
+// GET → <ArrayOfEvent><Event><Id>34407328</Id><Date>2026-07-03T14:00:06.757</Date>
+//        <Type>NEW</Type><BookingReference>PC90243780</BookingReference></Event>…
+export async function listParkviaEvents({ sinceId, hours } = {}) {
   const cfg = parkviaConfig();
-  // PROVISIONAL: endpoint + query. e.g. /operators/{parkingId}/bookings?since=ISO
-  const q = new URLSearchParams();
-  if (since) q.set('modifiedSince', since);           // PROVISIONAL param name
-  const path = `/operators/${encodeURIComponent(cfg.parkingId)}/bookings?${q.toString()}`;
+  const path = sinceId != null
+    ? `/operator/${encodeURIComponent(cfg.parkingId)}/bookings/events/since/${encodeURIComponent(sinceId)}`
+    : `/operator/${encodeURIComponent(cfg.parkingId)}/bookings/events/age/${encodeURIComponent(hours || 24)}`;
   const parsed = await parkviaRequest(path);
-  // PROVISIONAL: dig out the reservation array from the real envelope.
-  const node = parsed?.bookings?.booking ?? parsed?.Bookings?.Booking ?? [];
-  const raw = Array.isArray(node) ? node : [node].filter(Boolean);
-  return { raw };
+  const node = parsed?.ArrayOfEvent?.Event ?? [];
+  return (Array.isArray(node) ? node : [node])
+    .filter(Boolean)
+    .map((e) => ({
+      id: Number(xmlText(e.Id)),
+      date: xmlText(e.Date),
+      type: String(xmlText(e.Type)).toUpperCase(),   // NEW | AMEND | CANCEL | NOSHOW
+      ref: xmlText(e.BookingReference),
+    }))
+    .filter((e) => Number.isFinite(e.id) && e.ref);
 }
 
-// Fetch a single reservation's current state (used to re-check status).
-// PROVISIONAL endpoint + shape.
-export async function getParkviaBookingStatus(ref) {
+// CONFIRMED (2026-07-23): the full, current state of one booking — what the
+// mapper consumes. GET /operator/{id}/booking/{reference} → <Booking>…</Booking>
+// (Reference, Status ENQUIRY|CONFIRMED|CANCELLED, AmountPaid/AmountDue/Currency,
+// ArrivalDate/DepartureDate as LOCAL wall-time without offset, Customer,
+// Vehicle→Registration, Passengers(+Child/Infant), Outbound/ReturnFlight,
+// IsNoShow). Returns the raw parsed Booking node.
+export async function getParkviaBookingDetails(ref) {
   const cfg = parkviaConfig();
-  const path = `/operators/${encodeURIComponent(cfg.parkingId)}/bookings/${encodeURIComponent(ref)}`;
+  const path = `/operator/${encodeURIComponent(cfg.parkingId)}/booking/${encodeURIComponent(ref)}`;
   const parsed = await parkviaRequest(path);
-  const b = parsed?.booking ?? parsed?.Booking ?? {};
-  return { ref, status: normalizeStatus(b), raw: b };
+  return parsed?.Booking ?? {};
 }
 
-// ── Status normalisation (PROVISIONAL enum) ─────────────────────────────────
-// Maps ParkCloud's status field onto our internal reconcile signal.
-// PROVISIONAL: real status values/paths unknown — confirm on onboarding.
-function normalizeStatus(raw = {}) {
-  const s = String(raw.status ?? raw.Status ?? raw.state ?? '').toLowerCase();
-  if (/cancel/.test(s)) return 'cancelled';
-  if (/amend|chang|modif|updat/.test(s)) return 'amended';
-  return 'active';
+// ── Status normalisation (CONFIRMED enum) ───────────────────────────────────
+// Booking.Status per the portal docs: ENQUIRY (not yet confirmed — do not
+// import), CONFIRMED, CANCELLED (cancelled or refunded).
+export function normalizeStatus(status) {
+  const s = String(status || '').toUpperCase();
+  if (s === 'CANCELLED') return 'cancelled';
+  if (s === 'ENQUIRY') return 'enquiry';
+  return 'active';                                   // CONFIRMED (default-safe)
 }
 
-// ── THE isolated adapter — PROVISIONAL, the ONLY piece that changes on the ──
-// ── arrival of the real ParkCloud XML schema. Pure function, no I/O, so it   ─
-// ── is unit-tested against a fixture (functions/test/parkvia.mapper.test.js).─
+// ── THE isolated adapter — finalized 2026-07-23 against two real bookings ───
+// ── (PC90288686 / PC90243780; raw copies in documentation/parkvia-response.txt,
+// ── gitignored). Pure function, no I/O — unit-tested against a real-shaped
+// ── fixture (functions/test/parkvia.mapper.test.js).
 //
-// Maps a raw ParkCloud reservation node → the import param object consumed by
-// createBrokerBookingCore (index.js). ALL field paths, the datetime format, the
-// price field, and how plate/days are derived are guesses until confirmed.
-// Every access is marked. Do the normalisation HERE (ISO datetimes, days,
-// upper-cased plate) so the rest of the pipeline is schema-agnostic.
+// Maps a parsed <Booking> node (parseParkviaXml + stripPrefix) → the import
+// param object consumed by createBrokerBookingCore (index.js). Normalisation
+// happens HERE (ISO instants, billing days, upper-cased plate) so the rest of
+// the pipeline is schema-agnostic.
 //
-// Returns { ref, plate, dropoffAt, pickupAt, days, totalPrice,
+// Returns { ref, plate, dropoffAt, pickupAt, days, totalPrice, amountDue,
+//           currency, passengers, flightNumberDropoff, flightNumberPickup,
 //           contact:{name,email,phone}, brokerName, rawStatus }.
 // Throws if a load-bearing field (ref, plate, both dates) is missing, so the
 // poller counts it as an error and skips it rather than importing garbage.
 export function mapParkviaBookingToImport(raw = {}) {
-  const pick = (...keys) => {
-    for (const k of keys) {
-      const v = raw?.[k];
-      if (v != null && String(v).trim() !== '') return String(v).trim();
-    }
-    return '';
-  };
-
-  // PROVISIONAL: confirm field name/path for the ParkVia booking reference.
-  const ref = pick('bookingReference', 'reference', 'BookingReference', 'id');
-  // PROVISIONAL: confirm plate field name.
-  const plate = pick('vehicleRegistration', 'registration', 'plate', 'VehicleRegistration')
-    .toUpperCase().replace(/[\s-]/g, '');
-  // PROVISIONAL: confirm datetime field names + format/timezone. toIso() below
-  // assumes an ISO-8601-ish string; a different format needs a real parser.
-  const dropoffAt = toIso(pick('arrivalDateTime', 'dropOff', 'startDate', 'ArrivalDateTime'));
-  const pickupAt = toIso(pick('departureDateTime', 'pickUp', 'endDate', 'DepartureDateTime'));
+  const ref = xmlText(raw.Reference);
+  const plate = xmlText(raw.Vehicle?.Registration).toUpperCase().replace(/[\s-]/g, '');
+  // ArrivalDate / DepartureDate arrive as naive local wall-time
+  // ("2026-07-20T11:00:00", no offset) — interpreted as Europe/Bucharest, the
+  // car park's zone, and converted to real instants (the app-wide convention).
+  const dropoffAt = parkcloudLocalToIso(xmlText(raw.ArrivalDate));
+  const pickupAt = parkcloudLocalToIso(xmlText(raw.DepartureDate));
 
   if (!ref) throw new Error('ParkVia mapping: missing booking reference');
   if (!plate) throw new Error(`ParkVia mapping: missing plate (ref ${ref})`);
   if (!dropoffAt || !pickupAt) throw new Error(`ParkVia mapping: missing/invalid dates (ref ${ref})`);
 
-  // PROVISIONAL: confirm price field + currency handling. This is ParkVia's
-  // CUSTOMER price, not our net — broker bookings get no cashbook/SmartBill.
-  const totalPrice = parsePrice(pick('totalPrice', 'price', 'amount', 'TotalPrice'));
+  // ParkVia's CUSTOMER price, not our net — broker bookings get no
+  // cashbook/SmartBill. AmountDue > 0 means pay-on-arrival money the desk must
+  // still collect; the importer surfaces it in the booking notes.
+  const amountPaid = parsePrice(xmlText(raw.AmountPaid));
+  const amountDue = parsePrice(xmlText(raw.AmountDue));
+  const c = raw.Customer || {};
+  const passengers =
+    (Number(xmlText(raw.Passengers)) || 0) +
+    (Number(xmlText(raw.PassengersChild)) || 0) +
+    (Number(xmlText(raw.PassengersInfant)) || 0);
 
   return {
     ref,
@@ -202,26 +234,44 @@ export function mapParkviaBookingToImport(raw = {}) {
     dropoffAt,
     pickupAt,
     days: deriveDays(dropoffAt, pickupAt),
-    totalPrice,
+    totalPrice: amountPaid + amountDue,
+    amountDue,
+    currency: xmlText(raw.Currency) || 'RON',
+    passengers: passengers > 0 ? passengers : null,
+    flightNumberDropoff: xmlText(raw.OutboundFlight) || null,
+    flightNumberPickup: xmlText(raw.ReturnFlight) || null,
     contact: {
-      // PROVISIONAL: confirm customer field names.
-      name: pick('customerName', 'leadName', 'CustomerName'),
-      email: pick('customerEmail', 'email', 'CustomerEmail').toLowerCase(),
-      phone: pick('customerPhone', 'phone', 'CustomerPhone'),
+      name: [xmlText(c.FirstName), xmlText(c.Surname)].filter(Boolean).join(' '),
+      email: xmlText(c.Email).toLowerCase(),
+      phone: xmlText(c.Mobile),
     },
     brokerName: PARKVIA_BROKER_NAME,
-    rawStatus: normalizeStatus(raw),
+    rawStatus: normalizeStatus(xmlText(raw.Status)),
   };
 }
 
 // ── Small pure helpers used by the mapper (also test-covered) ───────────────
 
-// PROVISIONAL: replace with a real parser once the ParkCloud datetime format
-// (and whether it carries a timezone) is known. Returns an ISO string or ''.
-export function toIso(v) {
-  if (!v) return '';
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? new Date(t).toISOString() : '';
+// ParkCloud datetimes are naive wall-clock strings in the car park's zone.
+// Convert "yyyy-MM-ddTHH:mm:ss(.fff)" (Europe/Bucharest) → a real ISO instant,
+// resolving the +02:00/+03:00 (EET/EEST) offset for that specific date via Intl.
+export function parkcloudLocalToIso(v) {
+  const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return '';
+  const [, y, mo, d, h, mi, se] = m;
+  const wallAsUtc = Date.UTC(+y, +mo - 1, +d, +h, +mi, +(se || 0));
+  if (!Number.isFinite(wallAsUtc)) return '';
+  return new Date(wallAsUtc - bucharestOffsetMin(new Date(wallAsUtc)) * 60_000).toISOString();
+}
+
+function bucharestOffsetMin(date) {
+  try {
+    const s = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Bucharest', timeZoneName: 'longOffset' })
+      .formatToParts(date).find((p) => p.type === 'timeZoneName')?.value || '';
+    const m = s.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+    if (m) return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0));
+  } catch { /* fall through to the fixed default */ }
+  return 180;   // +03:00 — the summer (EEST) offset, right for peak season
 }
 
 // Billing-days: ceil of the span, 2h grace applied once, min 1 — mirrors the

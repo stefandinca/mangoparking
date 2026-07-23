@@ -1,83 +1,146 @@
 // Unit tests for the ParkVia (ParkCloud) import mapper — the one piece of the
 // scaffold with real logic. Run: `cd functions && npm test`.
 //
-// ⚠️ The sample XML below is a PLACEHOLDER shaped like a plausible ParkCloud
-// reservation. Once the real ParkCloud Operator API schema is known, update
-// BOTH this fixture and the field paths in parkvia.js → mapParkviaBookingToImport,
-// then re-run this test. These assertions are what pin the mapping contract.
+// The fixture mirrors the REAL ParkCloud Operator API <Booking> schema,
+// captured live on 2026-07-23 from GET /operator/{id}/booking/{reference}
+// (see documentation/parkvia-response.txt, gitignored, for raw copies):
+// namespaced <Vehicle> children (d2p1:Registration), i:nil empties, naive
+// local wall-time dates, AmountPaid/AmountDue, Passengers(+Child/Infant).
+// These assertions pin the mapping contract.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseStringPromise } from 'xml2js';
 import {
   mapParkviaBookingToImport,
+  parseParkviaXml,
+  normalizeStatus,
+  xmlText,
+  parkcloudLocalToIso,
   deriveDays,
-  toIso,
   parkviaRefDocId,
 } from '../src/parkvia.js';
 
-// A single reservation node, as it would arrive after parseStringPromise with
-// { explicitArray: false } (single-element nodes collapse to plain values).
 const SAMPLE_XML = `
-<booking>
-  <bookingReference>PV-100245</bookingReference>
-  <vehicleRegistration>b 123 xyz</vehicleRegistration>
-  <arrivalDateTime>2026-08-01T06:30:00Z</arrivalDateTime>
-  <departureDateTime>2026-08-05T22:15:00Z</departureDateTime>
-  <totalPrice>184.50</totalPrice>
-  <customerName>Ion Popescu</customerName>
-  <customerEmail>Ion.Popescu@example.com</customerEmail>
-  <customerPhone>+40 720 000 111</customerPhone>
-  <status>Confirmed</status>
-</booking>`;
+<Booking xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://parkcloud.net/operator">
+  <Reference>PC90288686</Reference>
+  <Status>CONFIRMED</Status>
+  <AmountPaid>90</AmountPaid>
+  <AmountDue>0</AmountDue>
+  <Currency>RON</Currency>
+  <BookingDate>2026-07-09T07:17:31.317</BookingDate>
+  <ArrivalDate>2026-07-20T11:00:00</ArrivalDate>
+  <DepartureDate>2026-07-23T16:15:00</DepartureDate>
+  <LanguageCode>RO</LanguageCode>
+  <Customer>
+    <Title></Title>
+    <FirstName>Ion</FirstName>
+    <Surname>Popescu</Surname>
+    <Address></Address><Town></Town><County></County><Postcode></Postcode>
+    <Mobile>720000111</Mobile>
+    <Email>Ion.Popescu@example.com</Email>
+  </Customer>
+  <Vehicle xmlns:d2p1="http://parkcloud.net">
+    <d2p1:Registration>b 63-30 tt</d2p1:Registration>
+    <d2p1:Make i:nil="true" />
+    <d2p1:Model i:nil="true" />
+    <d2p1:Colour i:nil="true" />
+  </Vehicle>
+  <Passengers>2</Passengers>
+  <PassengersChild>1</PassengersChild>
+  <PassengersInfant>0</PassengersInfant>
+  <Options><Option><Quantity>1</Quantity><Description>Parcare</Description></Option></Options>
+  <OutboundTerminal i:nil="true" />
+  <OutboundFlight i:nil="true" />
+  <ReturningFrom i:nil="true" />
+  <ReturnTerminal i:nil="true" />
+  <ReturnFlight i:nil="true" />
+  <SpecialRequests i:nil="true" />
+  <IsNoShow>false</IsNoShow>
+</Booking>`;
 
-test('maps a well-formed ParkCloud reservation to import params', async () => {
-  const parsed = await parseStringPromise(SAMPLE_XML, { explicitArray: false, trim: true });
-  const imp = mapParkviaBookingToImport(parsed.booking);
+test('maps a real-shaped ParkCloud booking to import params', async () => {
+  const parsed = await parseParkviaXml(SAMPLE_XML);
+  const imp = mapParkviaBookingToImport(parsed.Booking);
 
-  assert.equal(imp.ref, 'PV-100245');
-  assert.equal(imp.plate, 'B123XYZ', 'plate is upper-cased with spaces/hyphens stripped');
-  assert.equal(imp.dropoffAt, '2026-08-01T06:30:00.000Z');
-  assert.equal(imp.pickupAt, '2026-08-05T22:15:00.000Z');
-  assert.equal(imp.totalPrice, 184.5);
+  assert.equal(imp.ref, 'PC90288686');
+  assert.equal(imp.plate, 'B6330TT', 'plate from the namespaced Vehicle node, upper-cased, spaces/hyphens stripped');
+  // ArrivalDate 2026-07-20T11:00 is Bucharest wall-time; July = EEST (+03:00).
+  assert.equal(imp.dropoffAt, '2026-07-20T08:00:00.000Z');
+  assert.equal(imp.pickupAt, '2026-07-23T13:15:00.000Z');
+  assert.equal(imp.totalPrice, 90, 'AmountPaid + AmountDue');
+  assert.equal(imp.amountDue, 0);
+  assert.equal(imp.currency, 'RON');
+  assert.equal(imp.passengers, 3, 'adults + children + infants');
+  assert.equal(imp.flightNumberDropoff, null, 'i:nil OutboundFlight → null, not "[object Object]"');
+  assert.equal(imp.flightNumberPickup, null);
   assert.equal(imp.brokerName, 'ParkVia');
   assert.equal(imp.rawStatus, 'active');
   assert.deepEqual(imp.contact, {
     name: 'Ion Popescu',
     email: 'ion.popescu@example.com',   // lower-cased
-    phone: '+40 720 000 111',
+    phone: '720000111',
   });
-  // 4d ~16h span, 2h grace applied once → ceil ≈ 5 billing days.
-  assert.equal(imp.days, 5);
+  // 3d 5h15 span, 2h grace applied once → ceil ≈ 4 billing days.
+  assert.equal(imp.days, 4);
 });
 
-test('flags a cancelled reservation via rawStatus', async () => {
-  const xml = SAMPLE_XML.replace('<status>Confirmed</status>', '<status>Cancelled</status>');
-  const parsed = await parseStringPromise(xml, { explicitArray: false, trim: true });
-  const imp = mapParkviaBookingToImport(parsed.booking);
+test('pay-on-arrival: AmountDue folds into totalPrice and is surfaced', async () => {
+  const xml = SAMPLE_XML
+    .replace('<AmountPaid>90</AmountPaid>', '<AmountPaid>0</AmountPaid>')
+    .replace('<AmountDue>0</AmountDue>', '<AmountDue>150</AmountDue>');
+  const imp = mapParkviaBookingToImport((await parseParkviaXml(xml)).Booking);
+  assert.equal(imp.totalPrice, 150);
+  assert.equal(imp.amountDue, 150);
+});
+
+test('flight numbers map through when present', async () => {
+  const xml = SAMPLE_XML
+    .replace('<OutboundFlight i:nil="true" />', '<OutboundFlight>RO301</OutboundFlight>')
+    .replace('<ReturnFlight i:nil="true" />', '<ReturnFlight>RO302</ReturnFlight>');
+  const imp = mapParkviaBookingToImport((await parseParkviaXml(xml)).Booking);
+  assert.equal(imp.flightNumberDropoff, 'RO301');
+  assert.equal(imp.flightNumberPickup, 'RO302');
+});
+
+test('status enum: CONFIRMED / CANCELLED / ENQUIRY', async () => {
+  assert.equal(normalizeStatus('CONFIRMED'), 'active');
+  assert.equal(normalizeStatus('CANCELLED'), 'cancelled');
+  assert.equal(normalizeStatus('ENQUIRY'), 'enquiry');
+  assert.equal(normalizeStatus(''), 'active', 'default-safe');
+  const xml = SAMPLE_XML.replace('<Status>CONFIRMED</Status>', '<Status>CANCELLED</Status>');
+  const imp = mapParkviaBookingToImport((await parseParkviaXml(xml)).Booking);
   assert.equal(imp.rawStatus, 'cancelled');
 });
 
-test('throws on a missing booking reference', () => {
-  assert.throws(() => mapParkviaBookingToImport({ vehicleRegistration: 'B1XYZ' }), /reference/);
-});
-
-test('throws on a missing plate', () => {
+test('throws on missing reference / plate / dates', async () => {
+  assert.throws(() => mapParkviaBookingToImport({}), /reference/);
   assert.throws(
-    () => mapParkviaBookingToImport({ bookingReference: 'PV-1', arrivalDateTime: '2026-08-01T06:00:00Z', departureDateTime: '2026-08-02T06:00:00Z' }),
+    () => mapParkviaBookingToImport({ Reference: 'PC1', ArrivalDate: '2026-08-01T06:00:00', DepartureDate: '2026-08-02T06:00:00' }),
     /plate/,
   );
-});
-
-test('throws on missing/invalid dates', () => {
   assert.throws(
-    () => mapParkviaBookingToImport({ bookingReference: 'PV-1', vehicleRegistration: 'B1XYZ' }),
+    () => mapParkviaBookingToImport({ Reference: 'PC1', Vehicle: { Registration: 'B1XYZ' } }),
     /dates/,
   );
 });
 
+test('xmlText: strings, empty elements, and i:nil objects', () => {
+  assert.equal(xmlText('  x  '), 'x');
+  assert.equal(xmlText(''), '');
+  assert.equal(xmlText(null), '');
+  assert.equal(xmlText({ $: { nil: 'true' } }), '', 'i:nil="true" → empty, never "[object Object]"');
+  assert.equal(xmlText({ _: 'inner', $: { attr: 'v' } }), 'inner');
+});
+
+test('parkcloudLocalToIso: Bucharest wall-time → instant, DST-aware', () => {
+  assert.equal(parkcloudLocalToIso('2026-07-20T11:00:00'), '2026-07-20T08:00:00.000Z', 'summer = EEST +03:00');
+  assert.equal(parkcloudLocalToIso('2026-01-15T10:00:00'), '2026-01-15T08:00:00.000Z', 'winter = EET +02:00');
+  assert.equal(parkcloudLocalToIso('2026-07-03T14:00:06.757'), '2026-07-03T11:00:06.000Z', 'fractional seconds tolerated');
+  assert.equal(parkcloudLocalToIso(''), '');
+  assert.equal(parkcloudLocalToIso('not-a-date'), '');
+});
+
 test('deriveDays: 2h grace applied once, minimum 1', () => {
-  // days = ceil((span - 2h) / 24h), min 1.
   assert.equal(deriveDays('2026-08-01T08:00:00Z', '2026-08-02T09:00:00Z'), 1, '25h → 1 day (within 24h+grace)');
   assert.equal(deriveDays('2026-08-01T08:00:00Z', '2026-08-02T10:00:00Z'), 1, '26h → exactly 1 day');
   assert.equal(deriveDays('2026-08-01T08:00:00Z', '2026-08-02T12:00:00Z'), 2, '28h → 2 days');
@@ -86,10 +149,20 @@ test('deriveDays: 2h grace applied once, minimum 1', () => {
   assert.equal(deriveDays('bad', 'worse'), 1, 'unparseable → 1');
 });
 
-test('toIso normalises parseable datetimes and rejects junk', () => {
-  assert.equal(toIso('2026-08-01T06:30:00Z'), '2026-08-01T06:30:00.000Z');
-  assert.equal(toIso(''), '');
-  assert.equal(toIso('not-a-date'), '');
+test('parses an ArrayOfEvent envelope the way listParkviaEvents expects', async () => {
+  const xml = `
+<ArrayOfEvent xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://parkcloud.net/operator">
+  <Event><Id>34407328</Id><Date>2026-07-03T14:00:06.757</Date><Type>NEW</Type><BookingReference>PC90243780</BookingReference></Event>
+  <Event><Id>34408087</Id><Date>2026-07-03T14:42:43.947</Date><Type>CANCEL</Type><BookingReference>PC90244034</BookingReference></Event>
+</ArrayOfEvent>`;
+  const parsed = await parseParkviaXml(xml);
+  const node = parsed.ArrayOfEvent.Event;
+  assert.equal(Array.isArray(node), true);
+  assert.equal(xmlText(node[0].Id), '34407328');
+  assert.equal(xmlText(node[1].Type), 'CANCEL');
+  // Single-event envelope collapses to a plain object (explicitArray:false).
+  const one = await parseParkviaXml(xml.replace(/<Event><Id>34408087[\s\S]*?<\/Event>/, ''));
+  assert.equal(Array.isArray(one.ArrayOfEvent.Event), false);
 });
 
 test('parkviaRefDocId strips Firestore-illegal characters', () => {

@@ -77,16 +77,24 @@ fire automatically on create — the importer sends no email of its own.
 - **Amendment** — PROVISIONAL: only safe fields (dropoff/pickup dates → recompute `days`) are
   auto-applied, and only while `upcoming`; price/plate changes are left for manual review.
 
-## Still PROVISIONAL — finalize from the portal's operation list
-1. Every field path in `mapParkviaBookingToImport` + datetime format/timezone + price field.
-2. The reservations endpoint path, the `since` cursor param, pagination, response envelope
-   (`listParkviaBookings` / `getParkviaBookingStatus`) — guessed paths 404.
-3. The cancellation/amendment status enum (`normalizeStatus`) the reconcile branch keys off.
-
-~~Resolved 2026-07-23:~~ auth model (subscription key header + `key` query param — no
-operator-key header), base URL (`parkcloud.azure-api.net`), service prefix
-(`/rest/operator/v1.svc`), parking/operator id (**15777**), and `GET /operators`
-(confirmed, now the healthcheck probe).
+## Finalized 2026-07-23 — everything confirmed against the live API
+All former PROVISIONAL items are resolved (real responses captured in the
+gitignored `documentation/parkvia-response.txt`):
+- **Auth**: subscription key header + operator key as the `key` query param.
+- **Base**: `https://parkcloud.azure-api.net/rest/operator/v1.svc`, operator id **15777**.
+- **Model**: EVENT-based, not modified-since. `GET …/bookings/events/since/{id}`
+  (cursor = last event id, stored as `parkviaSync/state.lastEventId`) with
+  `…/events/age/{hours}` as first-run backfill; event types NEW/AMEND/CANCEL/NOSHOW.
+  Each event's reference is resolved through `GET …/booking/{reference}` (statuses
+  ENQUIRY → skipped without claiming, CONFIRMED → import, CANCELLED → reconcile).
+- **Mapper**: real `<Booking>` schema — namespaced `Vehicle→Registration`
+  (stripPrefix), `i:nil` empties (`xmlText`), naive local wall-time dates
+  converted from Europe/Bucharest (`parkcloudLocalToIso`, DST-aware),
+  `AmountPaid`+`AmountDue` (due > 0 → desk-collect note on the booking),
+  passengers = adults+children+infants, Outbound/ReturnFlight → flight-number
+  fields. Tests rewritten against the real shape (10/10).
+- **Not used yet**: `POST …/booking/{reference}/NoShow` (report no-shows back to
+  ParkVia — a natural `markNoShows` follow-up), arrivals/departures-by-date.
 
 Update the fixture + assertions in `functions/test/parkvia.mapper.test.js` alongside (1).
 
