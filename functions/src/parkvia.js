@@ -87,7 +87,10 @@ async function parkviaRequest(path, { method = 'GET', body } = {}) {
         Accept: 'application/xml',
         ...(body ? { 'Content-Type': 'application/xml' } : {}),
       },
-      ...(body ? { body } : {}),
+      // body may be '' — ParkCloud's IIS backend replies 411 Length Required
+      // to write verbs without a Content-Length, so an explicit empty body
+      // (→ content-length: 0) must survive this spread.
+      ...(body != null ? { body } : {}),
     });
   } catch (err) {
     throw new Error(err?.name === 'TimeoutError' || err?.name === 'AbortError'
@@ -99,6 +102,8 @@ async function parkviaRequest(path, { method = 'GET', body } = {}) {
   if (!res.ok) {
     throw new Error(`ParkVia HTTP ${res.status}${text ? `: ${String(text).slice(0, 200)}` : ''}`);
   }
+  // Write-style operations (Register No Show) may reply with an empty 2xx body.
+  if (!text.trim()) return null;
   return parseParkviaXml(text);
 }
 
@@ -177,6 +182,22 @@ export async function getParkviaBookingDetails(ref) {
   const path = `/operator/${encodeURIComponent(cfg.parkingId)}/booking/${encodeURIComponent(ref)}`;
   const parsed = await parkviaRequest(path);
   return parsed?.Booking ?? {};
+}
+
+// Register No Show — tells ParkVia the customer never arrived:
+// PUT /operator/{operator_id}/booking/{reference}/NoShow. The portal lists the
+// operation without a verb; probed live 2026-07-23 — POST/GET get APIM's
+// "Resource not found", PUT routes through (a fake ref draws the service's own
+// "Invalid booking reference" error, proving template + verb). Empty body with
+// an explicit content-length (see parkviaRequest). Any 2xx counts as accepted.
+// The subsequent NOSHOW event ParkCloud emits is a harmless echo — the sync
+// loop re-fetches details and reconciles to 'unchanged' (Status stays
+// CONFIRMED, only IsNoShow flips).
+export async function registerParkviaNoShow(ref) {
+  const cfg = parkviaConfig();
+  const path = `/operator/${encodeURIComponent(cfg.parkingId)}/booking/${encodeURIComponent(ref)}/NoShow`;
+  await parkviaRequest(path, { method: 'PUT', body: '' });
+  return { ok: true };
 }
 
 // ── Status normalisation (CONFIRMED enum) ───────────────────────────────────

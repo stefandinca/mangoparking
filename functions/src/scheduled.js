@@ -20,7 +20,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
 import { SMARTBILL_SECRETS, deleteEstimate } from './smartbill.js';
 import { PARKVIA_SECRETS } from './parkvia.js';
-import { runParkviaSync } from './index.js';
+import { runParkviaSync, reportParkviaNoShowSafe } from './index.js';
 
 const REGION = 'europe-west1';
 const TZ = 'Europe/Bucharest';
@@ -298,7 +298,8 @@ export const markNoShows = onSchedule(
     schedule: 'every 60 minutes',
     timeZone: TZ,
     region: REGION,
-    secrets: SMARTBILL_SECRETS,
+    // SmartBill for the proforma cleanup + ParkVia for the no-show report-back.
+    secrets: [...SMARTBILL_SECRETS, ...PARKVIA_SECRETS],
   },
   async () => {
     const db = getFirestore();
@@ -368,6 +369,8 @@ export const markNoShows = onSchedule(
         await dropProforma(doc.ref, data, 'markNoShows',
           data.paymentId ? db.collection('pendingOrders').doc(data.paymentId) : null);
       }
+      // ParkVia-imported booking → tell ParkVia the customer never arrived.
+      await reportParkviaNoShowSafe(doc.ref, data);
       flagged++;
     }
     console.log(`markNoShows: flagged=${flagged} pastCutoff=${scanned} upcoming=${snap.size}`);

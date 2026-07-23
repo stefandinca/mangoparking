@@ -90,8 +90,15 @@ gitignored `documentation/parkvia-response.txt`):
   `AmountPaid`+`AmountDue` (due > 0 → desk-collect note on the booking),
   passengers = adults+children+infants, Outbound/ReturnFlight → flight-number
   fields. Tests rewritten against the real shape (10/10).
-- **Not used yet**: `POST …/booking/{reference}/NoShow` (report no-shows back to
-  ParkVia — a natural `markNoShows` follow-up), arrivals/departures-by-date.
+- **No-show report-back (wired 2026-07-23)**: `PUT …/booking/{reference}/NoShow`
+  (verb probed live — the portal omits it; POST/GET 404 at APIM, PUT routes;
+  empty body needs an explicit Content-Length). `reportParkviaNoShowSafe`
+  (index.js) fires from BOTH no-show paths — the hourly `markNoShows` detector
+  and `cancelBookingWithRefund`'s no-show conversion — best-effort, only for
+  ParkVia-imported bookings, once per booking (`parkvia.noShowReportedAt`
+  stamp; failures land in `parkvia.noShowReportError` + logs). The NOSHOW echo
+  event ParkCloud then emits reconciles to 'unchanged'.
+- **Not used**: arrivals/departures-by-date, barcode image.
 
 Update the fixture + assertions in `functions/test/parkvia.mapper.test.js` alongside (1).
 

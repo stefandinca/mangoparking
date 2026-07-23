@@ -66,6 +66,7 @@ import {
   getParkviaBookingDetails,
   mapParkviaBookingToImport,
   parkviaRefDocId,
+  registerParkviaNoShow,
 } from './parkvia.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
@@ -2383,7 +2384,7 @@ export const cancelCashHandover = onCall(
 // (so the capacity map updates immediately), and write an audit log.
 // Staff/admin may cancel any booking; customers may cancel only their own.
 export const cancelBookingWithRefund = onCall(
-  { region: 'europe-west1', cors: true, secrets: [...SMARTBILL_SECRETS, BREVO_API_KEY] },
+  { region: 'europe-west1', cors: true, secrets: [...SMARTBILL_SECRETS, BREVO_API_KEY, ...PARKVIA_SECRETS] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated');
@@ -2475,6 +2476,8 @@ export const cancelBookingWithRefund = onCall(
           const sbRefs = [bookingRef, ...(booking.paymentId ? [db.collection('pendingOrders').doc(booking.paymentId)] : [])];
           await smartbillDeleteProformaSafe({ sb: booking.smartbill, refs: sbRefs, label: `no-show ${bookingId}` });
         }
+        // ParkVia-imported booking → tell ParkVia the customer never arrived.
+        await reportParkviaNoShowSafe(bookingRef, booking);
         return { ok: true, noShow: true };
       }
     }
@@ -4788,6 +4791,35 @@ async function reconcileParkviaBooking(imp, ledger, actorUid) {
     }
   }
   return 'unchanged';
+}
+
+// Report a no-show back to ParkVia (Register No Show). Best-effort — never
+// blocks the no-show flow. Fires only for ParkVia-imported bookings
+// (parkvia.ref present) not already reported; silently no-ops while ParkCloud
+// is unconfigured. Outcome is stamped on the booking's server-only parkvia
+// trail so staff/debugging can see whether ParkVia was told.
+// Shared by markNoShows (scheduled.js) and cancelBookingWithRefund's no-show
+// conversion — both function configs must bind PARKVIA_SECRETS.
+export async function reportParkviaNoShowSafe(bookingRef, booking) {
+  const ref = booking?.parkvia?.ref;
+  if (!ref || booking?.parkvia?.noShowReportedAt) return;
+  if (!parkviaConfig().configured) return;
+  const nowIso = new Date().toISOString();
+  try {
+    await registerParkviaNoShow(ref);
+    await bookingRef.update({ 'parkvia.noShowReportedAt': nowIso }).catch(() => {});
+    await getFirestore().collection('auditLog').add({
+      action: 'parkvia_noshow_reported',
+      entityType: 'booking',
+      entityId: bookingRef.id,
+      actorUid: 'system',
+      payload: { ref },
+      timestamp: nowIso,
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('reportParkviaNoShowSafe failed', ref, err?.message);
+    await bookingRef.update({ 'parkvia.noShowReportError': String(err?.message || err) }).catch(() => {});
+  }
 }
 
 // Small helper: stamp the ledger's lastStatus (kept terse — the ledger ref is
