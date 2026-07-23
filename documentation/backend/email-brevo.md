@@ -53,6 +53,7 @@ every template with an ID:
 | `admin-invite` | 8 / 1 | `adminSendInvite` |
 | `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail` |
 | `booking-refunded` | 22 / 21 | `sendRefundIssuedEmail` |
+| `booking-cancelled` | 29 / 30 | `sendBookingCancelledEmail` — cancellation confirmation; with `refundPending:true`, adds a "refund on its way" box (card vs desk wording via `channel`). |
 | `booking-repriced` | 28 / 27 | `sendBookingRepricedEmail`, `sendExtensionPaidEmail`, `sendBookingRequoteEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up; with `requote:true`, the unpaid-re-quote variant showing the new total instead of a difference. |
 | `credit-purchase` | 3 / 10 | `handlePurchase` (token purchase) |
 | `credit-used` | 11 / 12 | `handleUse` |
@@ -67,7 +68,7 @@ every template with an ID:
 
 ### The HTML source files & the sync script
 
-The template bodies live as source in **`email-templates/*.html`** (repo root, 26
+The template bodies live as source in **`email-templates/*.html`** (repo root, 28
 files — one per name × locale):
 
 ```
@@ -131,6 +132,14 @@ Reusable senders (not triggers themselves — called from callables / the IPN):
 - **`sendRepayPaidEmail(bookingId)`** (`emails.js:282`) — a fresh "payment received"
   confirmation sent from `netopiaCallback` when a pay-at-pickup booking is repaid
   online (the create-trigger already fired at order time with `paid:false`).
+- **`sendBookingCancelledEmail(bookingId)`** (`emails.js`) — **`booking-cancelled`**.
+  Sent best-effort from `cancelBookingWithRefund` after the cancellation lands
+  (both self-service and staff cancels; the no-show conversion sends nothing —
+  the fee is forfeited). `refundPending` adds a "refund on its way" box; the
+  amount shown is the **charged** amount (`pendingOrders.amount`, falling back
+  to `totalPrice` for desk bookings with no linked order) and `channel`
+  (`card`/`desk`) picks the wording. The `booking-refunded` email follows later
+  when staff mark the refund processed.
 - **`sendRefundIssuedEmail(bookingId)`** (`emails.js:322`) — **`booking-refunded`**.
   Called by `adminMarkRefunded` (auto) or a manual resend. Picks channel copy from
   `refundedVia` (`cash` vs `card`) and persists a `refundEmail` status block on the

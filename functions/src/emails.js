@@ -408,6 +408,56 @@ export async function sendBookingRequoteEmail(bookingId) {
   return result?.ok ? { ok: true, recipient: recipient.email } : { ok: false, reason: result?.reason || 'unknown' };
 }
 
+// Called from cancelBookingWithRefund after the cancellation lands. Confirms
+// the booking is void; when the payment was routed to the refund queue it also
+// explains how the money comes back (card vs desk) — the booking-refunded
+// email follows later, when staff actually process the refund. The amount
+// shown is the CHARGED amount (pendingOrders.amount — online orders are
+// discounted below totalPrice), falling back to the booking's totalPrice for
+// desk-paid bookings with no linked order. The no-show branch deliberately
+// sends nothing (the fee is forfeited — a different conversation).
+export async function sendBookingCancelledEmail(bookingId) {
+  const db = getFirestore();
+  const snap = await db.collection('bookings').doc(bookingId).get();
+  if (!snap.exists) return { ok: false, reason: 'booking-not-found' };
+  const booking = snap.data();
+
+  const recipient = await resolveRecipient({
+    customerId: booking.customerId,
+    licensePlate: booking.licensePlate,
+    contact: booking.contact,
+  });
+  if (!recipient) return { ok: false, reason: 'no-recipient' };
+
+  const refundPending = booking.paymentStatus === 'refund-pending';
+  let refundAmount = Number(booking.totalPrice) || 0;
+  if (refundPending && booking.paymentId) {
+    try {
+      const order = await db.collection('pendingOrders').doc(booking.paymentId).get();
+      const charged = order.exists ? Number(order.data().amount) : NaN;
+      if (Number.isFinite(charged) && charged > 0) refundAmount = charged;
+    } catch { /* fall back to totalPrice */ }
+  }
+
+  const result = await sendBrevoEmail({
+    to: recipient.email,
+    name: recipient.name,
+    templateName: 'booking-cancelled',
+    locale: recipient.locale,
+    params: {
+      firstName: recipient.firstName,
+      code: booking.code || `LT-${bookingId.slice(0, 5).toUpperCase()}`,
+      plate: booking.licensePlate,
+      dropoffAt: fmtDateTime(booking.dropoffAt || booking.startDate, recipient.locale),
+      pickupAt: fmtDateTime(booking.pickupAt || booking.endDate, recipient.locale),
+      refundPending,
+      refundAmount,
+      channel: booking.paidBy === 'netopia' ? 'card' : 'desk',
+    },
+  });
+  return result?.ok ? { ok: true, recipient: recipient.email } : { ok: false, reason: result?.reason || 'unknown' };
+}
+
 // Follow-up when the extension difference is paid ONLINE (from the IPN). Mirrors
 // sendRepayPaidEmail: same template, paid:true, no pay link.
 export async function sendExtensionPaidEmail(bookingId, extOrderId) {

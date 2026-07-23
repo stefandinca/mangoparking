@@ -102,7 +102,7 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 ### Bookings, refunds & repricing
 | Fn | Line | Auth | Does / side effects |
 |---|---|---|---|
-| `cancelBookingWithRefund` | 1687 | authed (owner) or `assertAgent` (staff) | Cancels an upcoming/active longTerm booking. Routes paid bookings to `refund-pending` (Netopia or cash), releases spot + `activeCheckIns`, mirrors onto `pendingOrders`, audit-logs. Auto-routes to **no-show** (forfeit) when drop-off is >12h past and never arrived. |
+| `cancelBookingWithRefund` | 1687 | authed (owner) or `assertAgent` (staff) | Cancels an upcoming/active longTerm booking. Routes paid bookings to `refund-pending` (Netopia or cash), releases spot + `activeCheckIns`, mirrors onto `pendingOrders`, audit-logs, and **emails the customer a cancellation confirmation** (`sendBookingCancelledEmail`, best-effort — includes a "refund on its way" note when one was queued). Auto-routes to **no-show** (forfeit) when drop-off is >12h past and never arrived — the no-show path sends no email. Binds `BREVO_API_KEY`. |
 | `adminMarkRefunded` | 1865 | `assertStaff` | `refund-pending` → `refunded`; stamps `refundedVia`, mirrors onto pendingOrders, audit-logs, sends the customer refund email. Idempotent. Secret: `BREVO_API_KEY`. |
 | `adminResendRefundEmail` | 2145 | `assertStaff` | Re-sends the refund email for an already-refunded booking. Secret: `BREVO_API_KEY`. |
 | `adminResendConfirmationEmail` | 2186 | `assertStaff` | Re-sends the longTerm confirmation email for an `upcoming` booking (reflects current paid state). Secret: `BREVO_API_KEY`. |

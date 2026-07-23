@@ -130,6 +130,13 @@ upcoming ──check-in──▶ active ──check-out──▶ completed
    └── no-show (markNoShows scheduled detector)
 ```
 
+- **Cancellation** — self-service (owner, `/account/bookings`) or staff
+  (`cancelBookingWithRefund`). Paid → `refund-pending` (manual queue); the
+  customer gets a **`booking-cancelled` confirmation email** (best-effort, with
+  a "refund on its way" note when one was queued — the `booking-refunded` email
+  follows when staff process it). The no-show conversion (drop-off >12h past,
+  never arrived) forfeits the fee and sends no email.
+
 - **Reprice / extension** — staff move a booking's dates on `/admin/checkins`
   (`adminRepriceBooking`). Unpaid → re-quote (collected at pick-up); when the
   total changed, the client is automatically emailed the new total

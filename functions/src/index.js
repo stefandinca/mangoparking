@@ -37,7 +37,7 @@ import {
   crcError,
 } from './netopia.js';
 import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
-import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendBookingRequoteEmail, sendExtensionPaidEmail } from './emails.js';
+import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendBookingRequoteEmail, sendBookingCancelledEmail, sendExtensionPaidEmail } from './emails.js';
 import { notifyAdminPasswordReset } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 import {
@@ -2381,7 +2381,7 @@ export const cancelCashHandover = onCall(
 // (so the capacity map updates immediately), and write an audit log.
 // Staff/admin may cancel any booking; customers may cancel only their own.
 export const cancelBookingWithRefund = onCall(
-  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
+  { region: 'europe-west1', cors: true, secrets: [...SMARTBILL_SECRETS, BREVO_API_KEY] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated');
@@ -2581,6 +2581,13 @@ export const cancelBookingWithRefund = onCall(
       },
       timestamp: nowIso,
     });
+
+    // Customer confirmation — the booking is void, plus (when a refund was
+    // queued) how the money comes back. Best-effort like every customer
+    // email. The no-show branch above deliberately sends nothing (the fee
+    // is forfeited — a different conversation, handled by staff).
+    try { await sendBookingCancelledEmail(bookingId); }
+    catch (err) { console.warn('cancel email failed:', err?.message); }
 
     return { ok: true, refundOutcome };
   }

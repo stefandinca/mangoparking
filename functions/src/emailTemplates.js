@@ -33,6 +33,11 @@ export const TEMPLATES = {
   // gracefully (deploy-safe), same rollout as the voucher templates.
   'booking-repriced-ro':            28,
   'booking-repriced-en':            27,
+  // Cancellation confirmation (+ refund-pending explainer when the payment
+  // went to the refund queue). Sent from cancelBookingWithRefund; the no-show
+  // path sends nothing (fee forfeited).
+  'booking-cancelled-ro':           29,
+  'booking-cancelled-en':           30,
 
   // Credit packs
   'credit-purchase-ro':             3,
