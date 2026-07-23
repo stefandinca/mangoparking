@@ -1,18 +1,15 @@
 # ParkVia (ParkCloud) auto-import — v1.x
 
-> **Status: 🟡 Credentials LIVE, bookings endpoint pending (2026-07-23).**
-> ParkCloud access arrived: both keys are set in Secret Manager
-> (`PARKVIA_SUBSCRIPTION_KEY` = Azure APIM primary, `PARKVIA_OPERATOR_KEY` =
-> the ParkCloud UUID key), the `defineSecret` bindings are enabled, and
-> `functions/.env.mango-parking` carries `PARKVIA_PARKING_ID=15777` (our
-> Operator Id, verified) + the gateway base URL. **Confirmed live against the
-> API:** gateway `https://parkcloud.azure-api.net`, service prefix
-> `/rest/operator/v1.svc`, auth = subscription key header + operator key as
-> the `key` query param, and the `GET /operators` endpoint (healthcheck now
-> probes it and verifies operator 15777 is visible). **Still unknown:** the
-> reservations-list endpoint + XML schema (portal operation list needed) —
-> the mapper stays quarantined in `mapParkviaBookingToImport` until then.
-> Not yet deployed.
+> **Status: 🟢 LIVE (2026-07-23).** Deployed and verified in production: the
+> first scheduled run primed the cursor as designed —
+> `{"configured":true,"primed":true,"seenEvents":41,"imported":0,"errors":0}`
+> (go-live decision: no historical backfill, because ~3 weeks of ParkVia
+> reservations had already been desk-entered manually; only events after
+> go-live import automatically, every 15 minutes). Secrets:
+> `PARKVIA_SUBSCRIPTION_KEY` (Azure APIM primary) + `PARKVIA_OPERATOR_KEY`
+> (ParkCloud UUID key), both v1 in Secret Manager;
+> `functions/.env.mango-parking` carries `PARKVIA_PARKING_ID=15777` + the
+> gateway base URL. Everything below documents the finalized integration.
 
 ## Goal
 
