@@ -63,6 +63,7 @@ export function Footer() {
               <p class="pt-2">${t('footer.parking247')}</p>
               <p>${t('footer.shuttleEvery15')}</p>
               <p class="pt-1 text-charcoal/70">${t('openingHours.callNote')} <a class="font-medium text-blueberry hover:text-blueberry-hover transition-colors whitespace-nowrap" href="tel:${PHONE_DIGITS}">${CONTACT_PHONE}</a></p>
+              <p class="text-charcoal/70">${t('openingHours.nightWeekendNote')} <a class="font-medium text-blueberry hover:text-blueberry-hover transition-colors whitespace-nowrap" href="tel:${PHONE_DIGITS}">${CONTACT_PHONE}</a></p>
             </div>
           </div>
         </div>

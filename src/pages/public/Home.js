@@ -454,6 +454,7 @@ export default function Home(container) {
             <div>
               <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('contact.phone')}</p>
               <a href="tel:${CONTACT_PHONE.replace(/\s/g, '')}" class="text-[16px] font-medium hover:text-blueberry transition-colors">${CONTACT_PHONE}</a>
+              <p class="text-[13px] text-dim mt-1">${t('openingHours.nightWeekendNote')} <a href="tel:${CONTACT_PHONE.replace(/\s/g, '')}" class="font-medium text-blueberry hover:text-blueberry-hover transition-colors whitespace-nowrap">${CONTACT_PHONE}</a></p>
             </div>
             <div>
               <p class="text-[12px] font-mono uppercase text-dim tracking-[0.12em] mb-1">${t('contact.emailLabel')}</p>

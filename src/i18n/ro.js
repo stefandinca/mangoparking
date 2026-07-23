@@ -1797,6 +1797,7 @@ export default {
     sat: 'Sâmbătă',
     sun: 'Duminică',
     callNote: 'Pentru rezervări în afara programului, vă rugăm sunați înainte de sosire:',
+    nightWeekendNote: 'Dacă ai nevoie de noi noaptea sau în weekend, sună-ne:',
   },
 
   // Admin activity feed (next 48h)

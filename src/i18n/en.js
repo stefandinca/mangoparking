@@ -1781,6 +1781,7 @@ export default {
     sat: 'Saturday',
     sun: 'Sunday',
     callNote: 'For reservations outside working hours, please call before arriving:',
+    nightWeekendNote: 'If you need us at night or on the weekend, call us:',
   },
 
   // Admin activity feed (next 48h)
