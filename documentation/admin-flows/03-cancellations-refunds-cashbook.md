@@ -116,10 +116,9 @@ History rows show an email badge (sent/failed/unknown). "Retrimite email" →
    voucher booking *did* reach the queue, the admin is told to refund N lei via
    Netopia with no hint there's no money to move. Pick one behavior and make doc,
    server, and page agree.
-4. **[HIGH] `{{ … }}` i18n keys render literally** in the refunds block:
-   `historySubtitle` "Ultimele {{ days }} de zile — {{ count }} rambursări",
-   `failedCount` "{{ count }} email-uri eșuate", `resendOk` "Email retrimis către
-   {{ recipient }} …" — both locales. See cross-cutting #1 / BUGS #1.
+4. ~~**[HIGH] `{{ … }}` i18n keys render literally** in the refunds block~~ —
+   **FIXED 2026-07-23**: `historySubtitle`, `failedCount`, `resendOk` rewritten
+   to single-brace in both locales. See cross-cutting #1 / BUGS #1.
 5. **[MED] No "No-show" surface, and detection can miss bookings.**
    `AdminCheckIns` has only checkin/checkout/overdue tabs — no No-show tab, so
    flagged no-shows vanish from the UI. `markNoShows` queries

@@ -36,10 +36,10 @@ They are mutually consistent — no privilege-escalation gap was found.
 
 These appear once here rather than being repeated in every doc:
 
-1. **`{{ … }}` i18n keys never interpolate** — `t()` only matches single-brace
-   `{name}` (`src/i18n/index.js:60`). Every double-brace key renders its braces
-   literally. Affects vouchers, refunds, and seasonal-pricing dialogs in **both**
-   locales. See BUGS #1 — this is the single highest-reach defect.
+1. ~~**`{{ … }}` i18n keys never interpolate**~~ — **fixed 2026-07-23**: all 8
+   double-brace keys rewritten to single-brace `{name}` in both locales
+   (BUGS #1). `t()` still only matches single-brace — that's the convention;
+   never author a key with `{{ … }}`.
 2. **UTC vs Europe/Bucharest date boundaries** — dashboard "today" stats, the
    cashbook day buckets, and most money-page date columns use the browser/UTC
    day instead of Bucharest local time, so overnight figures drift by one day.

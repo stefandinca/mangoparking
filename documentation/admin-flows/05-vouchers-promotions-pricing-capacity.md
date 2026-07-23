@@ -107,10 +107,11 @@ zero-capacity guard.**
 
 ## Bugs & inconsistencies
 
-1. **[HIGH] `{{ … }}` i18n keys render literally** — `vouchers.deleteConfirm`,
-   `vouchers.errorCodeTaken`, `seasonal.deleteConfirm`, `seasonal.errorOverlap`,
-   `seasonal.appliedBadge` (the last is public-facing). Both locales. Admins see
-   "Ștergi voucherul {{ code }}?" verbatim. See BUGS #1.
+1. ~~**[HIGH] `{{ … }}` i18n keys render literally**~~ — **FIXED 2026-07-23**:
+   `vouchers.deleteConfirm`, `vouchers.errorCodeTaken`, `seasonal.deleteConfirm`,
+   `seasonal.errorOverlap`, `seasonal.appliedBadge` (the last is public-facing,
+   reported live by the client) rewritten to single-brace in both locales.
+   See BUGS #1.
 2. **[HIGH] Long-term tier table has no validation** — gaps, overlaps, inverted
    ranges, and `perDay = 0` all save (`longTermService.js:22`, `AdminPricing.js:266`).
    Server `tierForDays` silently falls back to the **last tier** for any uncovered

@@ -75,7 +75,7 @@ Single `PERM` map drives route guards, the admin sidebar, and Firestore-rule log
 - Components: factory functions returning DOM via the `html` tagged template (`src/utils/dom.js`)
 - Firestore: small collections, client-side filter/sort; money math + privileged writes happen server-side in Cloud Functions (clients can't write `tokenTransactions` use rows, cash, bookings paid state, etc.)
 - ID conventions: `tokenBalances` keyed `{uid}` (logged-in) or `plate_{NORMALIZED_PLATE}` (guests); `pendingOrders` `ord_{ts}_{rand}`; `activeCheckIns` keyed by normalized plate
-- i18n parity: every key in both `ro.js` and `en.js`; internal links wrapped in `localePath()`. Note: `t()` only interpolates single-brace `{name}` — double-brace `{{ }}` renders literally (known bug, see admin-flows/BUGS.md)
+- i18n parity: every key in both `ro.js` and `en.js`; internal links wrapped in `localePath()`. Note: `t()` only interpolates single-brace `{name}` — never author keys with double-brace `{{ }}` (renders literally; the legacy offenders were fixed 2026-07)
 - Never commit secrets; `.env.local` holds Firebase web config; Function secrets via `firebase functions:secrets:set` (NETOPIA_*, BREVO_API_KEY)
 
 ## Cloud Functions (functions/src/)

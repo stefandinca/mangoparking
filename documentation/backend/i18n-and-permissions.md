@@ -43,14 +43,12 @@ interpolates, but **`{{ name }}` renders its braces literally** — the regex
 requires exactly one brace on each side and `\w+` does not match the leading
 space inside `{{ … }}`.
 
-> ⚠️ **Known bug (double-brace keys never interpolate).** Several real keys were
-> authored with `{{ … }}` and therefore display the braces to users in **both**
-> locales. Confirmed occurrences in `ro.js`: seasonal-pricing dialogs
-> (`ro.js:1263`, `:1268`, `:1269`), refunds history/resend (`ro.js:1907`,
-> `:1913`, `:1915`), and voucher delete/duplicate (`ro.js:1956`, `:1958`). The
-> EN file mirrors these. This is the highest-reach i18n defect — see
-> [admin-flows/BUGS.md](../admin-flows/BUGS.md) #1. Fix is either the key text
-> (`{{ name }}` → `{name}`) or the regex.
+> ✅ **Fixed (2026-07-23).** Several real keys had been authored with `{{ … }}`
+> and displayed the braces to users in both locales (seasonal-pricing dialogs +
+> the public `seasonal.appliedBadge`, refunds history/resend, voucher
+> delete/duplicate — [admin-flows/BUGS.md](../admin-flows/BUGS.md) #1). All 8
+> keys were rewritten to single-brace; the regex is unchanged. **Convention:
+> always write `{name}`, never `{{ name }}`** — there is no automated check.
 
 ### Path helpers & routing
 - `localePath('/booking')` → `'/booking'` in RO, `'/en/booking'` in EN

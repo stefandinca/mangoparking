@@ -12,15 +12,16 @@ during this review).
 > `0 lei` display, dashboard UTC→Bucharest, the AdminCheckIns listener leak,
 > `saveVoucher` count rollback, and more). The HIGH/MEDIUM rows below were **not
 > struck through individually**, so before actioning any row, cross-check it
-> against that "applied" list. Known-still-open highlights: the `{{ }}` i18n
-> interpolation bug (#1), over-refund on voucher bookings (#2), cash-refund
-> reconciliation (#3), and the two XSS sinks (#6, #20).
+> against that "applied" list. Known-still-open highlights: over-refund on
+> voucher bookings (#2), cash-refund reconciliation (#3), and the two XSS
+> sinks (#6, #20). The `{{ }}` i18n interpolation bug (#1) was **fixed
+> 2026-07-23** (all 8 keys rewritten to single-brace in both locales).
 
 ## HIGH — fix first
 
 | # | Area | Bug | Symptom | Ref |
 |---|------|-----|---------|-----|
-| 1 | All | ✔ **`{{ … }}` i18n keys never interpolate.** `t()` regex is `/\{(\w+)\}/g` (`i18n/index.js:60`) — single brace only. Every double-brace key shows its braces. Affects `vouchers.deleteConfirm`/`errorCodeTaken`, `refunds.historySubtitle`/`failedCount`/`resendOk`, `seasonal.deleteConfirm`/`errorOverlap`/`appliedBadge` — **both locales**. | Admins (and on `appliedBadge`, customers) see "Ștergi voucherul {{ code }}?", "Email retrimis către {{ recipient }}…" verbatim. | [03](03-cancellations-refunds-cashbook.md), [05](05-vouchers-promotions-pricing-capacity.md) |
+| 1 | All | ~~✔ **`{{ … }}` i18n keys never interpolate.**~~ **FIXED 2026-07-23** — all 8 double-brace keys (`vouchers.deleteConfirm`/`errorCodeTaken`, `refunds.historySubtitle`/`failedCount`/`resendOk`, `seasonal.deleteConfirm`/`errorOverlap`/`appliedBadge`) rewritten to single-brace in both locales; `t()`'s single-brace regex is unchanged and now documented as the convention. Reported live by the client on the booking page ("Tarif {{ name }}"). | ~~Admins (and on `appliedBadge`, customers) saw the braces verbatim.~~ | [03](03-cancellations-refunds-cashbook.md), [05](05-vouchers-promotions-pricing-capacity.md) |
 | 2 | Refunds | ✔ **Over-refund on voucher bookings.** Refund queue/dialog/dashboard/audit show `booking.totalPrice` (gross, pre-voucher; `index.js:209`); the charged amount is `pendingOrders.amount` (`index.js:405`). | Admin refunds more than the customer ever paid, by the discount. | [03](03-cancellations-refunds-cashbook.md) #1 |
 | 3 | Cashbook | **Cash refunds never reconciled.** Marking an admin-cash booking refunded writes no reversing `cashEntries` row. | Cashbook + printed report overstate cash on hand after every cash refund; agent "owes" returned money. | [03](03-cancellations-refunds-cashbook.md) #2 |
 | 4 | Check-ins | **Credit/commuter check-ins invisible & uncheckoutable.** Page subscribes only to `bookings` (`AdminCheckIns.js:507`); credit check-ins write `activeCheckIns` + tx, no booking. `tokenService.checkOut` is imported by no page. | Commuter checked in via credits never appears on any tab; spot stuck `occupied` with no UI to release. Contradicts v1.8 doc. | [01](01-checkin-checkout-walkin.md) #1 |
@@ -77,9 +78,8 @@ per-flow docs for line refs.
 
 ## Suggested fix order
 
-1. **One-liners with outsized reach:** the `{{ }}` i18n bug (#1) — either fix the
-   regex to also accept `{{ name }}` or rewrite the ~8 keys to single-brace. This
-   alone clears visible-text breakage across vouchers, refunds, and seasonal.
+1. ~~**One-liners with outsized reach:** the `{{ }}` i18n bug (#1)~~ — **done
+   2026-07-23** (all 8 keys rewritten to single-brace in both locales).
 2. **Money correctness:** refund amount source (#2), cash-refund reconciliation
    (#3) — these are real financial discrepancies.
 3. **Security:** the two XSS sinks (#6 dashboard, #20 users delete) — small,
