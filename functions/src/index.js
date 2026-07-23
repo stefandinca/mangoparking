@@ -62,6 +62,7 @@ import {
   PARKVIA_BROKER_NAME,
   parkviaConfig,
   listParkviaBookings,
+  listParkviaOperators,
   mapParkviaBookingToImport,
   parkviaRefDocId,
 } from './parkvia.js';
@@ -4772,10 +4773,18 @@ export const parkviaHealthcheck = onCall(
     let reachable = false;
     let sampleCount = null;
     let error = null;
+    let operatorFound = null;
     try {
-      const { raw } = await listParkviaBookings({ since: new Date(Date.now() - 5 * 60 * 1000).toISOString() });
+      // Probe the CONFIRMED /operators endpoint (cheap, known-good) rather
+      // than the still-provisional bookings list, and verify our configured
+      // operator id is actually visible to these credentials.
+      const ops = await listParkviaOperators();
       reachable = true;
-      sampleCount = raw.length;
+      sampleCount = ops.length;
+      operatorFound = ops.some((o) => o.id === String(cfg.parkingId));
+      if (!operatorFound) {
+        error = `Operator id ${cfg.parkingId} not in the account's operator list`;
+      }
     } catch (err) {
       error = String(err?.message || err);
     }
@@ -4784,6 +4793,7 @@ export const parkviaHealthcheck = onCall(
       reachable,
       sampleCount,
       error,
+      operatorFound,
       parkingId: cfg.parkingId,
       lastSyncAt: lastSync?.lastSyncAt || null,
       lastResult: lastSync?.lastResult || null,

@@ -1,11 +1,18 @@
 # ParkVia (ParkCloud) auto-import — v1.x
 
-> **Status: 🟡 Scaffolded & shipped DORMANT (2026-07-22).** The full pipeline is
-> in the codebase and deploys safely with no config; it does nothing until
-> ParkCloud credentials are set. The one piece with unknown specifics — the
-> XML→booking mapping — is quarantined in `mapParkviaBookingToImport`
-> (`functions/src/parkvia.js`) and unit-tested against a placeholder fixture.
-> **Not yet live:** we're still requesting ParkCloud Operator API access.
+> **Status: 🟡 Credentials LIVE, bookings endpoint pending (2026-07-23).**
+> ParkCloud access arrived: both keys are set in Secret Manager
+> (`PARKVIA_SUBSCRIPTION_KEY` = Azure APIM primary, `PARKVIA_OPERATOR_KEY` =
+> the ParkCloud UUID key), the `defineSecret` bindings are enabled, and
+> `functions/.env.mango-parking` carries `PARKVIA_PARKING_ID=15777` (our
+> Operator Id, verified) + the gateway base URL. **Confirmed live against the
+> API:** gateway `https://parkcloud.azure-api.net`, service prefix
+> `/rest/operator/v1.svc`, auth = subscription key header + operator key as
+> the `key` query param, and the `GET /operators` endpoint (healthcheck now
+> probes it and verifies operator 15777 is visible). **Still unknown:** the
+> reservations-list endpoint + XML schema (portal operation list needed) —
+> the mapper stays quarantined in `mapParkviaBookingToImport` until then.
+> Not yet deployed.
 
 ## Goal
 
@@ -70,14 +77,16 @@ fire automatically on create — the importer sends no email of its own.
 - **Amendment** — PROVISIONAL: only safe fields (dropoff/pickup dates → recompute `days`) are
   auto-applied, and only while `upcoming`; price/plate changes are left for manual review.
 
-## Still PROVISIONAL — finalize when ParkCloud access arrives
+## Still PROVISIONAL — finalize from the portal's operation list
 1. Every field path in `mapParkviaBookingToImport` + datetime format/timezone + price field.
-2. Endpoint paths, the `since` cursor param, pagination, response envelope
-   (`listParkviaBookings` / `getParkviaBookingStatus`).
-3. Exact operator-key header name (`X-ParkCloud-Operator-Key` is a guess) — or whether the
-   Azure subscription key is the only credential.
-4. The cancellation/amendment status enum (`normalizeStatus`) the reconcile branch keys off.
-5. `PARKVIA_BASE_URL` and `PARKVIA_PARKING_ID` values.
+2. The reservations endpoint path, the `since` cursor param, pagination, response envelope
+   (`listParkviaBookings` / `getParkviaBookingStatus`) — guessed paths 404.
+3. The cancellation/amendment status enum (`normalizeStatus`) the reconcile branch keys off.
+
+~~Resolved 2026-07-23:~~ auth model (subscription key header + `key` query param — no
+operator-key header), base URL (`parkcloud.azure-api.net`), service prefix
+(`/rest/operator/v1.svc`), parking/operator id (**15777**), and `GET /operators`
+(confirmed, now the healthcheck probe).
 
 Update the fixture + assertions in `functions/test/parkvia.mapper.test.js` alongside (1).
 

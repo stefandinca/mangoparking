@@ -63,21 +63,27 @@ export function parkviaConfig() {
 // ── Outbound HTTP + XML parse ───────────────────────────────────────────────
 // fetch + AbortSignal.timeout, then xml2js parseStringPromise. Copies the
 // timeout/error-normalisation shape used by smartbill.js.
-// PROVISIONAL: the operator-key HEADER NAME below is a guess — ParkCloud may
-// want the operator key as a second header, a query param, or nothing beyond
-// the Azure subscription key. Confirm on onboarding.
+//
+// CONFIRMED auth model (2026-07-23, live against the gateway): the Azure APIM
+// subscription key goes in the Ocp-Apim-Subscription-Key header, and the
+// ParkCloud operator key is the `key` QUERY PARAMETER (portal URL template:
+// /rest/operator/v1.svc/operators[?key]). No operator-key header exists.
+const PARKVIA_SERVICE_PREFIX = '/rest/operator/v1.svc';
+
 async function parkviaRequest(path, { method = 'GET', body } = {}) {
   const cfg = parkviaConfig();
   if (!cfg.configured) throw new Error('ParkVia not configured');
 
+  const url = new URL(`${cfg.baseUrl}${PARKVIA_SERVICE_PREFIX}${path}`);
+  url.searchParams.set('key', cfg.opKey);
+
   let res;
   try {
-    res = await fetch(`${cfg.baseUrl}${path}`, {
+    res = await fetch(url, {
       method,
       signal: AbortSignal.timeout(PARKVIA_TIMEOUT_MS),
       headers: {
         'Ocp-Apim-Subscription-Key': cfg.subKey,   // Azure APIM subscription key
-        'X-ParkCloud-Operator-Key': cfg.opKey,      // PROVISIONAL header name
         Accept: 'application/xml',
         ...(body ? { 'Content-Type': 'application/xml' } : {}),
       },
@@ -98,18 +104,30 @@ async function parkviaRequest(path, { method = 'GET', body } = {}) {
   return parseStringPromise(text, { explicitArray: false, trim: true });
 }
 
-// ── Endpoint stubs (PROVISIONAL paths / query params / pagination) ──────────
+// ── Endpoints ───────────────────────────────────────────────────────────────
+
+// CONFIRMED (2026-07-23): lists the operators visible to this account.
+// GET /operators → <ArrayOfOperator xmlns="http://parkcloud.net/operator">
+//   <Operator><Id>15777</Id><Name>ManGo Parking - …</Name></Operator>…
+// Used by the healthcheck as a cheap, known-good reachability probe.
+export async function listParkviaOperators() {
+  const parsed = await parkviaRequest('/operators');
+  const node = parsed?.ArrayOfOperator?.Operator ?? [];
+  return (Array.isArray(node) ? node : [node])
+    .filter(Boolean)
+    .map((o) => ({ id: String(o.Id ?? '').trim(), name: String(o.Name ?? '').trim() }));
+}
 
 // List reservations changed since a cursor. PROVISIONAL: the real endpoint,
 // the `since` query-param name/format, pagination, and the response envelope
-// are all unknown. Returns { raw: [...] } — an array of raw reservation nodes
-// for the mapper to normalise. Shape below is a placeholder.
+// are all unknown (probed guesses 404 — needs the portal's operation list).
+// Returns { raw: [...] } — an array of raw reservation nodes for the mapper.
 export async function listParkviaBookings({ since } = {}) {
   const cfg = parkviaConfig();
-  // PROVISIONAL: endpoint + query. e.g. /operator/{parkingId}/bookings?since=ISO
+  // PROVISIONAL: endpoint + query. e.g. /operators/{parkingId}/bookings?since=ISO
   const q = new URLSearchParams();
   if (since) q.set('modifiedSince', since);           // PROVISIONAL param name
-  const path = `/operator/${encodeURIComponent(cfg.parkingId)}/bookings?${q.toString()}`;
+  const path = `/operators/${encodeURIComponent(cfg.parkingId)}/bookings?${q.toString()}`;
   const parsed = await parkviaRequest(path);
   // PROVISIONAL: dig out the reservation array from the real envelope.
   const node = parsed?.bookings?.booking ?? parsed?.Bookings?.Booking ?? [];
@@ -121,7 +139,7 @@ export async function listParkviaBookings({ since } = {}) {
 // PROVISIONAL endpoint + shape.
 export async function getParkviaBookingStatus(ref) {
   const cfg = parkviaConfig();
-  const path = `/operator/${encodeURIComponent(cfg.parkingId)}/bookings/${encodeURIComponent(ref)}`;
+  const path = `/operators/${encodeURIComponent(cfg.parkingId)}/bookings/${encodeURIComponent(ref)}`;
   const parsed = await parkviaRequest(path);
   const b = parsed?.booking ?? parsed?.Booking ?? {};
   return { ref, status: normalizeStatus(b), raw: b };
