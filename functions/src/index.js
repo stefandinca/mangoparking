@@ -4838,7 +4838,11 @@ async function ledgerRef_update(ledger, lastStatus) {
 export const parkviaSyncNow = onCall(
   { region: 'europe-west1', cors: true, secrets: PARKVIA_SECRETS },
   async (request) => {
-    await assertAdmin(request);
+    // Staff gate (was admin-only): the button also lives on /admin/checkins,
+    // which agents and drivers man. Safe at this level — the sync takes no
+    // client input, and staff can already create the same broker bookings by
+    // hand via adminCreateLongtermBooking (also assertStaff).
+    await assertStaff(request);
     return runParkviaSync(request.auth.uid);
   }
 );

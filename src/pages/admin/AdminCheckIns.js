@@ -37,6 +37,7 @@ import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { hasPermission, PERM } from '../../utils/permissions.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
+import { parkviaSyncNow } from '../../services/parkviaService.js';
 import { setTransferStatus, deleteTransfer } from '../../services/transferService.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 import { geoFieldsHtml, wireGeoFields, readGeoFields } from '../../components/widgets/BillingFields.js';
@@ -640,7 +641,10 @@ export default async function AdminCheckIns(container) {
         <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep">${t('checkins.pageTitle')}</h1>
         <p class="text-dim text-[15px] mt-1">${t('checkins.subtitle')}</p>
       </div>
-      <button type="button" data-walkin class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors shadow-sm">${t('checkins.walkInCta')}</button>
+      <div class="flex flex-wrap gap-3">
+        <button type="button" data-parkvia-sync class="bg-white hover:bg-frost text-blueberry border border-blueberry font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('checkins.syncParkvia')}</button>
+        <button type="button" data-walkin class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors shadow-sm">${t('checkins.walkInCta')}</button>
+      </div>
     </div>
 
     <div class="card-solid rounded-2xl p-3 mb-4 flex items-center gap-2">
@@ -1011,6 +1015,31 @@ export default async function AdminCheckIns(container) {
       showToast(err?.message || t('common.error'), 'error');
     } finally {
       btn.disabled = false;
+    }
+  });
+
+  // ── ParkVia on-demand sync — the same pass the 15-min scheduler runs.
+  // The board subscribes to `bookings` live, so freshly imported reservations
+  // appear on the tabs without a reload; the toast just summarises the pass.
+  delegate(page, 'click', '[data-parkvia-sync]', async (_e, btn) => {
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = t('common.loading');
+    try {
+      const r = await parkviaSyncNow();
+      if (!r || r.configured === false) { showToast(t('parkvia.notConfigured'), 'error'); return; }
+      const detail = t('parkvia.syncResult', {
+        imported: r.imported ?? 0,
+        cancelled: r.cancelled ?? 0,
+        errors: r.errors ?? 0,
+      });
+      showToast(`${t('parkvia.syncDone')} — ${detail}`, (r.errors ?? 0) > 0 ? 'error' : 'success');
+    } catch (err) {
+      console.error('parkviaSyncNow', err);
+      showToast(err?.message || t('common.error'), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
     }
   });
 

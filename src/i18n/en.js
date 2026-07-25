@@ -1607,6 +1607,7 @@ export default {
     actionEdit: 'Edit',
     editTitle: 'Edit reservation',
     editActiveNote: 'The car is already checked in — only contact details can be edited.',
+    syncParkvia: 'Sync ParkVia',
     repriceTitle: 'Change reservation dates',
     repriceCollect: '+{amount} lei to collect',
     repriceRefund: '{amount} lei to refund',

@@ -1615,6 +1615,7 @@ export default {
     actionEdit: 'Editează',
     editTitle: 'Editează rezervarea',
     editActiveNote: 'Mașina este deja la check-in — poți modifica doar datele de contact.',
+    syncParkvia: 'Sincronizare ParkVia',
     repriceTitle: 'Modifică datele rezervării',
     repriceCollect: '+{amount} lei de încasat',
     repriceRefund: '{amount} lei de rambursat',

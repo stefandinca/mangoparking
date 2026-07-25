@@ -242,13 +242,14 @@ re-run doesn't double-send. Secret `BREVO_API_KEY` where they email.
 | `commuter7PMCheck` | 191 | `0 19 * * *` | Sends `reminder-commuter-7pm` (1h-before-cutoff nudge) to every commuter still in `activeCheckIns` today. Marker: `reminderCommuterSentAt`. |
 | `markNoShows` | 274 | `every 60 minutes` | Flips upcoming longTerm bookings whose drop-off is >12h past with no `activeCheckIns` row → `no-show`; releases the spot; audit-logs; **reports ParkVia-imported bookings back to ParkVia** (`reportParkviaNoShowSafe`, best-effort, once per booking). In-memory drop-off filter (handles `dropoffAt: null` web bookings). Binds SmartBill + ParkVia secrets. |
 | `expireStaleHolds` | 354 | `0 2 * * *` | Flips `pendingOrders` still `unpaid` after 14 days → `expired` (housekeeping; doesn't touch the booking). |
-| `pollParkviaBookings` | — | `every 15 minutes` | **Dormant** until ParkCloud credentials are set. Drives `runParkviaSync` (`index.js`): pulls ParkVia reservations, imports new ones as broker bookings via `createBrokerBookingCore`, reconciles cancellations. Binds `PARKVIA_SECRETS`. See [../roadmap/v.1.x_parkvia.md](../roadmap/v.1.x_parkvia.md). |
+| `pollParkviaBookings` | — | `every 15 minutes` | **LIVE (2026-07-23)**. Drives `runParkviaSync` (`index.js`): pulls ParkCloud booking EVENTS since the last event-id cursor, imports new reservations as broker bookings via `createBrokerBookingCore`, reconciles cancellations/amendments. First run primed the cursor (no historical backfill). Binds `PARKVIA_SECRETS`. See [../roadmap/v.1.x_parkvia.md](../roadmap/v.1.x_parkvia.md). |
 
-**ParkVia auto-import (dormant)** — admin callables `parkviaSyncNow` / `parkviaHealthcheck`
-(`assertAdmin`, `index.js`) run/verify the same `runParkviaSync` pass on demand; surfaced on
-`/admin/pricing`. Everything returns `{ configured:false }` until the ParkCloud Operator API
-credentials are configured. The provisional XML→booking mapping lives in `functions/src/parkvia.js`
-(`mapParkviaBookingToImport`, unit-tested).
+**ParkVia auto-import (live)** — `parkviaSyncNow` (`assertStaff` — the button lives on
+`/admin/checkins` next to the New-reservation CTA, and on `/admin/pricing`) runs the same
+`runParkviaSync` pass on demand; `parkviaHealthcheck` (`assertAdmin`, `/admin/pricing` only)
+probes the confirmed `GET /operators` endpoint and verifies operator 15777 is visible.
+The finalized XML→booking mapping lives in `functions/src/parkvia.js`
+(`mapParkviaBookingToImport`, unit-tested against real captures).
 
 ---
 

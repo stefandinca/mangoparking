@@ -41,7 +41,7 @@ the same pass on demand.
 | Shared broker-booking primitive (manual desk + import both route through it) | `functions/src/index.js` → `createBrokerBookingCore` |
 | Import engine + cancellation/amendment reconcile | `functions/src/index.js` → `runParkviaSync` / `reconcileParkviaBooking` |
 | Scheduled poller (`every 15 minutes`) | `functions/src/scheduled.js` → `pollParkviaBookings` |
-| Admin callables (`assertAdmin`) | `functions/src/index.js` → `parkviaSyncNow`, `parkviaHealthcheck` |
+| Callables — `parkviaSyncNow` (`assertStaff` since 2026-07-25, button on `/admin/checkins` + `/admin/pricing`), `parkviaHealthcheck` (`assertAdmin`) | `functions/src/index.js` |
 | Client wrappers | `src/services/parkviaService.js` |
 | Admin card ("Check connection" / "Sync now") | `src/pages/admin/AdminPricing.js` |
 | Server-only collections + `parkvia` field guard | `firestore.rules` |
