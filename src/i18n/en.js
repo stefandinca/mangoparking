@@ -1491,6 +1491,7 @@ export default {
     createUserPlatesLabel: 'Saved plates (tap to fill)',
     createNewName: 'Name',
     createNewEmail: 'Email',
+    createNewEmailOptional: 'Email (optional for broker)',
     createNewPhone: 'Phone',
     createPlate: 'License plate',
     createDropoff: 'Drop-off date & time',

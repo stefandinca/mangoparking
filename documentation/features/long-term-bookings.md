@@ -60,6 +60,7 @@ Full detail + the server-authoritative recompute is in [pricing](pricing.md).
 | **Online (Netopia)** | `BookingLongTerm.js` → `createPayment` → IPN | at IPN (`createBookingFromOrder`) | `paid` | `netopia` (or `voucher` if fully covered) |
 | **Pay-at-pickup** | `BookingLongTerm.js` (method toggle) → `createPayment` | at order time | `unpaid` | `null` until collected |
 | **Broker / prepaid** | admin `adminCreateLongtermBooking` (`paidBy:'broker'`) | immediately | `paid` | `broker` |
+| | _Broker bookings capture no billing (the broker invoices the customer) and, since 2026-07-26, the client **email is optional** in the create modal (3rd-party reservations often arrive without one; a typed value must still be valid). Email-less bookings skip the customer confirmation (`resolveRecipient` → no-recipient) and the account invite; the rezervari@ ops alert still fires with "—" for the email._ | | | |
 | **Walk-in (cash/card)** | admin `adminCreateLongtermBooking` (`autoCheckIn`) | immediately + checked in | `paid` | `admin-cash` / `admin-card` |
 
 **Online** — `createPayment` (`functions/src/index.js:310`) recomputes the

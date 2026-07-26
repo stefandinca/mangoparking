@@ -1492,6 +1492,7 @@ export default {
     createUserPlatesLabel: 'Numere salvate (apasă pentru a completa)',
     createNewName: 'Nume',
     createNewEmail: 'Email',
+    createNewEmailOptional: 'Email (opțional la broker)',
     createNewPhone: 'Telefon',
     createPlate: 'Număr înmatriculare',
     createDropoff: 'Data și ora sosire',

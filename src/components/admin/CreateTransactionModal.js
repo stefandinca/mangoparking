@@ -620,6 +620,14 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     const isBrokerLT = isLT && paidBySelect?.value === 'broker';
     const billingNeeded = (isLT && !isBrokerLT) || (isCredit && !useExisting);
     billingWrap?.classList.toggle('hidden', !billingNeeded);
+    // 3rd-party (broker) reservations often arrive without a client email —
+    // the submit validation relaxes it there; mirror that in the placeholder.
+    const newEmailInput = qs('[name="newEmail"]', contentEl);
+    if (newEmailInput) {
+      newEmailInput.placeholder = isBrokerLT
+        ? t('transactions.createNewEmailOptional')
+        : t('transactions.createNewEmail');
+    }
     // Broker/prepaid and pay-later are long-term-only payment routes. Hide
     // both options on the credit funnel (grantCreditsForCash only takes
     // cash/card) and snap the selector back to cash if it was left on either.
@@ -1099,7 +1107,11 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       const newName = String(qs('[name="newName"]', contentEl).value || '').trim();
       const newEmail = String(qs('[name="newEmail"]', contentEl).value || '').trim().toLowerCase();
       const newPhone = phoneValue(qs('[name="newPhone"]', contentEl));
-      if (!isValidEmail(newEmail)) {
+      // 3rd-party (broker) reservations often arrive without a client email,
+      // so it's optional there — but a typed value must still be valid.
+      // Everywhere else the email stays mandatory.
+      const brokerLT = type === 'longterm' && paidBy === 'broker';
+      if (!isValidEmail(newEmail) && !(brokerLT && !newEmail)) {
         errEl.textContent = t('admin.usersError');
         errEl.classList.remove('hidden');
         return;
@@ -1189,7 +1201,8 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
         });
       }
 
-      if (mode === 'new') {
+      // No invite without an address (email-less broker bookings).
+      if (mode === 'new' && payerEmail) {
         try {
           await adminSendInviteFn({ email: payerEmail, displayName: payerName, role: 'customer', locale });
           showToast(t('transactions.createInviteSent'), 'info');
