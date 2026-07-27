@@ -1,4 +1,4 @@
-import { html, delegate } from '../../utils/dom.js';
+import { html, delegate, escapeHtml } from '../../utils/dom.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCapacity } from '../../services/capacityService.js';
@@ -329,12 +329,16 @@ export default async function AdminDashboard(container) {
                 const actionStyle = ACTION_STYLES[item.action] || 'bg-gray-100 text-gray-600';
                 const actor = (item.user || '').split('@')[0] || '—';
                 const description = describeAction(item, locale);
+                // Both carry user-supplied data (audit payloads hold plates /
+                // codes / names; the actor resolves to an account's email or
+                // display name, and a customer self-cancel makes the CUSTOMER
+                // the actor) and land in innerHTML — escape before rendering.
                 return `
                 <div class="flex flex-wrap items-center gap-3 px-6 py-4">
                   <span class="font-mono text-[12px] text-dim w-24 shrink-0">${time}</span>
-                  <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${actionStyle}">${item.action.replace(/_/g, ' ')}</span>
-                  <span class="text-[14px] text-charcoal/80 flex-1 min-w-0 truncate">${description}</span>
-                  <span class="text-[12px] text-dim font-mono shrink-0 hidden sm:inline">${actor}</span>
+                  <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${actionStyle}">${escapeHtml(String(item.action || '').replace(/_/g, ' '))}</span>
+                  <span class="text-[14px] text-charcoal/80 flex-1 min-w-0 truncate">${escapeHtml(description)}</span>
+                  <span class="text-[12px] text-dim font-mono shrink-0 hidden sm:inline" title="${escapeHtml(item.user || '')}">${escapeHtml(actor)}</span>
                 </div>`;
               }).join('') : `
               <div class="px-6 py-8 text-center text-dim text-[15px]">${t('admin.noRecentActivity') || 'No recent activity'}</div>`}

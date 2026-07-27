@@ -783,6 +783,10 @@ export default {
     exportReport: 'Gestionează Pachete',
     recentActivity: 'Activitate recentă',
     noRecentActivity: 'Nicio activitate recentă',
+    // Autori din fluxul de activitate care nu sunt persoane (actorUid de la server).
+    actorScheduled: 'sistem (automat)',
+    actorSystem: 'sistem',
+    actorNetopia: 'plată online',
     actCheckIn: 'Check-in',
     actBooking: 'Rezervare',
     actCheckOut: 'Check-out',

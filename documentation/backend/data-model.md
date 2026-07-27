@@ -348,6 +348,15 @@ server-side.
   `action`, `entityType`, `entityId`, `oldValue`, `newValue`, `userId`, `userEmail`,
   `timestamp`; server writes `action`, `entityType`, `entityId`, `actorUid`,
   `payload`, `timestamp`.
+- **Reading the actor:** only the client shape carries an email, so
+  `getAuditLog` (`src/services/auditService.js`) resolves the uid — `actorUid`,
+  or a legacy client row's bare `userId` — against `users/{uid}` (one cached
+  lookup per distinct actor) to get an email/display name. Server-stamped
+  non-uid actors (`scheduled`, `system`, `netopia`) map to localized labels;
+  a deleted account falls back to a uid fragment. Before this, every
+  server-written row rendered as "unknown" in the dashboard activity feed.
+  Note the actor of a customer self-cancel is the **customer**, so the resolved
+  label is user-supplied text — escape it when rendering.
 - **Access:** staff read; append-only.
 - **Index:** composite `(entityType ASC, timestamp DESC)`.
 

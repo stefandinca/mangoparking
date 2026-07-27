@@ -31,7 +31,9 @@ and guard behavior: [i18n & permissions](../backend/i18n-and-permissions.md#2-ro
 ### Dashboard — `/admin` (`AdminDashboard.js`)
 Daily overview. KPIs (total / occupied / available spots from `getCapacity()`,
 credits used & purchased today), a 30/60/90-day stacked activity chart (credits +
-long-term check-ins), a recent audit-log feed (`getAuditLog()`), high-occupancy
+long-term check-ins), a recent audit-log feed (`getAuditLog()` — which resolves
+each row's actor uid to a person; see
+[data-model → auditLog](../backend/data-model.md#auditlog)), high-occupancy
 warnings, and a **refund-pending counter** linking to `/admin/refunds`. Walkthrough:
 [06-dashboard-shuttle-reviews-legal](../admin-flows/06-dashboard-shuttle-reviews-legal.md).
 

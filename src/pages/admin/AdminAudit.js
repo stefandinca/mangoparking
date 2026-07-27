@@ -1,4 +1,4 @@
-import { html, delegate } from '../../utils/dom.js';
+import { html, delegate, escapeHtml } from '../../utils/dom.js';
 import { t, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getAuditLog } from '../../services/auditService.js';
@@ -30,8 +30,8 @@ export default async function AdminAudit(container) {
   updateMeta({ title: 'Audit Log — Admin — ManGO Parking', description: 'System audit log and activity trail.' });
 
   const auditLog = await getAuditLog(100).catch(() => []);
-  const actionTypes = [...new Set(auditLog.map(l => l.action))];
-  const users = [...new Set(auditLog.map(l => l.user))];
+  const actionTypes = [...new Set(auditLog.map(l => l.action))].filter(Boolean);
+  const users = [...new Set(auditLog.map(l => l.user))].filter(Boolean);
 
   const page = AdminLayout('/admin/audit', `
         <div class="mb-8">
@@ -51,7 +51,7 @@ export default async function AdminAudit(container) {
           </select>
           <select class="px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] text-dim focus:outline-none focus:ring-2 focus:ring-mango/30 focus:border-mango transition-all" data-audit-user-filter>
             <option value="all">${t('admin.allUsers')}</option>
-            ${users.map(u => `<option value="${u}">${u}</option>`).join('')}
+            ${users.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('')}
           </select>
         </div>
 
@@ -70,14 +70,14 @@ export default async function AdminAudit(container) {
               </thead>
               <tbody class="divide-y divide-frost-deep/60" data-audit-body>
                 ${auditLog.map(log => `
-                  <tr class="hover:bg-frost transition-colors" data-log-action="${log.action}" data-log-user="${log.user}">
-                    <td class="px-6 py-4 font-mono text-[13px] text-dim whitespace-nowrap">${log.timestamp || '—'}</td>
+                  <tr class="hover:bg-frost transition-colors" data-log-action="${escapeHtml(log.action || '')}" data-log-user="${escapeHtml(log.user || '')}">
+                    <td class="px-6 py-4 font-mono text-[13px] text-dim whitespace-nowrap">${escapeHtml(log.timestamp || '—')}</td>
                     <td class="px-6 py-4">
-                      <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full whitespace-nowrap ${ACTION_STYLES[log.action] || 'bg-gray-100 text-gray-600'}">${(log.action || '').replace(/_/g, ' ')}</span>
+                      <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full whitespace-nowrap ${ACTION_STYLES[log.action] || 'bg-gray-100 text-gray-600'}">${escapeHtml((log.action || '').replace(/_/g, ' '))}</span>
                     </td>
-                    <td class="px-6 py-4 text-[14px] font-medium text-charcoal whitespace-nowrap">${log.entity || '—'}</td>
-                    <td class="px-6 py-4 font-mono text-[13px] text-dim">${log.user || '—'}</td>
-                    <td class="px-6 py-4 text-[14px] text-charcoal/60 max-w-xs truncate">${log.details || '—'}</td>
+                    <td class="px-6 py-4 text-[14px] font-medium text-charcoal whitespace-nowrap">${escapeHtml(log.entity || '—')}</td>
+                    <td class="px-6 py-4 font-mono text-[13px] text-dim">${escapeHtml(log.user || '—')}</td>
+                    <td class="px-6 py-4 text-[14px] text-charcoal/60 max-w-xs truncate">${escapeHtml(log.details || '—')}</td>
                   </tr>
                 `).join('')}
               </tbody>

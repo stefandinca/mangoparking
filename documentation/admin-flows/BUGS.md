@@ -13,9 +13,11 @@ during this review).
 > `saveVoucher` count rollback, and more). The HIGH/MEDIUM rows below were **not
 > struck through individually**, so before actioning any row, cross-check it
 > against that "applied" list. Known-still-open highlights: over-refund on
-> voucher bookings (#2), cash-refund reconciliation (#3), and the two XSS
-> sinks (#6, #20). The `{{ }}` i18n interpolation bug (#1) was **fixed
-> 2026-07-23** (all 8 keys rewritten to single-brace in both locales).
+> voucher bookings (#2) and cash-refund reconciliation (#3). The `{{ }}` i18n
+> interpolation bug (#1) was **fixed 2026-07-23** (all 8 keys rewritten to
+> single-brace in both locales); both XSS sinks are now closed — #20 (users
+> delete confirm) earlier, #6 (dashboard activity feed) on **2026-07-27**,
+> together with the "unknown" author it shared a render site with.
 
 ## HIGH — fix first
 
@@ -26,7 +28,7 @@ during this review).
 | 3 | Cashbook | **Cash refunds never reconciled.** Marking an admin-cash booking refunded writes no reversing `cashEntries` row. | Cashbook + printed report overstate cash on hand after every cash refund; agent "owes" returned money. | [03](03-cancellations-refunds-cashbook.md) #2 |
 | 4 | Check-ins | **Credit/commuter check-ins invisible & uncheckoutable.** Page subscribes only to `bookings` (`AdminCheckIns.js:507`); credit check-ins write `activeCheckIns` + tx, no booking. `tokenService.checkOut` is imported by no page. | Commuter checked in via credits never appears on any tab; spot stuck `occupied` with no UI to release. Contradicts v1.8 doc. | [01](01-checkin-checkout-walkin.md) #1 |
 | 5 | Pricing | **Long-term tier table has no validation.** Gaps/overlaps/inverted ranges/`perDay=0` all save; server falls back to the last tier for uncovered days. | Misconfigured tiers silently mis-price bookings (e.g. day-7 gap bills at catch-all rate). | [05](05-vouchers-promotions-pricing-capacity.md) #2 |
-| 6 | Dashboard | ✔ **Audit content rendered unescaped (XSS).** No `escapeHtml` import; `describeAction` interpolates user-supplied `email`/`name` into `innerHTML`. | Crafted display name/email injects markup into the dashboard. | [06](06-dashboard-shuttle-reviews-legal.md) #3 |
+| 6 | Dashboard | ~~✔ **Audit content rendered unescaped (XSS).**~~ **FIXED 2026-07-27** — the activity feed now escapes the action badge, the `describeAction` description and the actor (`AdminDashboard.js`); `AdminAudit.js` (hidden route, same data) escaped alongside it. | ~~Crafted display name/email injects markup into the dashboard.~~ | [06](06-dashboard-shuttle-reviews-legal.md) #3 |
 | 7 | Check-ins | **No-show plate normalization mismatch.** `normalizePlate` strips spaces+hyphens; cleanup/`markNoShows` strip spaces only. | Hyphenated-plate arrival can be flagged no-show; cancel leaves a dangling `activeCheckIns` row. | [01](01-checkin-checkout-walkin.md) #2 |
 | 8 | Shuttle | **`admin.trainToParking` key missing** in both locales; **"+ Add Departure" button dead.** | A schedule row shows the literal key; the page's primary action no-ops. | [06](06-dashboard-shuttle-reviews-legal.md) #1,#2 |
 

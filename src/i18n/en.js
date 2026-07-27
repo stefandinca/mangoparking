@@ -782,6 +782,10 @@ export default {
     exportReport: 'Manage Packs',
     recentActivity: 'Recent Activity',
     noRecentActivity: 'No recent activity',
+    // Activity-feed actors that aren't a person (server-stamped actorUid).
+    actorScheduled: 'system (scheduled)',
+    actorSystem: 'system',
+    actorNetopia: 'online payment',
     actCheckIn: 'Check-in',
     actBooking: 'Booking',
     actCheckOut: 'Check-out',
