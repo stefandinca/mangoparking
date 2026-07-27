@@ -24,7 +24,9 @@ const BUCHAREST_TZ = 'Europe/Bucharest';
 // Local-date extraction in the Bucharest timezone. Critical so a 02:00
 // pick-up doesn't get bucketed into the previous calendar day's period
 // because the server happens to run in UTC.
-function bucharestDay(iso) {
+// Exported (with the three helpers below) for functions/test/pricing.test.js —
+// the pure core of the authoritative pricer, testable without Firestore.
+export function bucharestDay(iso) {
   if (!iso) return null;
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return null;
@@ -35,19 +37,19 @@ function bucharestDay(iso) {
   }).format(d);
 }
 
-function billingDays(dropMs, pickMs) {
+export function billingDays(dropMs, pickMs) {
   const dur = pickMs - dropMs;
   if (!Number.isFinite(dur) || dur <= 0) return 0;
   return Math.max(1, Math.ceil((dur - BILLING_GRACE_MS) / 86_400_000));
 }
 
-function tierForDays(days, tiers) {
+export function tierForDays(days, tiers) {
   return tiers.find((t) =>
     days >= t.minDays && (t.maxDays == null || days <= t.maxDays)
   ) || tiers[tiers.length - 1];
 }
 
-function findActivePeriod(periods, dayStr) {
+export function findActivePeriod(periods, dayStr) {
   if (!dayStr) return null;
   for (const p of periods) {
     if (!p.active) continue;
