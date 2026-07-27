@@ -389,6 +389,9 @@ export async function createBrokerBookingCore({
     entityId: bookingRef.id,
     actorUid,
     payload: {
+      // `code` lets the audit surfaces name the booking (LT-…) instead of
+      // falling back to a doc-id fragment (see describeAction).
+      code: bookingCode,
       plate: normPlate, days: Number(days), totalPrice: Number(totalPrice),
       paidBy: 'broker', spotId, source: 'broker',
       brokerName: brokerName || null,
@@ -422,7 +425,7 @@ export async function createBrokerBookingCore({
       entityType: 'booking',
       entityId: bookingRef.id,
       actorUid,
-      payload: { plate: normPlate, spotId, source: 'walk-in' },
+      payload: { code: bookingCode, plate: normPlate, spotId, source: 'walk-in' },
       timestamp: checkinIso,
     });
     checkedIn = true;
@@ -1746,7 +1749,7 @@ async function applyExtensionSettlement(bookingRef, booking, order, { chargedAmo
     entityType: 'booking',
     entityId: bookingRef.id,
     actorUid: actorUid || 'netopia',
-    payload: { orderId: order.id, chargedAmount: charged, paidBy: storedPaidBy, via },
+    payload: { code: booking.code || null, orderId: order.id, chargedAmount: charged, paidBy: storedPaidBy, via },
     timestamp: nowIso,
   });
 
@@ -1906,7 +1909,7 @@ export const adminMarkOrderPaid = onCall(
       entityType: 'pendingOrder',
       entityId: orderId,
       actorUid: uid,
-      payload: { paidBy: paymentMark.paidBy, orderType: pending.orderType },
+      payload: { code: pending.bookingCode || null, paidBy: paymentMark.paidBy, orderType: pending.orderType },
       timestamp: nowIso,
     });
 
@@ -2061,7 +2064,7 @@ export const adminMarkOrderUnpaid = onCall(
       entityType: 'pendingOrder',
       entityId: orderId,
       actorUid: uid,
-      payload: { orderType: pending.orderType, originalPaidBy: pending.paidBy },
+      payload: { code: pending.bookingCode || null, orderType: pending.orderType, originalPaidBy: pending.paidBy },
       timestamp: nowIso,
     });
 
@@ -2138,7 +2141,7 @@ export const cancelPendingCreditOrder = onCall(
       entityType: 'pendingOrder',
       entityId: orderId,
       actorUid: callerUid,
-      payload: { orderType: order.orderType, bySelf: owns },
+      payload: { code: order.bookingCode || null, orderType: order.orderType, bySelf: owns },
       timestamp: nowIso,
     });
 
@@ -2461,6 +2464,7 @@ export const cancelBookingWithRefund = onCall(
           entityId: bookingId,
           actorUid: callerUid,
           payload: {
+            code: booking.code || null,
             triggeredBy: 'admin-cancel',
             wasPaid: booking.paymentStatus === 'paid',
             paidBy: booking.paidBy || null,
@@ -2579,6 +2583,7 @@ export const cancelBookingWithRefund = onCall(
       entityId: bookingId,
       actorUid: callerUid,
       payload: {
+        code: booking.code || null,
         wasPaid: paid,
         paidBy: booking.paidBy || null,
         refundOutcome,
@@ -2663,6 +2668,7 @@ export const adminMarkRefunded = onCall(
       entityId: bookingId,
       actorUid: uid,
       payload: {
+        code: booking.code || null,
         refundedVia,
         amount: booking.totalPrice || null,
         paidBy: booking.paidBy || null,
@@ -2914,7 +2920,7 @@ export const adminResendRefundEmail = onCall(
       entityType: 'booking',
       entityId: bookingId,
       actorUid: uid,
-      payload: { ok: !!result?.ok, reason: result?.reason || null, recipient: result?.recipient || null },
+      payload: { code: booking.code || null, ok: !!result?.ok, reason: result?.reason || null, recipient: result?.recipient || null },
       timestamp: new Date().toISOString(),
     });
 
@@ -2957,7 +2963,7 @@ export const adminResendConfirmationEmail = onCall(
       entityType: 'booking',
       entityId: bookingId,
       actorUid: uid,
-      payload: { ok: !!result?.ok, reason: result?.reason || null, recipient: result?.recipient || null },
+      payload: { code: booking.code || null, ok: !!result?.ok, reason: result?.reason || null, recipient: result?.recipient || null },
       timestamp: new Date().toISOString(),
     });
 
@@ -3218,7 +3224,7 @@ export const adminCreateLongtermBooking = onCall(
       entityType: 'booking',
       entityId: bookingRef.id,
       actorUid: uid,
-      payload: { plate, days: d, totalPrice: total, paidBy, spotId, source: bookingSource, brokerName: brokerName || null },
+      payload: { code: bookingCode, plate, days: d, totalPrice: total, paidBy, spotId, source: bookingSource, brokerName: brokerName || null },
       timestamp: nowIso,
     });
 
@@ -3285,7 +3291,7 @@ export const adminCreateLongtermBooking = onCall(
         entityType: 'booking',
         entityId: bookingRef.id,
         actorUid: uid,
-        payload: { plate: normalizePlate(plate), spotId, source: 'walk-in' },
+        payload: { code: bookingCode, plate: normalizePlate(plate), spotId, source: 'walk-in' },
         timestamp: checkinIso,
       });
       checkedIn = true;
@@ -3849,7 +3855,7 @@ export const adminChargeOverstay = onCall(
       entityType: 'booking',
       entityId: bookingId,
       actorUid: uid,
-      payload: { amount: amt, paidBy, latePrice: newLate },
+      payload: { code: b.code || null, amount: amt, paidBy, latePrice: newLate },
       timestamp: nowIso,
     });
 
@@ -3997,7 +4003,7 @@ export const adminRepriceBooking = onCall(
         entityType: 'booking',
         entityId: bookingId,
         actorUid: uid,
-        payload: { requote: true, newDropoff, newPickupAt, days: newCalc.days, oldTotal, newTotal: newCalc.expected },
+        payload: { code: b.code || null, requote: true, newDropoff, newPickupAt, days: newCalc.days, oldTotal, newTotal: newCalc.expected },
         timestamp: nowIso,
       });
       // v1.2 Phase 4b: the payment request changed → replace the proforma
@@ -4112,7 +4118,7 @@ export const adminRepriceBooking = onCall(
           entityType: 'booking',
           entityId: bookingId,
           actorUid: uid,
-          payload: { extOrderId, owed, difference, carriedOwed, addedDays, newDropoff, newPickupAt },
+          payload: { code: b.code || null, extOrderId, owed, difference, carriedOwed, addedDays, newDropoff, newPickupAt },
           timestamp: nowIso,
         });
 
@@ -4201,6 +4207,7 @@ export const adminRepriceBooking = onCall(
       entityId: bookingId,
       actorUid: uid,
       payload: {
+        code: b.code || null,
         newDropoff,
         newPickupAt,
         days: newCalc.days,
@@ -4252,7 +4259,7 @@ export const adminResolvePendingRefund = onCall(
       entityType: 'booking',
       entityId: bookingId,
       actorUid: uid,
-      payload: { amount, refundedVia },
+      payload: { code: b.code || null, amount, refundedVia },
       timestamp: nowIso,
     });
 
@@ -4729,7 +4736,7 @@ async function reconcileParkviaBooking(imp, ledger, actorUid) {
       await db.collection('auditLog').add({
         action: 'parkvia_cancel_needs_review',
         entityType: 'booking', entityId: ledger.bookingId, actorUid,
-        payload: { ref: imp.ref, bookingStatus: booking.status },
+        payload: { code: booking.code || null, ref: imp.ref, bookingStatus: booking.status },
         timestamp: nowIso,
       });
       return 'unchanged';
@@ -4757,7 +4764,7 @@ async function reconcileParkviaBooking(imp, ledger, actorUid) {
     await db.collection('auditLog').add({
       action: 'booking_cancelled',
       entityType: 'booking', entityId: ledger.bookingId, actorUid,
-      payload: { ref: imp.ref, via: 'parkvia' },
+      payload: { code: booking.code || null, ref: imp.ref, via: 'parkvia' },
       timestamp: nowIso,
     });
     return 'cancelled';
@@ -4785,7 +4792,7 @@ async function reconcileParkviaBooking(imp, ledger, actorUid) {
       await db.collection('auditLog').add({
         action: 'booking_amended',
         entityType: 'booking', entityId: ledger.bookingId, actorUid,
-        payload: { ref: imp.ref, via: 'parkvia', fields: Object.keys(patch) },
+        payload: { code: booking.code || null, ref: imp.ref, via: 'parkvia', fields: Object.keys(patch) },
         timestamp: nowIso,
       });
       return 'amended';
@@ -4814,7 +4821,7 @@ export async function reportParkviaNoShowSafe(bookingRef, booking) {
       entityType: 'booking',
       entityId: bookingRef.id,
       actorUid: 'system',
-      payload: { ref },
+      payload: { code: booking?.code || null, ref },
       timestamp: nowIso,
     }).catch(() => {});
   } catch (err) {

@@ -112,10 +112,11 @@ Firestore ids ("aTUFw5tp…") must never surface — staff read them as a second
 confusing code format. Applies to the archive/ledger, detail header + summary,
 check-in board rows, refunds queue, dialogs/toasts, `reservationCodeHtml`
 links, and audit descriptions (`describeAction` prefers a caller-supplied code
-or `newValue.code`; client audit writes now stamp `code` on
-check-in/out/cancel rows so the dashboard/audit feeds can use it — server rows
-recorded by Cloud Functions still fall back to an id fragment in the global
-feeds until their payloads carry `code` too).
+or `newValue.code`; client audit writes stamp `code` on check-in/out/cancel
+rows, and every booking-related Cloud Function audit payload carries `code`
+too — created/check-in/cancel/no-show/refund/overstay/reprice/extension/
+email-resend/ParkVia, plus `pendingOrders.bookingCode` on the order rows.
+Only rows written before this shipped keep the id-fragment fallback).
 
 **Actions** (check-in, check-out, collect payment, edit, charge overstay,
 resend confirmation, cancel + refund) run through

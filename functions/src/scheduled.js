@@ -357,6 +357,9 @@ export const markNoShows = onSchedule(
         entityId: doc.id,
         actorUid: 'scheduled',
         payload: {
+          // `code` lets the audit surfaces name the booking (LT-…) instead
+          // of falling back to a doc-id fragment (see describeAction).
+          code: data.code || null,
           plate: data.licensePlate || null,
           dropoffAt: data.dropoffAt || null,
           customerId: data.customerId || null,
