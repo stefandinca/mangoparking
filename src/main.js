@@ -4,6 +4,11 @@ import { detectLocale, setLocale } from './i18n/index.js';
 import { mountWhatsAppFab } from './components/core/WhatsAppFab.js';
 import { onAuthChange } from './firebase/auth.js';
 import { maybePromptProfileCompletion } from './components/account/ProfileCompletionModal.js';
+import { installErrorLogging } from './utils/errorLog.js';
+
+// First thing: uncaught errors / rejections → clientErrors collection
+// (in-house monitoring, capped + deduped — see utils/errorLog.js).
+installErrorLogging();
 
 // NOTE: the one-time database seeding tool (src/seed.js, gitignored) has been
 // de-wired from the app. The site runs on live data, so an in-app `?seed=true`

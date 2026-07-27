@@ -144,6 +144,16 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
   dedup ledger + poll cursor, written only by `runParkviaSync` (admin SDK). Staff-readable so an
   admin tool can show import history.
 
+### clientErrors — in-house error monitoring (2026-07)
+- **create:** anyone, including anonymous — crashes happen to guests too. Guarded by a strict
+  field allowlist (`kind/message/stack/route/locale/ua/uid/ts/createdAt`) with size caps
+  (message ≤500, stack ≤1500, route/ua ≤300) so the open create can't be abused as free storage.
+- **read:** `isAdmin()`. **update/delete:** denied — reports are immutable.
+- Written by `src/utils/errorLog.js` (`window.onerror` + `unhandledrejection`, installed first
+  thing in `main.js`): deduped per message, hard-capped at 10 writes per session, and the write
+  itself is swallowed on failure so a Firestore outage can't cascade. This is the
+  no-external-service replacement for Sentry; review via the Firebase console for now.
+
 ## Storage rules (`storage.rules`)
 
 ```

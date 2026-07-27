@@ -307,5 +307,24 @@ service cloud.firestore {
       allow read: if isAdmin() || (isAgent() && resource.data.agentUid == request.auth.uid);
       allow create, update, delete: if false;
     }
+
+    // Client error reports — in-house monitoring (src/utils/errorLog.js).
+    // Anyone may CREATE (crashes happen to anonymous visitors too); the
+    // field allowlist + size caps keep the open create from being abused
+    // as free storage. Immutable; admin-only read.
+    match /clientErrors/{id} {
+      allow create: if request.resource.data.keys().hasOnly(
+                      ['kind', 'message', 'stack', 'route', 'locale', 'ua', 'uid', 'ts', 'createdAt'])
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() <= 500
+                    && request.resource.data.stack is string
+                    && request.resource.data.stack.size() <= 1500
+                    && request.resource.data.route is string
+                    && request.resource.data.route.size() <= 300
+                    && request.resource.data.ua is string
+                    && request.resource.data.ua.size() <= 300;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
   }
 }
