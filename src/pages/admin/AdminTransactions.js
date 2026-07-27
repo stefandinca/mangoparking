@@ -47,6 +47,11 @@ const TYPE_STYLES = {
   longTerm: 'bg-blueberry/10 text-blueberry',
 };
 
+// Row types that belong to the CREDITS product — what the Credite tab keeps.
+// 'extension' rows live in tokenTransactions but are long-term extension
+// charges, and 'longTerm' rows are bookings; both show on Toate only.
+const CREDIT_TYPES = new Set(['purchase', 'use', 'refund', 'lateFee', 'adjustment']);
+
 const STATUS_STYLES = {
   paid: 'bg-leaf/10 text-leaf',
   unpaid: 'bg-danger/10 text-danger',
@@ -323,6 +328,20 @@ export default async function AdminTransactions(container) {
     const isRes = tab === 'reservations';
     ledgerEl.classList.toggle('hidden', isRes);
     resEl.classList.toggle('hidden', !isRes);
+    // Credite scopes the ledger to the credits product, so the long-term
+    // type-filter options are meaningless there — hide them and drop an
+    // already-selected one instead of silently showing an empty table.
+    const creditsOnly = tab === 'credits';
+    for (const opt of typeSelect.options) {
+      if (opt.value === 'longTerm' || opt.value === 'extension') {
+        opt.disabled = creditsOnly;
+        opt.hidden = creditsOnly;
+      }
+    }
+    if (creditsOnly && (filterType === 'longTerm' || filterType === 'extension')) {
+      filterType = '';
+      typeSelect.value = '';
+    }
     if (isRes) renderReservations(); else render();
   }
 
@@ -357,6 +376,7 @@ export default async function AdminTransactions(container) {
   function render() {
     const q = filterQ.trim().toLowerCase();
     const filtered = rows.filter((r) => {
+      if (tab === 'credits' && !CREDIT_TYPES.has(r.type)) return false;
       if (q && !`${r.email} ${r.plate} ${r.code}`.toLowerCase().includes(q)) return false;
       if (filterType && r.type !== filterType) return false;
       if (filterStatus && r.status !== filterStatus) return false;

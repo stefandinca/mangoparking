@@ -69,9 +69,14 @@ newest-first string sort. Status/payment chips render via
 value instead of echoing a `reservations.status.undefined` key for bookings
 with no `paymentStatus`.
 
-- **Toate / Credite** — the original unified ledger merging credit
-  `tokenTransactions` and long-term `bookings` (~500 most recent). Filter by
-  type and status, search by email / plate / code, open the walk-in modal.
+- **Toate** — the unified ledger merging credit `tokenTransactions` and
+  long-term `bookings` (~500 most recent). Filter by type and status, search
+  by email / plate / code, open the walk-in modal.
+- **Credite** — the same ledger scoped to the credits product only
+  (purchase / use / refund / lateFee / adjustment). Long-term booking rows and
+  `extension` rows (long-term extension charges that live in
+  `tokenTransactions`) stay on Toate; their type-filter options are hidden on
+  this tab.
 - **Rezervări** — the **reservation archive**: every `bookings` doc (long-term
   *and* credit check-ins), which is the only place a completed booking from
   months ago can be found (the check-in board is windowed and status-scoped).
