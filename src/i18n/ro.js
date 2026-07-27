@@ -634,7 +634,6 @@ export default {
     legalParaHint: 'Folosește două rânduri goale pentru paragrafe noi. Placeholders: {site}, {company}, {cui}, {regcom}, {address}, {email}, {dpo}.',
     legalSavedToast: 'Pagină salvată.',
     reports: 'Rapoarte',
-    audit: 'Jurnal Audit',
     // Users page
     usersTitle: 'Utilizatori',
     usersSubtitle: 'Gestionează conturile clienților, staff-ului și administratorilor.',

@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "lint": "eslint src scripts functions/src functions/test tests",
     "build:vite": "vite build",
-    "build": "vite build && node scripts/prerender.mjs",
+    "build": "npm run lint && npm test && vite build && node scripts/prerender.mjs",
     "prerender": "node scripts/prerender.mjs",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4.2.1",
     "autoprefixer": "^10.4.27",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
     "vite": "^7.3.1"

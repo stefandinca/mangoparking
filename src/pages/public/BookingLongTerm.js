@@ -694,7 +694,6 @@ export default function BookingLongTerm(container) {
   // Promo voucher: apply / remove. Preview via the validateVoucherCode
   // callable so the customer sees the discount before paying; the same
   // validation runs again server-side at pay time.
-  const voucherBlock = page.querySelector('[data-voucher-block]');
   const voucherInputWrap = page.querySelector('[data-voucher-input-wrap]');
   const voucherAppliedEl = page.querySelector('[data-voucher-applied]');
   const voucherAppliedName = page.querySelector('[data-voucher-applied-name]');

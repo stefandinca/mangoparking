@@ -236,7 +236,7 @@ export async function resolveVoucher({ code, plate, baseAmount, authedUid, order
   }
 
   const base = Number(baseAmount);
-  let discount = 0;
+  let discount; // every type branch assigns; unknown types return early
   let daysUsed = null;
   if (v.type === 'fixed') {
     discount = Math.min(Number(v.value), base - 1);

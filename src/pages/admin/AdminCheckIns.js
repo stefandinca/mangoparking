@@ -20,22 +20,19 @@
 // tab when their status flips.
 
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
-import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
+import { delegate, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { subscribeCollection, getCollection, getDocument } from '../../firebase/db.js';
-import { bucharestLocalToIso, isoToBucharestLocal } from '../../utils/date.js';
+import { subscribeCollection, getCollection } from '../../firebase/db.js';
 import { showToast } from '../../components/core/Toast.js';
 import { confirmModal } from '../../components/core/Modal.js';
 import { getTokenPacks } from '../../services/tokenService.js';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { hasPermission, PERM } from '../../utils/permissions.js';
 import { bookingDisplayCode } from '../../utils/bookingCode.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
 import {
-  fmtDateTime, pickupDeadlineMs, perCreditPrice, overstayInfo, paymentStatusBadge,
+  fmtDateTime, pickupDeadlineMs, perCreditPrice, paymentStatusBadge,
   typeBadge, runBookingAction,
 } from '../../components/admin/bookingActions.js';
 import { parkviaSyncNow } from '../../services/parkviaService.js';
@@ -44,13 +41,6 @@ import { userNameButton, wireUserLinks } from '../../components/admin/UserDetail
 import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
-
-const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
-const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
-const adminChargeOverstayFn = httpsCallable(functions, 'adminChargeOverstay');
-const resendConfirmationFn = httpsCallable(functions, 'adminResendConfirmationEmail');
-const previewBookingRepriceFn = httpsCallable(functions, 'previewBookingReprice');
-const adminRepriceBookingFn = httpsCallable(functions, 'adminRepriceBooking');
 
 const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 

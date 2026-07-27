@@ -90,7 +90,7 @@ async function smartbillFetch(path, { method = 'GET', body } = {}) {
   } catch (err) {
     throw new Error(err?.name === 'TimeoutError' || err?.name === 'AbortError'
       ? `SmartBill: timeout after ${SMARTBILL_TIMEOUT_MS / 1000}s`
-      : `SmartBill: ${err?.message || 'network error'}`);
+      : `SmartBill: ${err?.message || 'network error'}`, { cause: err });
   }
 
   const text = await res.text();

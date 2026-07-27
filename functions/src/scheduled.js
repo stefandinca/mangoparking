@@ -232,7 +232,7 @@ export const commuter7PMCheck = onSchedule(
       const balanceDocId = a.balanceDocId;
 
       // Pull the balance doc to get the customer's contact details.
-      let recipient = null;
+      let recipient;
       let customerId = null;
       if (balanceDocId && !balanceDocId.startsWith('plate_')) {
         customerId = balanceDocId;

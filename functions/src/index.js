@@ -99,7 +99,9 @@ const NETOPIA_SIGNATURE   = defineSecret('NETOPIA_SIGNATURE');
 const NETOPIA_PUBLIC_KEY  = defineSecret('NETOPIA_PUBLIC_KEY');
 const NETOPIA_PRIVATE_KEY = defineSecret('NETOPIA_PRIVATE_KEY');
 const NETOPIA_ENV         = defineSecret('NETOPIA_ENV');       // 'sandbox' | 'live'
-const NETOPIA_API_KEY     = defineSecret('NETOPIA_API_KEY');   // reserved
+// Reserved for the v1.4 Netopia v2 (REST) migration — the secret param stays
+// registered so the value survives; underscore = intentionally unbound.
+const _NETOPIA_API_KEY    = defineSecret('NETOPIA_API_KEY');
 
 const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
 // `netopiaCallback` is a separate Cloud Run service in Gen 2 — its hostname
@@ -2617,7 +2619,7 @@ export const cancelBookingWithRefund = onCall(
 export const adminMarkRefunded = onCall(
   { region: 'europe-west1', cors: true, secrets: [BREVO_API_KEY] },
   async (request) => {
-    const { uid, role } = await assertStaff(request);
+    const { uid } = await assertStaff(request);
     const { bookingId, refundedVia, notes } = request.data || {};
     if (!bookingId) throw new HttpsError('invalid-argument', 'Missing bookingId');
     const allowedVia = ['netopia-panel', 'cash-returned', 'card-terminal'];
@@ -4580,7 +4582,8 @@ export async function runParkviaSync(actorUid = 'scheduled') {
   const syncSnap = await syncRef.get();
   const state = syncSnap.exists ? syncSnap.data() : {};
 
-  let events = [];
+  // Assigned in the try (every other path returns first).
+  let events;
   try {
     if (!state.primedAt) {
       const seen = await listParkviaEvents({ hours: PARKVIA_BACKFILL_HOURS });

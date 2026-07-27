@@ -67,7 +67,7 @@ function localSubject(html) {
 
 // Zero-width chars sneak into Brevo subjects via copy-paste; ignore for compare.
 function normSubject(s) {
-  return (s ?? '').replace(/[​﻿]/g, '').trim();
+  return (s ?? '').replace(/[\u200B\uFEFF]/g, '').trim();
 }
 
 function entries(args) {

@@ -633,7 +633,6 @@ export default {
     legalParaHint: 'Use a blank line to start a new paragraph. Placeholders: {site}, {company}, {cui}, {regcom}, {address}, {email}, {dpo}.',
     legalSavedToast: 'Page saved.',
     reports: 'Reports',
-    audit: 'Audit Log',
     // Users page
     usersTitle: 'Users',
     usersSubtitle: 'Manage customer, staff, and admin accounts.',

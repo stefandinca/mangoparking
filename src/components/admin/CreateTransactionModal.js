@@ -1075,7 +1075,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       return;
     }
 
-    let payerEmail = '';
+    let payerEmail; // every mode branch assigns (or returns) before use
     let payerName = '';
     let payerPhone = '';
     let customerId = null;

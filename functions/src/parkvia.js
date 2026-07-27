@@ -91,7 +91,7 @@ async function parkviaRequest(path, { method = 'GET', body } = {}) {
   } catch (err) {
     throw new Error(err?.name === 'TimeoutError' || err?.name === 'AbortError'
       ? `ParkVia: timeout after ${PARKVIA_TIMEOUT_MS / 1000}s`
-      : `ParkVia: ${err?.message || 'network error'}`);
+      : `ParkVia: ${err?.message || 'network error'}`, { cause: err });
   }
 
   const text = await res.text();
