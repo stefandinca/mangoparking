@@ -1,7 +1,7 @@
 // Client wrappers for the ParkVia (ParkCloud) auto-import integration.
 // Admin diagnostics only — the import itself runs server-side on a schedule
 // (pollParkviaBookings) and on demand via parkviaSyncNow. See
-// documentation/roadmap/v.1.x_parkvia.md.
+// documentation/features/parkvia.md.
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase/config.js';
 
@@ -18,7 +18,7 @@ export async function parkviaHealthcheck() {
 
 // Admin-only. Runs one import pass on demand and returns the summary
 // { configured, imported, skipped, cancelled, amended, errors }, or
-// { configured: false } when dormant.
+// { configured: false } when ParkCloud isn't configured.
 export async function parkviaSyncNow() {
   const res = await parkviaSyncNowFn();
   return res.data;

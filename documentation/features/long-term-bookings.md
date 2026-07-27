@@ -87,7 +87,7 @@ paid**, so an unpaid no-show never orphans a spot.
   `adminCreateLongtermBooking` skips proforma issuance for `paidBy: 'broker'`.
   Both the manual desk flow and the **ParkVia auto-import** route through the
   shared `createBrokerBookingCore` primitive so they produce identical docs —
-  see [roadmap/v.1.x_parkvia.md](../roadmap/v.1.x_parkvia.md) (shipped dormant).
+  see [parkvia.md](./parkvia.md) (live since 2026-07-23).
 - `later` → unpaid reservation; creates a `pendingOrders` doc so it rides the
   same pay-at-pickup rails (online repay or collect at lot).
 `autoCheckIn` flips the fresh booking to `active`, marks the spot `occupied`, and

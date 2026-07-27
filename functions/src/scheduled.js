@@ -417,10 +417,11 @@ export const expireStaleHolds = onSchedule(
 
 // ── ParkVia auto-import poll ────────────────────────────────────────────
 // Pull new/changed ParkVia (ParkCloud) reservations and import them as broker
-// bookings, reconciling cancellations. DORMANT until ParkCloud credentials are
-// configured — runParkviaSync (index.js) returns { configured:false } and this
-// is a logged no-op. The real work + idempotency live in runParkviaSync; this
-// is just its schedule. The admin "Sync now" button calls the same function.
+// bookings, reconciling cancellations. LIVE since 2026-07-23; config-gated —
+// without ParkCloud credentials runParkviaSync (index.js) returns
+// { configured:false } and this is a logged no-op. The real work + idempotency
+// live in runParkviaSync; this is just its schedule. The admin "Sync now"
+// button calls the same function.
 export const pollParkviaBookings = onSchedule(
   {
     schedule: 'every 15 minutes',

@@ -88,8 +88,8 @@ export { lookupCui } from './cui.js';
 // Dormant until a flight API key is configured (see flightStatus.js).
 export { lookupFlightStatuses } from './flightStatus.js';
 
-// Scheduled jobs (Phase F). `pollParkviaBookings` is dormant until ParkCloud
-// credentials are configured (see parkvia.js).
+// Scheduled jobs (Phase F). `pollParkviaBookings` is live (config-gated — a
+// no-op without ParkCloud credentials; see parkvia.js).
 export { daily24hReminders, commuter7PMCheck, expireStaleHolds, markNoShows, pollParkviaBookings } from './scheduled.js';
 
 initializeApp();
@@ -4538,10 +4538,11 @@ export const smartbillTestIssue = onCall(
 // Pulls reservations from the ParkCloud Operator API and turns them into
 // broker bookings (via createBrokerBookingCore) so staff don't re-type them,
 // reconciling cancellations on each run. See functions/src/parkvia.js and
-// documentation/roadmap/v.1.x_parkvia.md.
+// documentation/features/parkvia.md.
 //
-// DORMANT until ParkCloud credentials are configured (parkviaConfig().configured
-// === false → this is a no-op returning { configured: false }). Shared by the
+// LIVE since 2026-07-23, config-gated: without ParkCloud credentials
+// (parkviaConfig().configured === false) this is a no-op returning
+// { configured: false }. Shared by the
 // scheduled poller (scheduled.js → pollParkviaBookings) and the admin "Sync now"
 // button (parkviaSyncNow). Best-effort per reservation: one bad row is counted
 // as an error and skipped, never aborting the batch.

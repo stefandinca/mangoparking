@@ -181,8 +181,9 @@ export default async function AdminPricing(container) {
         </section>
   `);
 
-  // ParkVia (ParkCloud) auto-import diagnostics. Dormant until credentials are
-  // configured — the callables return { configured:false } and we show a badge.
+  // ParkVia (ParkCloud) auto-import diagnostics. The import is live, but stays
+  // config-gated server-side — without credentials the callables return
+  // { configured:false } and we show a badge instead of a result.
   const parkviaNotConfigured = () =>
     `<div class="rounded-xl border border-frost-deep bg-frost p-4 text-charcoal/70">${t('parkvia.notConfigured')}</div>`;
 

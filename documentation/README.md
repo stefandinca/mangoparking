@@ -15,7 +15,7 @@ or feedback round.** The goal is that a fresh session can read this folder and
 | Folder | What's in it |
 |---|---|
 | [`backend/`](backend/) | How the server works: data model, Cloud Functions, security rules, payments, email, external integrations, i18n & permissions. |
-| [`features/`](features/) | One doc per product feature (credits, long-term bookings, pricing, vouchers, billing, cashbook & refunds, capacity, transfers, shuttle, reviews, trip info). |
+| [`features/`](features/) | One doc per product feature (credits, long-term bookings, pricing, vouchers, billing, cashbook & refunds, capacity, transfers, shuttle, reviews, trip info, ParkVia import). |
 | [`sections/`](sections/) | The app surfaces: public site, customer account, admin panel. |
 | [`admin-flows/`](admin-flows/) | Detailed step-by-step staff walkthroughs, one per admin area, + the [BUGS.md](admin-flows/BUGS.md) register. |
 | [`roadmap/`](roadmap/) | **Planned / not built** — design docs for future work. |
@@ -54,6 +54,7 @@ or feedback round.** The goal is that a fresh session can read this folder and
 - [features/shuttle.md](features/shuttle.md) — the ManGO buzz shuttle + opening hours.
 - [features/reviews.md](features/reviews.md) — customer reviews CMS.
 - [features/trip-info.md](features/trip-info.md) — passengers, flight numbers, flight delay/cancel warnings.
+- [features/parkvia.md](features/parkvia.md) — ParkVia (ParkCloud) reservation auto-import (live). Onboarding record: [parkvia-setup-steps.md](parkvia-setup-steps.md).
 
 ## Sections
 
@@ -87,5 +88,6 @@ current reference:
 
 - **Payments (Netopia)** — live, on the legacy crypto-envelope flow. **Refunds are manual** (admin refund queue). v2 REST automation is [planned](roadmap/v.1.4_netopia_v2_migration.md).
 - **Invoicing (SmartBill)** — **live** (v1.2 Phase 2/4): proforma on every order, fiscal invoice on online-payment confirm, storno on cancel. Best-effort — a failure stamps `smartbill.status='failed'` and never breaks a money flow. Pay-at-location invoices are issued manually; documents aren't surfaced in-app. e-Factura + retry queue (Phase 7/8) [planned](roadmap/v.1.2_smartbill.md).
+- **ParkVia (ParkCloud)** — **live** since 2026-07-23: polls every 15 min, imports ParkVia reservations as broker bookings, reconciles cancellations/amendments, reports no-shows back. [Doc](features/parkvia.md).
 - **ANPR cameras** — **not built.** (The overstay/no-show pieces that plan referenced did ship independently.) [Plan](roadmap/v.1.3_anpr.md).
 - **Flight status** — code shipped but **dormant** until a flight-API key is configured. See [backend/integrations.md](backend/integrations.md).

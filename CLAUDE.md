@@ -47,11 +47,13 @@ src/services/                         — booking, token, capacity, longTerm, pr
                                         discount, promoVoucher, voucher, cashbook, audit, review,
                                         promotions, legalPage, shuttle, contact, cui, netopia,
                                         transfer (door-to-airport), gallery (facility photos),
-                                        openingHours, userMerge (+ hidden: subscription, loyalty)
+                                        openingHours, userMerge, parkvia (broker auto-import
+                                        admin diagnostics) (+ hidden: subscription, loyalty)
 scripts/{prerender.mjs,seo-routes.mjs}    — build-time SEO prerender for public routes
 functions/src/                        — index.js (Netopia + admin/cash/booking callables),
                                         emails.js (customer Brevo emails), adminNotifications.js
-                                        (ops alerts to rezervari@), brevo.js, scheduled.js, cui.js
+                                        (ops alerts to rezervari@), brevo.js, scheduled.js, cui.js,
+                                        smartbill.js, parkvia.js (ParkVia auto-import, live)
 firestore.rules / firestore.indexes.json / storage.rules
 firebase.json / vercel.json / vite.config.js / .firebaserc (project: mango-parking)
 ```

@@ -181,6 +181,7 @@ the last admin); admins can also create/delete users and send magic-link invites
 | `shuttleSchedule`, `trainSchedule` | auto | Departure schedules |
 | `settings/global` | global | Global config (online-discount %, per-day `openingHours`) |
 | `pendingInvites`, `lookupCache` | email / `cui_*` | Invite staging + ANAF CUI cache |
+| `parkviaImports`, `parkviaSync` | ParkVia ref / `state` | ParkVia auto-import dedup ledger + poll cursor (server-written) |
 
 **Security model (firestore.rules):** public read / admin write for config + content
 collections; owner-or-staff for users / balances / transactions / bookings; cash,
@@ -208,7 +209,7 @@ no-shows are explicit flows.
 
 ---
 
-## 8. Payments, Email & Invoicing
+## 8. Payments, Email, Invoicing & Broker Import
 
 - **Netopia (crypto-envelope, live):** `createPayment` / `repayOrder` build an
   RSA/AES-encrypted request; Netopia confirms via the `netopiaCallback` IPN, which is
@@ -236,6 +237,14 @@ no-shows are explicit flows.
   aren't surfaced in-app (staff use SmartBill directly). Secrets: `SMARTBILL_USERNAME`,
   `SMARTBILL_TOKEN`, `SMARTBILL_CIF`. e-Factura (B2B) + a failed-doc retry queue are the
   remaining Phase 7/8 work (`documentation/roadmap/v.1.2_smartbill.md`).
+- **ParkVia auto-import (live since 2026-07-23):** reservations booked through
+  ParkVia arrive automatically as broker bookings instead of being re-typed at the
+  desk. `pollParkviaBookings` polls the ParkCloud Operator API (REST/XML, event
+  cursor) every 15 minutes, imports via the shared `createBrokerBookingCore`,
+  reconciles cancellations/amendments safely, and reports no-shows back. Broker
+  bookings carry no billing and get no invoice or cashbook entry. Secrets:
+  `PARKVIA_SUBSCRIPTION_KEY`, `PARKVIA_OPERATOR_KEY`
+  (`documentation/features/parkvia.md`).
 
 ---
 

@@ -1,32 +1,28 @@
-// ParkVia (ParkCloud) auto-import — REST/XML integration scaffold.
-// See documentation/roadmap/v.1.x_parkvia.md for the full plan.
+// ParkVia (ParkCloud) auto-import — REST/XML integration. LIVE since 2026-07-23.
+// See documentation/features/parkvia.md for the full picture.
 //
 // GOAL: reservations made through ParkVia appear as broker bookings
 // automatically, instead of being re-typed at the admin desk.
 //
-// DORMANT BY DEFAULT. With no ParkCloud credentials configured, parkviaConfig()
-// returns { configured: false }: the scheduled poller is a logged no-op, the
-// admin callables return { configured: false }, and the admin card shows
-// "not configured". So this deploys safely TODAY, before we have partner access.
-//
 // MODEL: ParkVia's operator technology is the ParkCloud Operator API — a
-// REST/XML service on Azure API Management with API-key auth, documented as
-// PULL/poll (we fetch new bookings on a schedule; no confirmed push webhook).
-// A scheduled job + an admin "Sync now" button drive runParkviaSync (index.js).
+// REST/XML service on Azure API Management with API-key auth, PULL/poll (no
+// push webhook). It is EVENT-based: NEW/AMEND/CANCEL/NOSHOW rows with
+// increasing ids, and the last id is our cursor. A scheduled job (every 15 min)
+// + an admin "Sync now" button drive runParkviaSync (index.js).
 //
-// ⚠️ PROVISIONAL: the exact endpoints, the reservation XML schema, the datetime
-// format/timezone, the operator-key header name, and the cancellation/amendment
-// status signal are all PARTNER-GATED (behind ParkCloud's developer portal) and
-// UNKNOWN until we onboard. Everything so marked below must be confirmed against
-// the real API before enabling. The whole XML→booking mapping is quarantined in
-// mapParkviaBookingToImport() so only that one pure function changes on arrival.
+// CONFIG-GATED, NOT DORMANT. Everything runs off parkviaConfig(): with no
+// ParkCloud credentials it returns { configured: false } and the poller is a
+// logged no-op, the callables return { configured: false }, and the admin card
+// shows "not configured". Production IS configured — PARKVIA_SUBSCRIPTION_KEY +
+// PARKVIA_OPERATOR_KEY as secrets, PARKVIA_PARKING_ID (15777) + PARKVIA_BASE_URL
+// in functions/.env.mango-parking.
 //
-// To enable once we have access (see the roadmap doc for the full checklist):
-//   • dotenv functions/.env.mango-parking — PARKVIA_PARKING_ID, PARKVIA_BASE_URL
-//   • firebase functions:secrets:set PARKVIA_SUBSCRIPTION_KEY
-//   • firebase functions:secrets:set PARKVIA_OPERATOR_KEY
-//   • uncomment the [SECRET] lines below + the `secrets: PARKVIA_SECRETS`
-//     bindings on the poller/callables, finalize the provisional bits, redeploy.
+// Endpoints, auth, the <Booking> schema, the datetime format and the No-Show
+// verb were all CONFIRMED live on 2026-07-23 (see the per-function comments).
+// The one area still provisional is how AMENDMENTS are signalled, so
+// reconcileParkviaBooking (index.js) auto-applies safe date fields only.
+// The whole XML→booking mapping stays quarantined in
+// mapParkviaBookingToImport() and is unit-tested (functions/test/).
 
 import { parseStringPromise, processors } from 'xml2js';
 import { defineSecret } from 'firebase-functions/params';
@@ -41,7 +37,7 @@ const PARKVIA_TIMEOUT_MS = 12_000;
 // The broker name stamped on imported bookings (matches the manual desk value).
 export const PARKVIA_BROKER_NAME = 'ParkVia';
 
-// ── Configuration / dormant gate ────────────────────────────────────────────
+// ── Configuration gate ──────────────────────────────────────────────────────
 // Mirrors flightStatus.js apiConfig(): reads env first (dotenv or Gen2 secret,
 // both surface on process.env inside a bound invocation). `configured` is false
 // until the two keys + a parking id are present, which keeps everything inert.

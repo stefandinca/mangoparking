@@ -1,5 +1,14 @@
 # ParkVia (ParkCloud) — setup steps
 
+> ## ✅ COMPLETED 2026-07-23 — historical record
+>
+> Onboarding is **done**: the subscription key and operator key are set as
+> Cloud Function secrets, operator id **15777** is confirmed, and the import has
+> been live in production since 2026-07-23. Nothing below is an open action —
+> the file is kept as the record of how access was obtained (useful if a key is
+> ever revoked or rotated). For how the integration actually works, see
+> [features/parkvia.md](features/parkvia.md).
+
 A clear, do-this-next guide for connecting the ParkVia auto-import. Work through
 it top to bottom. Paste results back to me and I'll wire the code.
 
