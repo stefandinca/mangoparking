@@ -12,16 +12,16 @@
 
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
-import { t, getLocale } from '../../i18n/index.js';
+import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCollection } from '../../firebase/db.js';
+import { navigate } from '../../router/index.js';
 import { showToast } from '../../components/core/Toast.js';
 import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { getCurrentUser } from '../../firebase/auth.js';
 import { isValidEmail } from '../../utils/validators.js';
-import { openUserDetailModal } from '../../components/admin/UserDetailModal.js';
 import { buildUsersExport } from '../../services/userExportService.js';
 import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
 
@@ -38,7 +38,16 @@ function normalizeRole(role) {
   return ROLE_ORDER.includes(role) ? role : 'customer';
 }
 
-export default function AdminUsers(container) {
+export default async function AdminUsers(container) {
+  // /admin/users?uid=… is the single-user profile. The router strips the query
+  // before matching, so both views live behind this one route entry — which
+  // also keeps the sidebar's "Utilizatori" item highlighted on the profile.
+  const uid = new URLSearchParams(window.location.search).get('uid');
+  if (uid) {
+    const { default: AdminUserProfile } = await import('./AdminUserProfile.js');
+    return AdminUserProfile(container, { uid });
+  }
+
   const locale = getLocale();
   updateMeta({ title: `${t('admin.usersTitle')} — Admin`, lang: locale });
 
@@ -121,12 +130,14 @@ export default function AdminUsers(container) {
     }
   }
 
-  // Delegate "view detail" clicks on the name cell.
+  // Delegate "view detail" clicks on the name cell → the full profile page
+  // (activity for a period + the detail sections). The modal is still used
+  // elsewhere (booking rows, capacity tiles) via openUserDetail().
   rows.addEventListener('click', (e) => {
     const viewBtn = e.target.closest('[data-action="view"]');
     if (!viewBtn) return;
-    const user = users.find((u) => u.id === viewBtn.dataset.uid);
-    if (user) openUserDetailModal(user);
+    const id = viewBtn.dataset.uid;
+    if (id) navigate(localePath(`/admin/users?uid=${encodeURIComponent(id)}`));
   });
 
   // Delegate delete clicks across all per-role tables.

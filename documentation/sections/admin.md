@@ -140,13 +140,35 @@ of departures (time, route, driver, capacity, status). Per-departure actions
 [06-dashboard-shuttle-reviews-legal](../admin-flows/06-dashboard-shuttle-reviews-legal.md).
 
 ### Users — `/admin/users` (`AdminUsers.js`) · admin-only
-Staff & customer management. Lists users grouped by role with search, a user
-detail modal, **role change** (`adminChangeUserRole`, confirms on admin/demotion),
+Staff & customer management. Lists users grouped by role with search, **role change** (`adminChangeUserRole`, confirms on admin/demotion),
 **delete** (`adminDeleteUser`), and two add paths: direct create (email +
 password, `adminCreateUser`) or **email invite** (magic link, `adminSendInvite` —
 completed at [/auth/finish-signup](./account.md#authfinish-signup-srcpagesauthfinishsignupjs)).
-CSV export of customers (with lifetime spend). Walkthrough:
-[04-users-accounts-roles](../admin-flows/04-users-accounts-roles.md).
+CSV export of customers (with lifetime spend). Clicking a name opens that
+user's [profile page](#user-profile--adminusersuid-adminuserprofilejs).
+Walkthrough: [04-users-accounts-roles](../admin-flows/04-users-accounts-roles.md).
+
+### User profile — `/admin/users?uid=…` (`AdminUserProfile.js`)
+Clicking a name in the users list opens that person's profile instead of the
+old modal. The router matches on path only, so this lives behind the same
+`/admin/users` route entry (which also keeps the sidebar item highlighted);
+`AdminUsers.js` checks for `?uid=` and delegates.
+
+- **"What did this person do"**: a date range (the shared preset/custom bar),
+  a stat row — check-ins, check-outs, reservations created, payments taken,
+  total actions — and the paginated list of those actions.
+- Rows come from `auditLog` **where they are the actor**. Actor matching has to
+  cover both writer shapes (`actorUid` server-side, `userEmail` client-side),
+  which one Firestore query can't do, so the page reuses the capped range query
+  and filters in memory (`isActorRow` in `auditFormat.js`); the cap notice is
+  shown, since a truncated range means a possibly-short count. Two composite
+  indexes (`actorUid`+`timestamp`, `userId`+`timestamp`) would make it exact if
+  volume ever demands it.
+- Below the activity block sit the same read-only sections the user modal
+  renders (profile, vehicles, billing, credits, vouchers, their bookings and
+  credit ledger) — reused via `renderUserSections`, not duplicated.
+- The modal (`openUserDetail`) is still the surface used from booking rows and
+  capacity tiles, and still owns **edit** and **CSV export**.
 
 ### Action log — `/admin/audit` (`AdminAudit.js`)
 The full staff-action history behind the dashboard's short activity summary —

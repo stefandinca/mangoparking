@@ -66,6 +66,41 @@ export function actionStyle(action) {
   return ACTION_STYLES[action] || 'bg-gray-100 text-gray-600';
 }
 
+// ── Per-actor activity (the /admin/users?uid= profile) ────────────────────
+
+/**
+ * Is this audit row an action performed BY the given person?
+ *
+ * Rows identify their actor two ways — `actorUid` on server writes, and
+ * `userId`/`userEmail` on client writes (auditService resolves the latter
+ * into `user`). Both must match or a staff member's client-written actions
+ * (spot flips, check-in/out, review edits) would go missing from their
+ * profile. Email comparison is case-insensitive: rows predate the
+ * lowercase-at-write convention.
+ */
+export function isActorRow(row, { uid, email } = {}) {
+  if (!row) return false;
+  if (uid && row.actorUid === uid) return true;
+  if (!email || !row.user) return false;
+  return String(row.user).toLowerCase() === String(email).toLowerCase();
+}
+
+/**
+ * Headline counters on the profile. Anything not listed still counts toward
+ * the total, which is why there is no "other" tile.
+ */
+export const ACTOR_STAT_TILES = [
+  { key: 'checkins', actions: ['booking_checkin', 'check_in'] },
+  { key: 'checkouts', actions: ['booking_checkout', 'check_out'] },
+  { key: 'reservations', actions: ['booking_created'] },
+  { key: 'payments', actions: ['order_marked_paid', 'admin_credits_granted'] },
+];
+
+/** Count rows whose action falls in `actions`. */
+export function countActions(rows, actions) {
+  return rows.filter((r) => actions.includes(r.action)).length;
+}
+
 // ── Date-range presets for the /admin/audit window bar ────────────────────
 // Kept here (a DOM-free module) rather than inside the page so the boundary
 // math is unit-testable: it decides which rows the Firestore query returns.

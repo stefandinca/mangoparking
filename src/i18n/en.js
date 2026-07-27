@@ -1294,6 +1294,19 @@ export default {
     capped: 'Showing the newest {cap} entries in this range — narrow the range to see older ones.',
   },
 
+  // Admin → user profile (/admin/users?uid=…)
+  userProfile: {
+    activityTitle: 'Activity in this period',
+    detailsTitle: 'Account details',
+    statCheckins: 'Check-ins',
+    statCheckouts: 'Check-outs',
+    statReservations: 'Reservations',
+    statPayments: 'Payments taken',
+    statTotal: 'Total actions',
+    noActivity: 'No actions by this user in this period',
+    notFound: 'User not found',
+  },
+
   // Common
   common: {
     loading: 'Loading...',

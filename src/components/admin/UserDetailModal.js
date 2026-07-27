@@ -681,6 +681,10 @@ function enterEditMode(user, body, refreshHeader) {
   });
 }
 
+// Exported as renderUserSections: the /admin/users?uid= profile page renders
+// the same read-only sections below its activity block, so they stay in sync.
+export { loadAndRender as renderUserSections };
+
 async function loadAndRender(user, body) {
   const uid = user.id;
   const email = user.email;

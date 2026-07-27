@@ -1296,6 +1296,19 @@ export default {
     capped: 'Se afișează cele mai recente {cap} intrări din acest interval — restrânge intervalul pentru a le vedea pe cele mai vechi.',
   },
 
+  // Admin → profil utilizator (/admin/users?uid=…)
+  userProfile: {
+    activityTitle: 'Activitate în perioada selectată',
+    detailsTitle: 'Detalii cont',
+    statCheckins: 'Check-in-uri',
+    statCheckouts: 'Check-out-uri',
+    statReservations: 'Rezervări',
+    statPayments: 'Plăți încasate',
+    statTotal: 'Total acțiuni',
+    noActivity: 'Nicio acțiune a acestui utilizator în perioada selectată',
+    notFound: 'Utilizatorul nu a fost găsit',
+  },
+
   common: {
     loading: 'Se încarcă...',
     error: 'A apărut o eroare',
