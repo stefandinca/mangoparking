@@ -25,6 +25,13 @@ import {
 import { bucharestLocalToIso } from '../../utils/date.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
+// Mounting flatpickr directly means importing its stylesheet directly too.
+// Everywhere else the picker arrives via the FormDateTime component, which
+// carries these two imports (see the theming note in style.css) — AdminCheckIns
+// drives flatpickr itself but still imports FormDateTime, so it inherits them.
+// This page doesn't, and without them the calendar renders completely unstyled.
+import 'flatpickr/dist/flatpickr.min.css';
+import '../../styles/flatpickr-theme.css';
 
 const PAGE_SIZE = 25;
 
