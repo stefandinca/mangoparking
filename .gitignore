@@ -15,6 +15,7 @@ netopia*keys*.md
 netopia*keys*.txt
 documentation/smartbill-creds.md
 documentation/parkcloud*.md
+documentation/firebase.md
 documentation/parkvia-response.txt
 *.pem
 *.key
