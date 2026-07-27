@@ -222,15 +222,15 @@ export const routes = [
     component: () => import('../pages/admin/AdminHelp.js'),
     guards: ['auth', 'admin', 'perm:help'],
   },
+  {
+    path: '/admin/audit',
+    component: () => import('../pages/admin/AdminAudit.js'),
+    guards: ['auth', 'admin', 'perm:audit'],
+  },
   // MVP: hidden
   // {
   //   path: '/admin/reports',
   //   component: () => import('../pages/admin/AdminReports.js'),
-  //   guards: ['auth', 'admin'],
-  // },
-  // {
-  //   path: '/admin/audit',
-  //   component: () => import('../pages/admin/AdminAudit.js'),
   //   guards: ['auth', 'admin'],
   // },
 ];

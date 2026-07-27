@@ -618,6 +618,7 @@ export default {
     website: 'Public website',
     websiteSubtitle: 'Manage front-end content: gallery, opening hours, promotions, reviews, legal pages.',
     help: 'Guide',
+    audit: 'Action log',
     legalSubtitle: 'Edit Terms, Privacy, GDPR, Delivery, and Cancellation copy.',
     legalTitle: 'Page title',
     legalIntro: 'Intro',
@@ -1274,6 +1275,23 @@ export default {
     errorTiers: 'Add at least one valid pricing tier.',
     errorOverlap: 'Overlaps with "{name}". Adjust the dates or deactivate the other period.',
     appliedBadge: '{name} rate',
+  },
+
+  // Admin → action log (/admin/audit)
+  audit: {
+    rangeLabel: 'Range',
+    rangeToday: 'Today',
+    range7d: 'Last 7 days',
+    range30d: 'Last 30 days',
+    rangeOr: 'or',
+    rangeCustom: 'Pick a custom range',
+    seeAll: 'See all activity',
+    empty: 'No activity in this range',
+    prev: 'Previous',
+    next: 'Next',
+    pageOf: 'Page {page} of {pages}',
+    showingRange: 'Showing {from}–{to} of {total} entries',
+    capped: 'Showing the newest {cap} entries in this range — narrow the range to see older ones.',
   },
 
   // Common

@@ -18,9 +18,9 @@ detailed staff walkthroughs in [admin-flows/](../admin-flows/README.md).
 
 ## Access model (quick reference)
 
-Roles: **admin** (all 16 permissions), **agent** (legacy `staff` — ops only,
-9 perms), **driver** (6 perms), **customer** (none). The sidebar shows at most
-13 links; the consolidated **promotions / reviews / legal** editors have routes
+Roles: **admin** (all 17 permissions), **agent** (legacy `staff` — ops only,
+10 perms), **driver** (7 perms), **customer** (none). The sidebar shows at most
+14 links; the consolidated **promotions / reviews / legal** editors have routes
 and permissions but no sidebar link (reached via the *Website* tabs). Full table
 and guard behavior: [i18n & permissions](../backend/i18n-and-permissions.md#2-roles--permissions).
 
@@ -148,6 +148,31 @@ completed at [/auth/finish-signup](./account.md#authfinish-signup-srcpagesauthfi
 CSV export of customers (with lifetime spend). Walkthrough:
 [04-users-accounts-roles](../admin-flows/04-users-accounts-roles.md).
 
+### Action log — `/admin/audit` (`AdminAudit.js`)
+The full staff-action history behind the dashboard's short activity summary —
+"who did what, when". Available to **every admin-access role** (admin, agent,
+driver): each already sees the same feed, shortened, on its dashboard, and
+`firestore.rules` lets any `isStaff()` read `auditLog`, so a UI-only
+restriction would be cosmetic.
+
+- **Date range** drives the Firestore query: `Today` / `Last 7 days` /
+  `Last 30 days` presets plus a flatpickr custom range, bounded on
+  **Europe/Bucharest** calendar days (`windowToIso` in
+  `components/admin/auditFormat.js`). Range + sort are both on `timestamp`, so
+  no composite index is needed.
+- **Action** and **actor** dropdowns are built from what the range returned;
+  a free-text search matches across action / entity / actor / description.
+  Filters apply to the whole range, then the result is **paginated
+  client-side** (25/page) — a cursor page would filter only its own slice.
+- The range query is capped at `AUDIT_RANGE_MAX` (1000). Hitting the cap shows
+  a notice rather than truncating silently.
+- Range, page and search are mirrored into the URL, so a refresh or a shared
+  link reopens the same view.
+- Rows render through the shared `auditFormat.js` helpers (`actionStyle`,
+  `describeAction`, `fmtAuditTime`) — the same ones the dashboard uses, so an
+  action reads identically in both places — and the actor column shows the
+  resolved person (see [data-model → auditLog](../backend/data-model.md#auditlog)).
+
 ### Help — `/admin/help` (`AdminHelp.js`)
 A plain-language, bilingual (inline RO/EN) staff guide: one expandable card per
 admin page (with role badges derived from the real `PERM` map), three role cards,
@@ -165,9 +190,10 @@ These have page files but their route entries are commented out in
 - **Account:** `/account/subscription`, `/account/loyalty` (page files
   `Subscription.js`, `Loyalty.js`; `subscription`/`loyalty` services are the
   "hidden" services noted in the directory map).
-- **Admin:** `/admin/reports`, `/admin/audit` (`AdminReports.js`, `AdminAudit.js`).
-  Note these two commented entries guard on `['auth','admin']` only (no `perm:`),
-  unlike the live admin routes.
+- **Admin:** `/admin/reports` (`AdminReports.js`). Note this commented entry
+  guards on `['auth','admin']` only (no `perm:`), unlike the live admin routes.
+  (`/admin/audit` was **un-hidden 2026-07-27** — it is now a live route with a
+  `perm:audit` guard and a sidebar link; see *Action log* above.)
 
 ---
 

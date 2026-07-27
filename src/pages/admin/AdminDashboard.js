@@ -6,108 +6,8 @@ import { getAllRecentTransactions } from '../../services/tokenService.js';
 import { getAuditLog } from '../../services/auditService.js';
 import { getCollection } from '../../firebase/db.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
-
-const ACTION_STYLES = {
-  booking_checkin: 'bg-leaf/10 text-leaf',
-  booking_checkout: 'bg-blue-100 text-blue-600',
-  booking_created: 'bg-mango/10 text-mango',
-  booking_cancelled: 'bg-red-100 text-red-500',
-  booking_refunded: 'bg-mango/10 text-mango',
-  spot_updated: 'bg-purple-100 text-purple-600',
-  shuttle_updated: 'bg-purple-100 text-purple-600',
-  pricing_updated: 'bg-yellow-100 text-yellow-700',
-  addon_updated: 'bg-yellow-100 text-yellow-700',
-  subscription_created: 'bg-mango/10 text-mango',
-  token_purchase: 'bg-leaf/10 text-leaf',
-  token_used: 'bg-blue-100 text-blue-600',
-  token_checkout: 'bg-purple-100 text-purple-600',
-  token_refund: 'bg-mango/10 text-mango',
-  token_pack_created: 'bg-yellow-100 text-yellow-700',
-  token_pack_updated: 'bg-yellow-100 text-yellow-700',
-  order_marked_paid: 'bg-leaf/10 text-leaf',
-  order_marked_unpaid: 'bg-red-100 text-red-500',
-  admin_credits_granted: 'bg-mango/10 text-mango',
-  admin_user_created: 'bg-blueberry/10 text-blueberry',
-  admin_user_deleted: 'bg-red-100 text-red-500',
-  admin_invite_sent: 'bg-blueberry/10 text-blueberry',
-};
-
-// Friendly per-action message. Pulls fields from newValue when available;
-// falls back to the entity id when not. This is the alternative to the
-// previous behavior of dumping raw `{old} → {new}` JSON, which was
-// unreadable for non-engineers.
-function describeAction(item, locale) {
-  const a = item.action;
-  const nv = item.newValueObj || {};
-  const id = item.entityId || '';
-  const idShort = id ? id.slice(0, 8) : '';
-  const ro = locale === 'ro';
-
-  switch (a) {
-    case 'booking_checkin':
-      return ro
-        ? `Check-in rezervare ${idShort}${nv.spotId ? ` la locul ${nv.spotId}` : ''}`
-        : `Booking ${idShort} checked in${nv.spotId ? ` at spot ${nv.spotId}` : ''}`;
-    case 'booking_checkout':
-      return ro ? `Check-out rezervare ${idShort}` : `Booking ${idShort} checked out`;
-    case 'booking_created':
-      return ro
-        ? `Rezervare nouă${nv.code ? ` (${nv.code})` : ''}`
-        : `New booking${nv.code ? ` (${nv.code})` : ''}`;
-    case 'booking_cancelled':
-      return ro ? `Rezervare anulată ${idShort}` : `Booking ${idShort} cancelled`;
-    case 'booking_refunded':
-      return ro
-        ? `Rambursare ${idShort}${nv.amount ? ` (${nv.amount} lei)` : ''}`
-        : `Refund ${idShort}${nv.amount ? ` (${nv.amount} lei)` : ''}`;
-    case 'spot_updated':
-      return ro
-        ? `Loc ${id} → ${nv.status || '?'}`
-        : `Spot ${id} → ${nv.status || '?'}`;
-    case 'token_purchase':
-      return ro
-        ? `Achiziție credite${nv.quantity ? ` (${nv.quantity})` : ''}${nv.licensePlate ? ` pentru ${nv.licensePlate}` : ''}`
-        : `Credit purchase${nv.quantity ? ` (${nv.quantity})` : ''}${nv.licensePlate ? ` for ${nv.licensePlate}` : ''}`;
-    case 'token_used':
-      return ro
-        ? `Credit folosit${nv.licensePlate ? ` pentru ${nv.licensePlate}` : ''}`
-        : `Credit used${nv.licensePlate ? ` for ${nv.licensePlate}` : ''}`;
-    case 'token_refund':
-      return ro ? `Rambursare credit` : `Credit refunded`;
-    case 'token_pack_created':
-      return ro ? `Pachet credite creat` : `Token pack created`;
-    case 'token_pack_updated':
-      return ro ? `Pachet credite actualizat` : `Token pack updated`;
-    case 'order_marked_paid':
-      return ro
-        ? `Plată marcată${nv.paidBy ? ` (${nv.paidBy === 'admin-cash' ? 'numerar' : 'card'})` : ''}`
-        : `Payment marked${nv.paidBy ? ` (${nv.paidBy === 'admin-cash' ? 'cash' : 'card'})` : ''}`;
-    case 'order_marked_unpaid':
-      return ro ? `Plată anulată` : `Payment reversed`;
-    case 'admin_credits_granted':
-      return ro
-        ? `Credite acordate cu numerar${nv.licensePlate ? ` pentru ${nv.licensePlate}` : ''}`
-        : `Cash credits granted${nv.licensePlate ? ` for ${nv.licensePlate}` : ''}`;
-    case 'admin_user_created':
-      return ro
-        ? `Cont creat${nv.email ? ` (${nv.email})` : ''}`
-        : `User created${nv.email ? ` (${nv.email})` : ''}`;
-    case 'admin_user_deleted':
-      return ro
-        ? `Cont șters${nv.email ? ` (${nv.email})` : ''}`
-        : `User deleted${nv.email ? ` (${nv.email})` : ''}`;
-    case 'admin_invite_sent':
-      return ro
-        ? `Invitație trimisă${nv.email ? ` la ${nv.email}` : ''}`
-        : `Invite sent${nv.email ? ` to ${nv.email}` : ''}`;
-    case 'pricing_updated':
-      return ro ? `Tarife actualizate` : `Pricing updated`;
-    case 'shuttle_updated':
-      return ro ? `Program microbuz actualizat` : `Shuttle schedule updated`;
-    default:
-      return ro ? `${a.replace(/_/g, ' ')} ${idShort}` : `${a.replace(/_/g, ' ')} ${idShort}`;
-  }
-}
+// Shared with /admin/audit so the same action reads identically in both places.
+import { actionStyle, actionLabel, describeAction, fmtAuditTime } from '../../components/admin/auditFormat.js';
 
 // Reusable: get a YYYY-MM-DD string in Europe/Bucharest TZ.
 function localDay(iso) {
@@ -321,23 +221,24 @@ export default async function AdminDashboard(container) {
 
         <!-- Recent Activity -->
         <div>
-          <h2 class="font-heading font-bold text-lg mb-4 text-charcoal">${t('admin.recentActivity')}</h2>
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="font-heading font-bold text-lg text-charcoal">${t('admin.recentActivity')}</h2>
+            <a href="${localePath('/admin/audit')}" data-link class="text-[13px] font-semibold text-blueberry hover:text-blueberry-hover hover:underline transition-colors shrink-0">${t('audit.seeAll')} →</a>
+          </div>
           <div class="card-solid rounded-2xl overflow-hidden">
             <div class="divide-y divide-frost-deep/60">
               ${activityRows.length > 0 ? activityRows.map(item => {
-                const time = item.timestamp ? new Date(item.timestamp).toLocaleString(locale === 'ro' ? 'ro-RO' : 'en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '--:--';
-                const actionStyle = ACTION_STYLES[item.action] || 'bg-gray-100 text-gray-600';
                 const actor = (item.user || '').split('@')[0] || '—';
-                const description = describeAction(item, locale);
-                // Both carry user-supplied data (audit payloads hold plates /
-                // codes / names; the actor resolves to an account's email or
-                // display name, and a customer self-cancel makes the CUSTOMER
-                // the actor) and land in innerHTML — escape before rendering.
+                // Both the description and the actor carry user-supplied data
+                // (audit payloads hold plates / codes / names; the actor
+                // resolves to an account's email or display name, and a
+                // customer self-cancel makes the CUSTOMER the actor) and land
+                // in innerHTML — escape before rendering.
                 return `
                 <div class="flex flex-wrap items-center gap-3 px-6 py-4">
-                  <span class="font-mono text-[12px] text-dim w-24 shrink-0">${time}</span>
-                  <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${actionStyle}">${escapeHtml(String(item.action || '').replace(/_/g, ' '))}</span>
-                  <span class="text-[14px] text-charcoal/80 flex-1 min-w-0 truncate">${escapeHtml(description)}</span>
+                  <span class="font-mono text-[12px] text-dim w-24 shrink-0">${escapeHtml(fmtAuditTime(item.timestamp, locale))}</span>
+                  <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${actionStyle(item.action)}">${escapeHtml(actionLabel(item.action))}</span>
+                  <span class="text-[14px] text-charcoal/80 flex-1 min-w-0 truncate">${escapeHtml(describeAction(item, locale))}</span>
                   <span class="text-[12px] text-dim font-mono shrink-0 hidden sm:inline" title="${escapeHtml(item.user || '')}">${escapeHtml(actor)}</span>
                 </div>`;
               }).join('') : `

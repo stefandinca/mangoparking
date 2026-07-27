@@ -1,4 +1,4 @@
-import { addDocument, getCollection, getDocument, orderBy, limit } from '../firebase/db.js';
+import { addDocument, getCollection, getDocument, where, orderBy, limit } from '../firebase/db.js';
 import { getCurrentUser } from '../firebase/auth.js';
 import { t } from '../i18n/index.js';
 
@@ -65,38 +65,77 @@ export async function auditLog(action, entityType, entityId, oldValue, newValue)
   });
 }
 
+// Shape a raw auditLog doc into the row the admin surfaces render. `user` is
+// filled in afterwards by resolveActors — see the note at the top of the file.
+function toRow(e) {
+  return {
+    id: e.id,
+    timestamp: e.timestamp,
+    action: e.action,
+    entityType: e.entityType || '',
+    entityId: e.entityId || '',
+    entity: (e.entityType || '') + ' ' + (e.entityId || ''),
+    // Only userEmail is readable as-is. Server rows (actorUid) and older
+    // client rows that stored just a userId both get resolved by resolveActors.
+    user: e.userEmail || '',
+    actorUid: e.actorUid || e.userId || null,
+    oldValueObj: e.oldValue || null,
+    newValueObj: e.newValue || e.payload || null,
+    details: e.oldValue && e.newValue
+      ? JSON.stringify(e.oldValue) + ' → ' + JSON.stringify(e.newValue)
+      : e.newValue ? JSON.stringify(e.newValue) : '',
+  };
+}
+
+// Fill in `user` for rows that only carry a uid. One lookup per DISTINCT
+// actor (a page of rows is a handful of people even when it's hundreds of
+// rows), resolved in parallel and cached across calls.
+async function resolveActors(rows) {
+  const pending = [...new Set(rows.filter(r => !r.user && r.actorUid).map(r => r.actorUid))];
+  const labels = new Map(
+    await Promise.all(pending.map(async uid => [uid, await resolveActorLabel(uid)])),
+  );
+  return rows.map(r => ({ ...r, user: r.user || labels.get(r.actorUid) || '' }));
+}
+
 /**
- * Get audit log entries
+ * Get the N most recent audit entries (the dashboard's summary feed).
  */
 export async function getAuditLog(limitCount = 50) {
   try {
     const entries = await getCollection('auditLog', orderBy('timestamp', 'desc'), limit(limitCount));
-    const rows = entries.map(e => ({
-      id: e.id,
-      timestamp: e.timestamp,
-      action: e.action,
-      entityType: e.entityType || '',
-      entityId: e.entityId || '',
-      entity: (e.entityType || '') + ' ' + (e.entityId || ''),
-      // Only userEmail is readable as-is. Server rows (actorUid) and older
-      // client rows that stored just a userId both get resolved below.
-      user: e.userEmail || '',
-      actorUid: e.actorUid || e.userId || null,
-      oldValueObj: e.oldValue || null,
-      newValueObj: e.newValue || e.payload || null,
-      details: e.oldValue && e.newValue
-        ? JSON.stringify(e.oldValue) + ' → ' + JSON.stringify(e.newValue)
-        : e.newValue ? JSON.stringify(e.newValue) : '',
-    }));
-
-    // One lookup per DISTINCT actor (a page of rows is typically a handful of
-    // people), resolved in parallel and cached across calls.
-    const pending = [...new Set(rows.filter(r => !r.user && r.actorUid).map(r => r.actorUid))];
-    const labels = new Map(
-      await Promise.all(pending.map(async uid => [uid, await resolveActorLabel(uid)])),
-    );
-    return rows.map(r => ({ ...r, user: r.user || labels.get(r.actorUid) || '' }));
+    return await resolveActors(entries.map(toRow));
   } catch {
     return [];
+  }
+}
+
+// Hard ceiling for a single range query. Deliberately surfaced to the caller
+// (`capped`) rather than silently truncating — a range that hits this is
+// showing only its newest rows and the UI must say so.
+export const AUDIT_RANGE_MAX = 1000;
+
+/**
+ * Get audit entries inside a date range, newest first — the /admin/audit
+ * history. `fromIso`/`toIso` are inclusive ISO instants.
+ *
+ * `timestamp` is an ISO string on every writer (client and server), so a
+ * lexicographic range works, and because the range and the sort are on the
+ * SAME field Firestore needs no composite index for it.
+ *
+ * Returns `{ rows, capped }`; a failure degrades to an empty, uncapped result
+ * so the page renders its empty state instead of breaking.
+ */
+export async function listAuditRange({ fromIso, toIso, max = AUDIT_RANGE_MAX } = {}) {
+  try {
+    const constraints = [];
+    if (fromIso) constraints.push(where('timestamp', '>=', fromIso));
+    if (toIso) constraints.push(where('timestamp', '<=', toIso));
+    constraints.push(orderBy('timestamp', 'desc'), limit(max));
+    const entries = await getCollection('auditLog', ...constraints);
+    return { rows: await resolveActors(entries.map(toRow)), capped: entries.length >= max };
+  } catch (err) {
+    console.warn('listAuditRange failed:', err?.message);
+    return { rows: [], capped: false };
   }
 }

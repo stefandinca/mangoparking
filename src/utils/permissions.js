@@ -43,20 +43,24 @@ export const PERM = Object.freeze({
   PROMOTIONS:   'promotions',
   WEBSITE:      'website',
   HELP:         'help',
+  AUDIT:        'audit',
 });
 
 const ROLE_PERMISSIONS = {
   [ROLE_ADMIN]:    Object.values(PERM),
   [ROLE_AGENT]:    [
     PERM.DASHBOARD, PERM.ACTIVITY, PERM.CHECKINS, PERM.TRANSACTIONS, PERM.CASHBOOK,
-    PERM.CAPACITY, PERM.SHUTTLE, PERM.REFUNDS, PERM.HELP,
+    PERM.CAPACITY, PERM.SHUTTLE, PERM.REFUNDS, PERM.HELP, PERM.AUDIT,
     // Intentionally excluded: PRICING, USERS, LEGAL, VOUCHERS, PROMOTIONS,
     // REVIEWS, WEBSITE — agents see ops, not configuration / public-site
     // content (reviews moved under the admin-only Public website section).
     // Firestore rules also gate writes to settings docs to isAdmin() so even
     // direct API access fails.
+    // AUDIT is included: every admin-access role already sees the same feed
+    // (shortened) on its dashboard, and firestore.rules lets any isStaff()
+    // read auditLog — restricting the page would be cosmetic only.
   ],
-  [ROLE_DRIVER]:   [PERM.DASHBOARD, PERM.ACTIVITY, PERM.CHECKINS, PERM.CAPACITY, PERM.SHUTTLE, PERM.HELP],
+  [ROLE_DRIVER]:   [PERM.DASHBOARD, PERM.ACTIVITY, PERM.CHECKINS, PERM.CAPACITY, PERM.SHUTTLE, PERM.HELP, PERM.AUDIT],
   [ROLE_CUSTOMER]: [],
 };
 

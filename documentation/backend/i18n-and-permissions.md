@@ -105,10 +105,10 @@ Defined at `permissions.js:20-25`:
 | `customer` | `ROLE_CUSTOMER` | No admin access. **All new users are created `customer`** (enforced by rules). |
 
 ### The permission identifiers
-`PERM` (`permissions.js:28-45`) has **16 entries**, one per admin section:
+`PERM` (`permissions.js:28-46`) has **17 entries**, one per admin section:
 `dashboard`, `activity`, `checkins`, `transactions`, `cashbook`, `capacity`,
 `pricing`, `shuttle`, `reviews`, `users`, `legal`, `refunds`, `vouchers`,
-`promotions`, `website`, `help`.
+`promotions`, `website`, `help`, `audit`.
 
 ### Role → permission table
 `ROLE_PERMISSIONS` (`permissions.js:47-60`):
@@ -124,6 +124,7 @@ Defined at `permissions.js:20-25`:
 | shuttle | ✅ | ✅ | ✅ | — |
 | refunds | ✅ | ✅ | — | — |
 | help | ✅ | ✅ | ✅ | — |
+| audit | ✅ | ✅ | ✅ | — |
 | pricing | ✅ | — | — | — |
 | users | ✅ | — | — | — |
 | vouchers | ✅ | — | — | — |
@@ -132,15 +133,15 @@ Defined at `permissions.js:20-25`:
 | legal | ✅ | — | — | — |
 | website | ✅ | — | — | — |
 
-- **admin** = `Object.values(PERM)` → all 16.
+- **admin** = `Object.values(PERM)` → all 17.
 - **agent** = `dashboard, activity, checkins, transactions, cashbook, capacity,
-  shuttle, refunds, help` (9). Intentionally excludes every configuration /
+  shuttle, refunds, help, audit` (10). Intentionally excludes every configuration /
   public-content surface (pricing, users, legal, vouchers, promotions, reviews,
   website). Note **reviews moved under the admin-only "Public website" section**,
   so agents no longer see it (the code comment at `permissions.js:51-56` and the
   slightly older [admin-flows README](../admin-flows/README.md) role matrix,
   which still lists reviews for agents, differ — the code above is authoritative).
-- **driver** = `dashboard, activity, checkins, capacity, shuttle, help` (6).
+- **driver** = `dashboard, activity, checkins, capacity, shuttle, help, audit` (7).
 - **customer** = `[]`.
 
 ### Helper functions
@@ -171,12 +172,12 @@ first dispatch so a hard refresh doesn't wrongly bounce a signed-in user to
 `/login` (`src/router/index.js:44-50`).
 
 ### Sidebar consistency
-`AdminLayout` builds `ADMIN_LINKS` (13 links — dashboard, activity, checkins,
+`AdminLayout` builds `ADMIN_LINKS` (14 links — dashboard, activity, checkins,
 transactions, cashbook, refunds, vouchers, website, capacity, pricing, shuttle,
-users, help) and filters them with `hasPermission` in `visibleLinks()`
-(`AdminLayout.js:9-28`). The three consolidated editors — **promotions,
+users, audit, help) and filters them with `hasPermission` in `visibleLinks()`
+(`AdminLayout.js:9-29`). The three consolidated editors — **promotions,
 reviews, legal** — have `PERM` entries and standalone routes for deep links but
 **no sidebar link**; they are reached through the `/admin/website` tabs. So the
-sidebar shows at most 13 items even though `PERM` has 16 entries. Because the
+sidebar shows at most 14 items even though `PERM` has 17 entries. Because the
 sidebar and the route guards read the same map, a role can never see a link it
 cannot open, and vice versa.

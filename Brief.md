@@ -130,14 +130,15 @@ functions/src/     — index.js (Netopia + admin/cash/booking callables), emails
 
 ### Admin (auth + admin + per-section permission)
 `/admin` (dashboard), `/admin/checkins`, `/transactions`, `/cashbook`, `/refunds`,
-`/vouchers`, `/capacity`, `/pricing`, `/shuttle`, `/users`, `/help`, and
+`/vouchers`, `/capacity`, `/pricing`, `/shuttle`, `/users`, `/audit` (staff-action
+history with date range + pagination), `/help`, and
 `/admin/website` ("Public website", admin-only) — the front-end-content hub with
 tabs for the facility **gallery** and **opening hours** (new) plus the
 **promotions / reviews / legal** editors (consolidated; those routes still exist
 for deep links but are no longer separate sidebar entries).
 
 ### Hidden (code preserved, routes commented out)
-`/commuter`, `/account/subscription`, `/account/loyalty`, `/admin/reports`, `/admin/audit`.
+`/commuter`, `/account/subscription`, `/account/loyalty`, `/admin/reports`.
 
 ---
 
@@ -148,9 +149,9 @@ sidebar, and Firestore-rule logic — kept mutually consistent.
 
 | Role | Access |
 |------|--------|
-| **admin** | Every section — all 16 permissions, incl. config (pricing, users, legal, vouchers, promotions) and the Website content hub (gallery, hours, promotions, reviews, legal) |
-| **agent** (legacy `staff` alias) | Ops only: dashboard, activity, checkins, transactions, cashbook, capacity, shuttle, refunds, help — **no** config and **no** reviews |
-| **driver** | dashboard, activity, checkins, capacity, shuttle, help |
+| **admin** | Every section — all 17 permissions, incl. config (pricing, users, legal, vouchers, promotions) and the Website content hub (gallery, hours, promotions, reviews, legal) |
+| **agent** (legacy `staff` alias) | Ops only: dashboard, activity, checkins, transactions, cashbook, capacity, shuttle, refunds, audit, help — **no** config and **no** reviews |
+| **driver** | dashboard, activity, checkins, capacity, shuttle, audit, help |
 | **customer** | No admin access |
 
 New users are always created `role: customer` (enforced by rules). Role changes go

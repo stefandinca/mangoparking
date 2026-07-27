@@ -619,6 +619,7 @@ export default {
     website: 'Site public',
     websiteSubtitle: 'Gestionează conținutul site-ului: galerie, program, promoții, recenzii, pagini legale.',
     help: 'Ghid',
+    audit: 'Jurnal acțiuni',
     legalSubtitle: 'Editează termenii, politica de confidențialitate, GDPR, livrare și anulare.',
     legalTitle: 'Titlu pagină',
     legalIntro: 'Introducere',
@@ -1278,6 +1279,23 @@ export default {
   },
 
   // Common
+  // Admin → jurnal acțiuni (/admin/audit)
+  audit: {
+    rangeLabel: 'Interval',
+    rangeToday: 'Azi',
+    range7d: 'Ultimele 7 zile',
+    range30d: 'Ultimele 30 de zile',
+    rangeOr: 'sau',
+    rangeCustom: 'Alege un interval',
+    seeAll: 'Vezi toată activitatea',
+    empty: 'Nicio activitate în acest interval',
+    prev: 'Anterior',
+    next: 'Următor',
+    pageOf: 'Pagina {page} din {pages}',
+    showingRange: 'Se afișează {from}–{to} din {total} intrări',
+    capped: 'Se afișează cele mai recente {cap} intrări din acest interval — restrânge intervalul pentru a le vedea pe cele mai vechi.',
+  },
+
   common: {
     loading: 'Se încarcă...',
     error: 'A apărut o eroare',
