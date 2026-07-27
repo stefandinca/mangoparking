@@ -59,12 +59,43 @@ callables `checkInBooking`, `checkOutBooking`, `adminMarkOrderPaid`,
 [01-checkin-checkout-walkin](../admin-flows/01-checkin-checkout-walkin.md).
 
 ### Transactions — `/admin/transactions` (`AdminTransactions.js`)
-Unified ledger merging credit `tokenTransactions` and long-term `bookings` (~500
-most recent, newest first). Filter by type (purchase / use / refund / lateFee /
-adjustment / extension / longTerm) and status, search by email / plate / code, and
-open the walk-in modal. Read-only aggregation via `getAllRecentTransactions()` +
-`getCollection('bookings')`. Walkthrough:
-[02-reservations-transactions](../admin-flows/02-reservations-transactions.md).
+Three tabs over the same fetch:
+
+- **Toate / Credite** — the original unified ledger merging credit
+  `tokenTransactions` and long-term `bookings` (~500 most recent). Filter by
+  type and status, search by email / plate / code, open the walk-in modal.
+- **Rezervări** — the **reservation archive**: every `bookings` doc (long-term
+  *and* credit check-ins), which is the only place a completed booking from
+  months ago can be found (the check-in board is windowed and status-scoped).
+  Filters: status, payment status, type, source, plus search over code / plate /
+  email / phone / name. Paginated (25/page) with the shared pager, and a **CSV
+  export** of the current filtered set. A row opens the detail view below.
+
+### Reservation detail — `/admin/transactions?booking=…` (`AdminReservationDetail.js`)
+The full record behind one booking — previously ~15 of its ~60 fields were
+visible anywhere. Cards: customer & vehicle · stay · money · payment &
+invoicing · billing · operations. Empty fields are dropped, so a broker row
+shows its ParkVia trail and a web row shows its billing identity.
+
+Three things it surfaces that had no UI at all:
+- **What was actually charged.** `booking.totalPrice` is the gross; the linked
+  `pendingOrders` doc carries the post-discount, post-voucher amount. Both are
+  shown when they differ — the gap behind [BUGS.md #2](../admin-flows/BUGS.md).
+- **The fiscal trail** — SmartBill proforma / invoice / storno numbers, status
+  and last error.
+- **History** — the booking's own `auditLog` rows (`where entityId == id`,
+  sorted client-side, so no composite index), rendered with the shared
+  `describeAction`. `updateBookingDetails` now records the *before* values of
+  the changed keys, so an edit reads as a change and not just a new value.
+
+**Actions** (check-in, check-out, collect payment, edit, charge overstay,
+resend confirmation, cancel + refund) run through
+`src/components/admin/bookingActions.js` — extracted from `AdminCheckIns` so
+both surfaces share one implementation of the money-moving paths. **Copy UX**:
+click-to-copy on plate / email / phone / order id, plus a *Copy summary* button
+producing a plain-text block for WhatsApp.
+
+Walkthrough: [02-reservations-transactions](../admin-flows/02-reservations-transactions.md).
 
 ### Cashbook — `/admin/cashbook` (`AdminCashbook.js`)
 Per-agent cash drawer. Admins see every agent's open entries; agents see only

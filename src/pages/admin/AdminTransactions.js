@@ -7,6 +7,11 @@ import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
+import { navigate } from '../../router/index.js';
+import { localePath } from '../../i18n/index.js';
+import { pagerHtml } from '../../components/admin/ListControls.js';
+import { fmtDateTime } from '../../components/admin/bookingActions.js';
+import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
 
 // /admin/transactions — unified ledger.
 //
@@ -52,6 +57,16 @@ const STATUS_STYLES = {
 };
 
 export default async function AdminTransactions(container) {
+  // /admin/transactions?booking=<id> is the reservation detail view. Same
+  // in-route trick as the user profile: the router matches on path only, so
+  // both live behind this entry and the sidebar item stays highlighted.
+  const search = new URLSearchParams(window.location.search);
+  const bookingParam = search.get('booking');
+  if (bookingParam) {
+    const { default: AdminReservationDetail } = await import('./AdminReservationDetail.js');
+    return AdminReservationDetail(container, { bookingId: bookingParam });
+  }
+
   const locale = getLocale();
   updateMeta({ title: `${t('transactions.pageTitle')} — Admin — ManGO Parking`, description: t('transactions.subtitle'), lang: locale });
 
@@ -126,6 +141,9 @@ export default async function AdminTransactions(container) {
       </button>
     </div>
 
+    <div class="flex flex-wrap items-center gap-2 mb-5" data-tabs></div>
+
+    <div data-ledger>
     <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
       <input data-filter type="search" placeholder="${t('transactions.searchPlaceholder')}"
         class="flex-1 max-w-md px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
@@ -170,6 +188,9 @@ export default async function AdminTransactions(container) {
         </table>
       </div>
     </div>
+    </div>
+
+    <div data-reservations class="hidden"></div>
   `);
 
   initAdminNav(page);
@@ -187,6 +208,147 @@ export default async function AdminTransactions(container) {
   let filterQ = '';
   let filterType = '';
   let filterStatus = '';
+
+  // ── Reservations archive ────────────────────────────────────────────────
+  // Every bookings doc (long-term AND credit check-ins) — the check-in board
+  // is windowed and status-scoped, so this is the only place a completed
+  // booking from months ago can be found.
+  const RES_PAGE_SIZE = 25;
+  let tab = ['credits', 'reservations'].includes(search.get('tab')) ? search.get('tab') : 'all';
+  let resQ = search.get('q') || '';
+  let resStatus = '';
+  let resPayment = '';
+  let resType = '';
+  let resSource = '';
+  let resPage = 1;
+
+  const tabsEl = qs('[data-tabs]', page);
+  const ledgerEl = qs('[data-ledger]', page);
+  const resEl = qs('[data-reservations]', page);
+
+  function setTabUrl() {
+    const p2 = new URLSearchParams();
+    if (tab !== 'all') p2.set('tab', tab);
+    if (resQ) p2.set('q', resQ);
+    const qsStr = p2.toString();
+    window.history.replaceState(null, '', qsStr ? `${window.location.pathname}?${qsStr}` : window.location.pathname);
+  }
+
+  function renderTabs() {
+    const pill = (key, label) => {
+      const active = key === tab;
+      return `<button type="button" data-tab="${key}" class="px-4 py-2 rounded-xl text-[14px] font-semibold transition-colors ${active ? 'bg-blueberry text-white' : 'bg-frost text-charcoal/70 hover:bg-frost-deep'}">${escapeHtml(label)}</button>`;
+    };
+    tabsEl.innerHTML = pill('all', t('transactions.tabAll'))
+      + pill('credits', t('transactions.tabCredits'))
+      + pill('reservations', t('transactions.tabReservations'));
+  }
+
+  function reservationMatches(b) {
+    const q = resQ.trim().toLowerCase();
+    if (resStatus && b.status !== resStatus) return false;
+    if (resPayment && b.paymentStatus !== resPayment) return false;
+    if (resType && (b.type || 'longTerm') !== resType) return false;
+    if (resSource && (b.source || 'web') !== resSource) return false;
+    if (!q) return true;
+    return `${b.code || ''} ${b.licensePlate || ''} ${b.contact?.email || ''} ${b.contact?.phone || ''} ${b.contact?.name || ''}`
+      .toLowerCase().includes(q);
+  }
+
+  const sortedBookings = bookings.slice().sort((a, b) =>
+    String(b.createdAt || b.dropoffAt || b.startDate || '').localeCompare(String(a.createdAt || a.dropoffAt || a.startDate || '')));
+
+  function renderReservations() {
+    const filtered = sortedBookings.filter(reservationMatches);
+    const pages = Math.max(1, Math.ceil(filtered.length / RES_PAGE_SIZE));
+    if (resPage > pages) resPage = pages;
+    const start = (resPage - 1) * RES_PAGE_SIZE;
+    const slice = filtered.slice(start, start + RES_PAGE_SIZE);
+    const selCls = 'px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40 transition-colors';
+    const opts = (name, values, current) => `<option value="">${escapeHtml(t(`reservations.filter${name}All`))}</option>`
+      + values.map((v) => `<option value="${v}" ${v === current ? 'selected' : ''}>${escapeHtml(t(`reservations.${name === 'Source' ? 'source' : name === 'Type' ? 'type' : 'status'}.${v}`) || v)}</option>`).join('');
+
+    resEl.innerHTML = `
+      <div class="flex flex-col lg:flex-row lg:items-center gap-3 mb-4">
+        <input data-res-q type="search" value="${escapeHtml(resQ)}" placeholder="${escapeHtml(t('reservations.searchPlaceholder'))}"
+          class="flex-1 max-w-md px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
+        <select data-res-status class="${selCls}">${opts('Status', ['upcoming', 'active', 'completed', 'cancelled', 'no-show'], resStatus)}</select>
+        <select data-res-payment class="${selCls}">${opts('Payment', ['paid', 'unpaid', 'refund-pending', 'refunded'], resPayment)}</select>
+        <select data-res-type class="${selCls}">${opts('Type', ['longTerm', 'credit'], resType)}</select>
+        <select data-res-source class="${selCls}">${opts('Source', ['web', 'admin', 'broker', 'walk-in'], resSource)}</select>
+        <button type="button" data-res-export class="bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[14px] px-4 py-2.5 rounded-xl transition-colors">${escapeHtml(t('reservations.export'))}</button>
+      </div>
+
+      ${filtered.length ? `
+      <div class="card-solid rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-[14px]">
+            <thead class="bg-frost text-charcoal/70 text-[12px] uppercase tracking-wider">
+              <tr>
+                <th class="text-left px-4 py-3">${t('reservations.code')}</th>
+                <th class="text-left px-4 py-3">${t('reservations.customer')}</th>
+                <th class="text-left px-4 py-3">${t('reservations.plate')}</th>
+                <th class="text-left px-4 py-3">${t('reservations.period')}</th>
+                <th class="text-left px-4 py-3">${t('reservations.statusLabel')}</th>
+                <th class="text-left px-4 py-3">${t('reservations.paymentLabel')}</th>
+                <th class="text-right px-4 py-3">${t('reservations.total')}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-frost-deep/60">
+              ${slice.map((b) => `
+                <tr data-res-row="${escapeHtml(b.id)}" class="hover:bg-frost transition-colors cursor-pointer">
+                  <td class="px-4 py-3 font-mono font-semibold text-blueberry">${escapeHtml(b.code || b.id.slice(0, 6))}</td>
+                  <td class="px-4 py-3">${escapeHtml(b.contact?.name || '—')}</td>
+                  <td class="px-4 py-3 font-mono">${escapeHtml(b.licensePlate || '—')}</td>
+                  <td class="px-4 py-3 text-charcoal/70 whitespace-nowrap">${escapeHtml(fmtDateTime(b.dropoffAt || b.startDate, locale))} → ${escapeHtml(fmtDateTime(b.pickupAt || b.endDate, locale))}</td>
+                  <td class="px-4 py-3"><span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_STYLES[b.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml(t(`reservations.status.${b.status}`) || b.status || '—')}</span></td>
+                  <td class="px-4 py-3"><span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_STYLES[b.paymentStatus] || 'bg-gray-100 text-gray-600'}">${escapeHtml(t(`reservations.status.${b.paymentStatus}`) || b.paymentStatus || '—')}</span></td>
+                  <td class="px-4 py-3 text-right font-semibold whitespace-nowrap">${b.totalPrice != null ? `${Number(b.totalPrice)} ${escapeHtml(t('common.lei'))}` : '—'}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${pagerHtml({ page: resPage, pages, from: start + 1, to: start + slice.length, total: filtered.length })}
+      </div>`
+      : `<div class="card-solid rounded-2xl p-10 text-center text-dim">${escapeHtml(t('reservations.empty'))}</div>`}
+    `;
+  }
+
+  function renderTab() {
+    renderTabs();
+    const isRes = tab === 'reservations';
+    ledgerEl.classList.toggle('hidden', isRes);
+    resEl.classList.toggle('hidden', !isRes);
+    if (isRes) renderReservations(); else render();
+  }
+
+  delegate(page, 'click', '[data-tab]', (_e, btn) => {
+    tab = btn.dataset.tab;
+    resPage = 1;
+    setTabUrl();
+    renderTab();
+  });
+  delegate(page, 'click', '[data-res-row]', (_e, tr) => {
+    navigate(localePath(`/admin/transactions?booking=${encodeURIComponent(tr.dataset.resRow)}`));
+  });
+  delegate(page, 'input', '[data-res-q]', (_e, input) => { resQ = input.value; resPage = 1; setTabUrl(); renderReservations(); });
+  delegate(page, 'change', '[data-res-status]', (_e, sel) => { resStatus = sel.value; resPage = 1; renderReservations(); });
+  delegate(page, 'change', '[data-res-payment]', (_e, sel) => { resPayment = sel.value; resPage = 1; renderReservations(); });
+  delegate(page, 'change', '[data-res-type]', (_e, sel) => { resType = sel.value; resPage = 1; renderReservations(); });
+  delegate(page, 'change', '[data-res-source]', (_e, sel) => { resSource = sel.value; resPage = 1; renderReservations(); });
+  delegate(page, 'click', '[data-page-prev]', () => { if (resPage > 1) { resPage--; renderReservations(); } });
+  delegate(page, 'click', '[data-page-next]', () => { resPage++; renderReservations(); });
+  delegate(page, 'click', '[data-res-export]', () => {
+    const filtered = sortedBookings.filter(reservationMatches);
+    const headers = ['code', 'type', 'status', 'payment', 'customer', 'email', 'phone', 'plate', 'dropoff', 'pickup', 'days', 'total', 'source'];
+    const csvRows = filtered.map((b) => [
+      b.code || b.id, b.type || 'longTerm', b.status || '', b.paymentStatus || '',
+      b.contact?.name || '', b.contact?.email || '', b.contact?.phone || '', b.licensePlate || '',
+      b.dropoffAt || b.startDate || '', b.pickupAt || b.endDate || '', b.days ?? '',
+      b.totalPrice ?? '', b.source || '',
+    ]);
+    downloadCsv(`mango-reservations-${todayStamp()}.csv`, buildCsv(headers, csvRows));
+  });
 
   function render() {
     const q = filterQ.trim().toLowerCase();
@@ -220,7 +382,7 @@ export default async function AdminTransactions(container) {
   filterInput.addEventListener('input', (e) => { filterQ = String(e.target.value || ''); render(); });
   typeSelect.addEventListener('change', (e) => { filterType = String(e.target.value || ''); render(); });
   statusSelect.addEventListener('change', (e) => { filterStatus = String(e.target.value || ''); render(); });
-  render();
+  renderTab();
 
   // ── Create-transaction modal ──────────────────────────────────────
   // Modal lives in src/components/admin/CreateTransactionModal.js so the

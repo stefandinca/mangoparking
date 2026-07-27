@@ -170,7 +170,12 @@ export async function updateBookingDetails(bookingId, patch = {}) {
   // Free-text staff comment about this booking.
   if (patch.notes !== undefined) update.notes = String(patch.notes || '').trim();
   await updateDocument('bookings', bookingId, update);
-  await auditLog('booking_edited', 'booking', bookingId, null, update);
+  // Record the BEFORE values of exactly the keys that changed, so the
+  // reservation's history can render "from → to" instead of only the new
+  // value (this used to pass null, which made an edit unauditable).
+  const before = {};
+  for (const key of Object.keys(update)) before[key] = old[key] ?? null;
+  await auditLog('booking_edited', 'booking', bookingId, before, update);
   return update;
 }
 

@@ -79,8 +79,11 @@ export function wireReservationLinks(container, resolve, beforeNavigate) {
       if (typeof beforeNavigate === 'function') beforeNavigate();
       navigate(`${localePath('/admin/checkins')}?${p.toString()}`);
     } else {
-      const { openBookingDetail } = await import('./BookingDetailModal.js');
-      openBookingDetail(b);
+      // Historical reservation: no row on the check-in board, so go to the
+      // full record — every stored field plus this booking's history — rather
+      // than the 15-field read-only modal it used to open.
+      if (typeof beforeNavigate === 'function') beforeNavigate();
+      navigate(`${localePath('/admin/transactions')}?booking=${encodeURIComponent(id)}`);
     }
   });
 }

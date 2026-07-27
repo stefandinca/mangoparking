@@ -226,6 +226,40 @@ export function describeAction(item, locale) {
       return ro
         ? `Invitație trimisă${nv.email ? ` la ${nv.email}` : ''}`
         : `Invite sent${nv.email ? ` to ${nv.email}` : ''}`;
+    case 'booking_edited': {
+      // updateBookingDetails now records the before-values of the changed
+      // keys, so name the fields rather than dumping the patch.
+      const fields = Object.keys(nv || {}).filter((k) => k !== 'updatedAt');
+      const names = { contact: ro ? 'contact' : 'contact', licensePlate: ro ? 'număr' : 'plate', dropoffAt: ro ? 'dată sosire' : 'drop-off', pickupAt: ro ? 'dată plecare' : 'pick-up', days: ro ? 'zile' : 'days', notes: ro ? 'notițe' : 'notes' };
+      const list = fields.map((f) => names[f] || f).join(', ');
+      return ro
+        ? `Rezervare modificată${list ? ` (${list})` : ''}`
+        : `Reservation edited${list ? ` (${list})` : ''}`;
+    }
+    case 'booking_repriced':
+      return ro
+        ? `Rezervare re-tarifată${nv.newTotal != null ? ` → ${nv.newTotal} lei` : ''}`
+        : `Reservation repriced${nv.newTotal != null ? ` → ${nv.newTotal} lei` : ''}`;
+    case 'booking_reprice_email_requested':
+      return ro ? 'Cerere de plată trimisă (prelungire)' : 'Extension payment request emailed';
+    case 'booking_extension_settled':
+      return ro
+        ? `Prelungire încasată${nv.chargedAmount != null ? ` (${nv.chargedAmount} lei)` : ''}`
+        : `Extension settled${nv.chargedAmount != null ? ` (${nv.chargedAmount} lei)` : ''}`;
+    case 'booking_overstay_charged':
+      return ro
+        ? `Depășire încasată${nv.amount != null ? ` (${nv.amount} lei)` : ''}`
+        : `Overstay charged${nv.amount != null ? ` (${nv.amount} lei)` : ''}`;
+    case 'booking_checkout_refund_resolved':
+      return ro ? 'Refund parțial rezolvat' : 'Partial refund resolved';
+    case 'booking_no_show':
+      return ro ? 'Marcată no-show' : 'Marked as no-show';
+    case 'booking_amended':
+      return ro ? 'Rezervare actualizată de broker' : 'Amended by the broker';
+    case 'parkvia_noshow_reported':
+      return ro ? 'No-show raportat către ParkVia' : 'No-show reported to ParkVia';
+    case 'parkvia_cancel_needs_review':
+      return ro ? 'Anulare ParkVia — necesită verificare' : 'ParkVia cancellation needs review';
     case 'pricing_updated':
       return ro ? 'Tarife actualizate' : 'Pricing updated';
     case 'shuttle_updated':
