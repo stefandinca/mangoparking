@@ -23,7 +23,7 @@ import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js
 import { delegate, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { subscribeCollection, getCollection } from '../../firebase/db.js';
+import { subscribeCollection, getCollection, where } from '../../firebase/db.js';
 import { showToast } from '../../components/core/Toast.js';
 import { confirmModal } from '../../components/core/Modal.js';
 import { getTokenPacks } from '../../services/tokenService.js';
@@ -777,12 +777,14 @@ export default async function AdminCheckIns(container) {
   }
 
   // ── Subscriptions ──
-  // Subscribe once to all bookings; filter per tab in memory. The
-  // collection is small at our scale (thousands of rows tops).
+  // Live statuses only — the five tabs never render completed/cancelled
+  // bookings, so streaming the whole archive (and re-sending it on every
+  // snapshot) is pure waste that grows with lifetime volume. Single-field
+  // 'in' filter → automatic index. Filtered per tab in memory as before.
   unsub = subscribeCollection('bookings', (rows) => {
     bookings = rows;
     rerender();
-  });
+  }, where('status', 'in', ['upcoming', 'active', 'no-show']));
 
   // Door-to-airport transfers — separate collection, drives the Transfers tab.
   unsubTransfers = subscribeCollection('transfers', (rows) => {

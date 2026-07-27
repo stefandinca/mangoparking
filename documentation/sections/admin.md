@@ -48,7 +48,11 @@ the check-ins tab. No dedicated admin-flows walkthrough yet.
 ### Check-ins — `/admin/checkins` (`AdminCheckIns.js`)
 The core daily-ops screen. Five tabs: **Check-in** (upcoming, pay-first),
 **Check-out** (active, incl. credit check-ins), **Overdue** (past pickup + grace),
-**No-show** (auto-flagged), **Transfers** (door-to-airport legs). Plate/name/code
+**No-show** (auto-flagged), **Transfers** (door-to-airport legs). The live
+`bookings` subscription is scoped to `status in [upcoming, active, no-show]`
+(single-field filter, automatic index) — the board never renders
+completed/cancelled rows, so it no longer re-streams the whole archive on
+every snapshot as lifetime volume grows. Plate/name/code
 search and a today/week/month/custom window selector. Actions: check-in, check-out,
 charge overstay, collect payment, cancel+refund, edit booking details, resend
 confirmation email, reprice, and transfer complete/cancel/delete. **Walk-ins** are
@@ -64,7 +68,18 @@ the same fetch. All timestamps render through `anyToIso` (`src/utils/date.js`)
 — client-written docs carry Firestore `Timestamp` objects in
 `createdAt`/`updatedAt` (db.js stamps `serverTimestamp()`), which used to leak
 as raw `Timestamp(seconds=…)` text in the date columns and to corrupt the
-newest-first string sort. Status/payment chips render via
+newest-first string sort. Since 2026-07 the db.js read boundary additionally
+runs every doc through `normalizeDocDates` (`src/utils/date.js`), so
+Timestamps are already ISO strings by the time any page sees them; the
+per-surface `anyToIso` calls remain as belt-and-braces.
+
+**Known read ceilings (deliberate).** The reservation archive and the
+dashboard fetch the whole `bookings` collection: the archive because
+completeness is its job (client-paginated), the dashboard because `createdAt`
+is *mixed-typed* across the collection (Timestamp on client writes, ISO
+string on function writes) and a Firestore range/orderBy constraint only
+matches one type — a server-side window would silently drop rows. Revisit
+after a stored-field migration to a single type. Status/payment chips render via
 `reservationStatusLabel` (bookingActions.js), which falls back to `—` / the raw
 value instead of echoing a `reservations.status.undefined` key for bookings
 with no `paymentStatus`.

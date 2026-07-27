@@ -32,6 +32,35 @@ export function anyToIso(v) {
   return null;
 }
 
+// A live Firestore Timestamp (not a serialized shape — those only appear
+// after JSON round-trips, which doc reads never do).
+function isFirestoreTimestamp(v) {
+  return !!v && typeof v.toDate === 'function' && typeof v.seconds === 'number';
+}
+
+/**
+ * Recursively convert Firestore Timestamps in a document's data to ISO
+ * strings. Applied at the db.js read boundary (getDocument/getCollection/
+ * subscribe*) so `serverTimestamp()`-written fields (createdAt/updatedAt/…)
+ * can never leak "Timestamp(seconds=…)" into the UI or corrupt string
+ * sorts again. Walks plain objects and arrays only — class instances
+ * (GeoPoint, DocumentReference, …) pass through untouched. Depth-capped
+ * as a cycle/pathology guard; at the cap the value is returned as-is.
+ */
+export function normalizeDocDates(value, depth = 8) {
+  if (value == null || depth <= 0) return value;
+  if (isFirestoreTimestamp(value)) {
+    try { return value.toDate().toISOString(); } catch { return value; }
+  }
+  if (Array.isArray(value)) return value.map((v) => normalizeDocDates(v, depth - 1));
+  if (typeof value === 'object' && (value.constructor === Object || value.constructor === undefined)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = normalizeDocDates(v, depth - 1);
+    return out;
+  }
+  return value;
+}
+
 // ── Europe/Bucharest wall-clock ↔ instant ────────────────────────────────
 // Bookings are FOR the lot in Otopeni, so a picked "10:00" always means
 // 10:00 Romanian time — regardless of the timezone of the device making the

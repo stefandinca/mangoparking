@@ -100,6 +100,14 @@ export default async function AdminDashboard(container) {
 
   // Fetch real data. Pull 90 days of token transactions + bookings up front
   // so the chart tab switcher is instant (re-buckets in memory).
+  //
+  // The bookings fetch is deliberately UNSCOPED: `createdAt` is mixed-typed
+  // across the collection (Firestore Timestamp on client writes via
+  // addDocument's serverTimestamp, ISO string on Cloud Function writes), and
+  // Firestore range/orderBy constraints only match one type — a server-side
+  // 90-day window would silently drop half the rows. Until the stored field
+  // is migrated to one type, filter client-side; the read boundary
+  // (db.js normalizeDocDates) at least guarantees uniform values in memory.
   const [capacity, tokenTx, recentActivity, allBookings] = await Promise.all([
     getCapacity().catch(() => ({ total: 110, occupied: 0, available: 110 })),
     getAllRecentTransactions(2000).catch(() => []),

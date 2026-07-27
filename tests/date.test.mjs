@@ -2,7 +2,7 @@
 // wall-clock ↔ instant converters every booking path depends on.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { anyToIso, bucharestLocalToIso, isoToBucharestLocal, daysBetween } from '../src/utils/date.js';
+import { anyToIso, bucharestLocalToIso, isoToBucharestLocal, daysBetween, normalizeDocDates } from '../src/utils/date.js';
 
 test('anyToIso: strings pass through untouched', () => {
   assert.equal(anyToIso('2026-05-08T06:37:55.520Z'), '2026-05-08T06:37:55.520Z');
@@ -62,6 +62,52 @@ test('isoToBucharestLocal: legacy date-only strings mean Bucharest midnight', ()
   assert.equal(isoToBucharestLocal('2026-05-08'), '2026-05-08 00:00');
   assert.equal(isoToBucharestLocal(''), '');
   assert.equal(isoToBucharestLocal('garbage'), '');
+});
+
+// Mimics a live Firestore Timestamp (has toDate + seconds).
+const fakeTimestamp = (ms) => ({
+  seconds: Math.floor(ms / 1000),
+  nanoseconds: (ms % 1000) * 1e6,
+  toDate: () => new Date(ms),
+});
+
+test('normalizeDocDates: converts nested live Timestamps to ISO strings', () => {
+  const ms = 1778224675520;
+  const doc = {
+    createdAt: fakeTimestamp(ms),
+    contact: { name: 'Ana', verifiedAt: fakeTimestamp(ms) },
+    history: [{ at: fakeTimestamp(ms) }, 'keep'],
+    totalPrice: 250,
+    dropoffAt: '2026-07-20T09:00:00.000Z',
+    nothing: null,
+  };
+  const out = normalizeDocDates(doc);
+  const want = new Date(ms).toISOString();
+  assert.equal(out.createdAt, want);
+  assert.equal(out.contact.verifiedAt, want);
+  assert.equal(out.contact.name, 'Ana');
+  assert.equal(out.history[0].at, want);
+  assert.equal(out.history[1], 'keep');
+  assert.equal(out.totalPrice, 250);
+  assert.equal(out.dropoffAt, '2026-07-20T09:00:00.000Z');
+  assert.equal(out.nothing, null);
+});
+
+test('normalizeDocDates: leaves non-Timestamp class instances and plain shapes alone', () => {
+  const d = new Date('2026-01-01T00:00:00Z');
+  assert.equal(normalizeDocDates(d), d); // Date instance passes through
+  // Serialized {seconds} without toDate is NOT a live Timestamp — untouched.
+  const serialized = { seconds: 1778224675, nanoseconds: 0 };
+  assert.deepEqual(normalizeDocDates({ x: serialized }).x, serialized);
+  assert.equal(normalizeDocDates('str'), 'str');
+  assert.equal(normalizeDocDates(undefined), undefined);
+});
+
+test('normalizeDocDates: depth cap returns the value as-is instead of recursing forever', () => {
+  const deep = { a: { b: { c: { d: { e: { f: { g: { h: { i: fakeTimestamp(0) } } } } } } } } };
+  const out = normalizeDocDates(deep);
+  // 8 levels of nesting exhaust the default cap before reaching the leaf.
+  assert.equal(typeof out.a.b.c.d.e.f.g.h.i.toDate, 'function');
 });
 
 test('daysBetween: ceil with a 1-day minimum', () => {

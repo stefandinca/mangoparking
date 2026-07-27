@@ -16,16 +16,23 @@ import {
   increment,
 } from 'firebase/firestore';
 import { db } from './config.js';
+import { normalizeDocDates } from '../utils/date.js';
 
 // Re-export for convenience
 export { db, collection, doc, query, where, orderBy, limit, onSnapshot, serverTimestamp, increment };
+
+// Every read goes through normalizeDocDates: fields written with
+// `serverTimestamp()` (createdAt/updatedAt/…) come back as Firestore
+// Timestamp objects, which used to leak "Timestamp(seconds=…)" into the
+// UI and corrupt ISO-string sorts. Normalizing here kills the whole class.
+const shape = (snap) => ({ id: snap.id, ...normalizeDocDates(snap.data()) });
 
 /**
  * Get a single document
  */
 export async function getDocument(collectionName, docId) {
   const snap = await getDoc(doc(db, collectionName, docId));
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  return snap.exists() ? shape(snap) : null;
 }
 
 /**
@@ -36,7 +43,7 @@ export async function getCollection(collectionName, ...queryConstraints) {
     ? query(collection(db, collectionName), ...queryConstraints)
     : collection(db, collectionName);
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(shape);
 }
 
 /**
@@ -86,7 +93,7 @@ export async function incrementField(collectionName, docId, field, delta) {
  */
 export function subscribeDoc(collectionName, docId, callback) {
   return onSnapshot(doc(db, collectionName, docId), (snap) => {
-    callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    callback(snap.exists() ? shape(snap) : null);
   });
 }
 
@@ -98,6 +105,6 @@ export function subscribeCollection(collectionName, callback, ...queryConstraint
     ? query(collection(db, collectionName), ...queryConstraints)
     : collection(db, collectionName);
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    callback(snap.docs.map(shape));
   });
 }
