@@ -24,6 +24,7 @@ No glassmorphism (`.glass` is solid white + border), no `backdrop-blur`, no tran
 
 ## Essential Commands
 - `npm run dev` — Vite dev server (port 3000)
+- `npm test` — `node --test` over `tests/*.test.mjs`: pure-logic suites (dates/DST, booking codes, audit formatting, i18n RO/EN key parity, CSV, validators). No network, no Firebase. `cd functions && npm test` runs the functions suites.
 - `npm run build` — Vite build + Puppeteer prerender of public routes (`dist/*/index.html`). Prerender is non-fatal: if Puppeteer can't run (e.g. Vercel CI), the build still succeeds and ships the plain SPA.
 - `npm run build:vite` / `npm run prerender` — each step on its own
 - `npm run preview` — preview built output
