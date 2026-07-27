@@ -28,6 +28,12 @@ import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
 const PAGE_SIZE = 25;
 
+// Secondary-button styling, matching the rest of the admin (AdminUsers export,
+// UserDetailModal, Login): white + frost-deep border, and a disabled state
+// expressed with `disabled:` variants rather than a swapped background — a
+// frost background would disappear into the frost page.
+const PAGER_BTN = 'px-3 py-1.5 rounded-xl bg-white border border-frost-deep hover:bg-frost text-charcoal font-semibold text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white';
+
 function pill(key, activeKey, label) {
   const isActive = key === activeKey;
   const cls = isActive ? 'bg-mango text-charcoal' : 'bg-white text-charcoal/70 hover:bg-frost';
@@ -211,20 +217,21 @@ export default async function AdminAudit(container) {
             </tbody>
           </table>
         </div>
-      </div>
 
-      <div class="flex flex-wrap items-center justify-between gap-3 mt-6">
-        <p class="text-[14px] text-dim">${escapeHtml(t('audit.showingRange', {
-          from: start + 1,
-          to: start + slice.length,
-          total: filtered.length,
-        }))}</p>
-        <div class="flex items-center gap-2">
-          <button type="button" data-page-prev ${page <= 1 ? 'disabled' : ''}
-            class="px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${page <= 1 ? 'bg-frost text-charcoal/30 cursor-not-allowed' : 'bg-white text-charcoal/70 hover:bg-frost'}">${t('audit.prev')}</button>
-          <span class="text-[13px] text-dim font-mono">${escapeHtml(t('audit.pageOf', { page, pages }))}</span>
-          <button type="button" data-page-next ${page >= pages ? 'disabled' : ''}
-            class="px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${page >= pages ? 'bg-frost text-charcoal/30 cursor-not-allowed' : 'bg-white text-charcoal/70 hover:bg-frost'}">${t('audit.next')}</button>
+        <!-- Pager sits INSIDE the card: the admin page background is frost, so
+             a bare button row out there has nothing to sit on (and a frost
+             "disabled" button is invisible against it). -->
+        <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-frost-deep">
+          <p class="text-[13px] text-dim">${escapeHtml(t('audit.showingRange', {
+            from: start + 1,
+            to: start + slice.length,
+            total: filtered.length,
+          }))}</p>
+          <div class="flex items-center gap-2">
+            <button type="button" data-page-prev ${page <= 1 ? 'disabled' : ''} class="${PAGER_BTN}">${t('audit.prev')}</button>
+            <span class="text-[13px] text-dim font-mono px-1">${escapeHtml(t('audit.pageOf', { page, pages }))}</span>
+            <button type="button" data-page-next ${page >= pages ? 'disabled' : ''} class="${PAGER_BTN}">${t('audit.next')}</button>
+          </div>
         </div>
       </div>
     `;
