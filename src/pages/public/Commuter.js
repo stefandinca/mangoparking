@@ -4,7 +4,6 @@ import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCommuterRate } from '../../services/pricingService.js';
-import { checkIcon } from '../../components/widgets/icons.js';
 
 export default function Commuter(container) {
   const locale = getLocale();

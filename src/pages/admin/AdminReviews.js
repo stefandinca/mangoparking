@@ -61,7 +61,7 @@ export async function mountReviews(page) {
 
   page.querySelector('[data-add-review]').addEventListener('click', async () => {
     try {
-      const id = await createReview({
+      await createReview({
         name: 'Nume',
         rating: 5,
         comment: '',

@@ -1,4 +1,4 @@
-import { html, delegate, escapeHtml } from '../../utils/dom.js';
+import { delegate, escapeHtml } from '../../utils/dom.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCapacity } from '../../services/capacityService.js';

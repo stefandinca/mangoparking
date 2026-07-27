@@ -1,4 +1,4 @@
-import { getCollection, getDocument, updateDocument, addDocument } from '../firebase/db.js';
+import { getCollection, getDocument, updateDocument } from '../firebase/db.js';
 import { auditLog } from './auditService.js';
 
 // Fallback pricing tiers (used when Firestore is not available)

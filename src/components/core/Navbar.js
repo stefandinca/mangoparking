@@ -1,7 +1,7 @@
 import { html } from '../../utils/dom.js';
-import { t, localePath, altLocalePath, getLocale } from '../../i18n/index.js';
+import { t, localePath, altLocalePath } from '../../i18n/index.js';
 import { getCurrentUser, getUserProfile, logout } from '../../firebase/auth.js';
-import { navigate, getCurrentPath } from '../../router/index.js';
+import { navigate } from '../../router/index.js';
 import { hasAdminAccess } from '../../utils/permissions.js';
 
 export function Navbar() {

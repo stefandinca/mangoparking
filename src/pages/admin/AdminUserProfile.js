@@ -14,7 +14,7 @@
 // the period once (the same capped range query the audit page uses) and
 // filters by actor in memory. Same trade-off, and the cap is surfaced.
 
-import { html, delegate, escapeHtml, qs } from '../../utils/dom.js';
+import { delegate, escapeHtml, qs } from '../../utils/dom.js';
 import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getDocument } from '../../firebase/db.js';

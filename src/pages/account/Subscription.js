@@ -3,7 +3,6 @@ import { Footer } from '../../components/core/Footer.js';
 import { t, localePath, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getUserProfile } from '../../firebase/auth.js';
 import { checkIcon } from '../../components/widgets/icons.js';
 import { accountLayout, initAccountNav, NAV_ICONS } from '../../components/account/AccountLayout.js';
 import { alertModal, confirmModal } from '../../components/core/Modal.js';

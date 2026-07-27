@@ -15,8 +15,8 @@
 // backdrop-click / Escape behaviour).
 
 import { html, qs, escapeHtml } from '../../utils/dom.js';
-import { t, getLocale } from '../../i18n/index.js';
-import { getCollection, getDocument, where, orderBy, limit } from '../../firebase/db.js';
+import { t } from '../../i18n/index.js';
+import { getCollection, getDocument, where } from '../../firebase/db.js';
 import { getBalance, getTransactions } from '../../services/tokenService.js';
 import { showToast } from '../core/Toast.js';
 import { httpsCallable } from 'firebase/functions';

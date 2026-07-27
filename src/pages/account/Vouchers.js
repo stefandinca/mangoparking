@@ -1,6 +1,6 @@
 import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
-import { t, localePath, getLocale } from '../../i18n/index.js';
+import { t, getLocale } from '../../i18n/index.js';
 import { html, escapeHtml } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCurrentUser } from '../../firebase/auth.js';
@@ -93,7 +93,7 @@ function promoCardHtml(v, redemptionsByCode, locale) {
   `;
 }
 
-function legacyCardHtml(legacy, locale) {
+function legacyCardHtml(legacy, _locale) {
   // The legacy signup voucher is a flat-amount, no-expiry credit auto-applied
   // at checkout. Status comes straight from the doc.
   const status = legacy.status === 'unused' ? 'active' : 'used';

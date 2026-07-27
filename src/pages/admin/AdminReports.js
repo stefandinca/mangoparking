@@ -1,5 +1,5 @@
-import { html, delegate } from '../../utils/dom.js';
-import { t, localePath } from '../../i18n/index.js';
+import { delegate } from '../../utils/dom.js';
+import { t } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getAllBookings } from '../../services/bookingService.js';
 import { getAllSubscriptions } from '../../services/subscriptionService.js';

@@ -1,4 +1,4 @@
-import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
+import { qs, delegate, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getAllRecentTransactions } from '../../services/tokenService.js';

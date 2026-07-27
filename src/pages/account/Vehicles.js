@@ -1,6 +1,6 @@
 import { Navbar } from '../../components/core/Navbar.js';
 import { Footer } from '../../components/core/Footer.js';
-import { t, localePath, getLocale } from '../../i18n/index.js';
+import { t, getLocale } from '../../i18n/index.js';
 import { html, delegate } from '../../utils/dom.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCurrentUser } from '../../firebase/auth.js';

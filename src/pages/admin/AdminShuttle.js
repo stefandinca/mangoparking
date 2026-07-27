@@ -1,7 +1,7 @@
-import { html, delegate } from '../../utils/dom.js';
-import { t, localePath } from '../../i18n/index.js';
+import { delegate } from '../../utils/dom.js';
+import { t } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getShuttleSchedule, updateShuttleStatus, getRouteKey } from '../../services/shuttleService.js';
+import { getShuttleSchedule, updateShuttleStatus } from '../../services/shuttleService.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 
 const STATUS_KEYS = {
@@ -111,7 +111,7 @@ export default async function AdminShuttle(container) {
     const statusEl = page.querySelector(`[data-shuttle-status="${id}"]`);
     if (!statusEl) return;
 
-    let newStatus = '';
+    let newStatus;
     if (action === 'delay') newStatus = 'delayed';
     else if (action === 'cancel') newStatus = 'cancelled';
     else if (action === 'depart') newStatus = 'departed';

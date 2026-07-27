@@ -10,7 +10,7 @@
 // reservationLink.js). The router matches on path only, so this lives behind
 // the /admin/transactions route entry — no router change, sidebar stays lit.
 
-import { html, delegate, escapeHtml, qs } from '../../utils/dom.js';
+import { delegate, escapeHtml, qs } from '../../utils/dom.js';
 import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getDocument } from '../../firebase/db.js';

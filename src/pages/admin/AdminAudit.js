@@ -13,14 +13,14 @@
 // empty page 1 while page 4 has matches). The cap is surfaced in the UI
 // rather than silently truncating.
 
-import { html, delegate, escapeHtml, qs } from '../../utils/dom.js';
+import { delegate, escapeHtml, qs } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { listAuditRange, AUDIT_RANGE_MAX } from '../../services/auditService.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import {
   actionStyle, actionLabel, describeAction, fmtAuditTime,
-  RANGE_PRESETS as PRESETS, bucharestToday, windowToIso,
+  RANGE_PRESETS as PRESETS, windowToIso,
 } from '../../components/admin/auditFormat.js';
 import { bucharestLocalToIso } from '../../utils/date.js';
 import { rangeBarHtml, mountRangePicker, pagerHtml } from '../../components/admin/ListControls.js';

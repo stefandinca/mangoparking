@@ -11,7 +11,7 @@
 // users for the foreseeable future).
 
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
-import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
+import { qs, escapeHtml } from '../../utils/dom.js';
 import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getCollection } from '../../firebase/db.js';

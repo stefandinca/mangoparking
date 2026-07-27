@@ -1,4 +1,4 @@
-import { addDocument, getCollection, getDocument, updateDocument, removeDocument, query, where, orderBy, limit } from '../firebase/db.js';
+import { addDocument, getCollection, getDocument, updateDocument, removeDocument, where, orderBy, limit } from '../firebase/db.js';
 import { getCurrentUser } from '../firebase/auth.js';
 import { auditLog } from './auditService.js';
 import { getAllSpots, updateSpotStatus } from './capacityService.js';

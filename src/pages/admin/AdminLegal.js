@@ -1,4 +1,4 @@
-import { html, qs, delegate, escapeHtml } from '../../utils/dom.js';
+import { escapeHtml } from '../../utils/dom.js';
 import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
@@ -66,19 +66,6 @@ export async function mountLegal(page) {
       sections: [freshSection(), freshSection()],
       lastUpdatedISO: new Date().toISOString().slice(0, 10),
     };
-  }
-
-  function commitField(field, value) {
-    working[activeSlug] = working[activeSlug] || { ro: snapshotFor(activeSlug, 'ro'), en: snapshotFor(activeSlug, 'en') };
-    working[activeSlug][editLocale] = working[activeSlug][editLocale] || snapshotFor(activeSlug, editLocale);
-    working[activeSlug][editLocale][field] = value;
-  }
-
-  function commitSection(idx, field, value) {
-    working[activeSlug] = working[activeSlug] || { ro: snapshotFor(activeSlug, 'ro'), en: snapshotFor(activeSlug, 'en') };
-    const snap = working[activeSlug][editLocale] = working[activeSlug][editLocale] || snapshotFor(activeSlug, editLocale);
-    snap.sections[idx] = snap.sections[idx] || freshSection();
-    snap.sections[idx][field] = value;
   }
 
   function content() {

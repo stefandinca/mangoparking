@@ -1,5 +1,5 @@
 import { getCurrentUser, getUserProfile } from '../firebase/auth.js';
-import { getLocale, localePath } from '../i18n/index.js';
+import { localePath } from '../i18n/index.js';
 import { hasPermission, hasAdminAccess } from '../utils/permissions.js';
 
 /**

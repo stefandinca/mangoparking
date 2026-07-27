@@ -1,4 +1,4 @@
-import { getDocument, subscribeDoc, subscribeCollection, updateDocument, getCollection } from '../firebase/db.js';
+import { getDocument, subscribeCollection, updateDocument, getCollection } from '../firebase/db.js';
 import { TOTAL_CAPACITY } from '../utils/constants.js';
 import { auditLog } from './auditService.js';
 

@@ -5,7 +5,7 @@ import { html, delegate } from '../../utils/dom.js';
 import { phoneField, phoneValue } from '../../components/core/PhoneField.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getUserProfile, getCurrentUser } from '../../firebase/auth.js';
-import { updateDocument, getDocument, getCollection, where, orderBy } from '../../firebase/db.js';
+import { updateDocument, getDocument, getCollection, where } from '../../firebase/db.js';
 import { getBalance, getTransactions } from '../../services/tokenService.js';
 import { showToast } from '../../components/core/Toast.js';
 import { accountLayout, initAccountNav } from '../../components/account/AccountLayout.js';

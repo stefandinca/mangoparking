@@ -1,5 +1,4 @@
 import { getCollection, subscribeCollection, updateDocument } from '../firebase/db.js';
-import { orderBy } from 'firebase/firestore';
 import { auditLog } from './auditService.js';
 
 // Fallback mock data

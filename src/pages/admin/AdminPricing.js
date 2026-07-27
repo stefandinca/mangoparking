@@ -1,5 +1,5 @@
 import { html, delegate, escapeHtml } from '../../utils/dom.js';
-import { t, localePath, getLocale } from '../../i18n/index.js';
+import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getAllTokenPacks, createTokenPack, updateTokenPack, deleteTokenPack } from '../../services/tokenService.js';
 import { getLongTermRates, saveLongTermRates, getCommuterPolicy, saveCommuterPolicy } from '../../services/longTermService.js';

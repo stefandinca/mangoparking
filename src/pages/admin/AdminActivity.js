@@ -10,7 +10,7 @@
 // same-day with no scheduled time.
 
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
-import { html, escapeHtml, delegate } from '../../utils/dom.js';
+import { escapeHtml, delegate } from '../../utils/dom.js';
 import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { subscribeCollection } from '../../firebase/db.js';

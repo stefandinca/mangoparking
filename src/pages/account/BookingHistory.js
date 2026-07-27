@@ -244,7 +244,7 @@ function renderBookingRow(b, locale) {
 // Pay-at-pickup credit packs awaiting payment. The /pay link reopens the
 // online Netopia flow for the same orderId; "Anulează" calls the
 // cancelPendingCreditOrder callable.
-function renderPendingCreditOrder(o, locale) {
+function renderPendingCreditOrder(o, _locale) {
   const qty = o.quantity || '?';
   const amount = o.amount ? `${Number(o.amount)} ${t('common.lei')}` : '';
   const plate = o.customerData?.licensePlate || '';
