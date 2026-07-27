@@ -154,6 +154,25 @@ export function paymentStatusBadge(b) {
   return `<span class="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls}">${label}${partnerChip}</span>`;
 }
 
+// Reservation-type chip — lets staff tell long-term, commuter and broker /
+// prepaid (ParkVia etc.) bookings apart at a glance. Broker bookings carry
+// `source: 'broker'` / `paidBy: 'broker'` and an optional brokerName.
+export function typeBadge(b) {
+  const isBroker = b.source === 'broker' || b.paidBy === 'broker';
+  const base = 'inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded';
+  const planeIcon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5L21 16z"/></svg>';
+  const peopleIcon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M16 11a3 3 0 100-6 3 3 0 000 6zm-8 0a3 3 0 100-6 3 3 0 000 6zm0 2c-2.7 0-8 1.3-8 4v2h8v-2c0-1 .4-1.9 1-2.6-.3 0-.7-.4-1-.4zm8 0c-.3 0-.7 0-1 .4.6.7 1 1.6 1 2.6v2h8v-2c0-2.7-5.3-4-8-4z"/></svg>';
+  const brokerIcon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M20 6h-4V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2zm-6 0h-4V4h4v2z"/></svg>';
+  if (isBroker) {
+    const name = b.brokerName ? `: ${escapeHtml(b.brokerName)}` : '';
+    return `<span class="${base} bg-blueberry/10 text-blueberry">${brokerIcon}${t('checkins.typeBroker')}${name}</span>`;
+  }
+  if (b.type === 'credit') {
+    return `<span class="${base} bg-leaf/10 text-leaf">${peopleIcon}${t('checkins.typeCommuter')}</span>`;
+  }
+  return `<span class="${base} bg-mango/15 text-charcoal">${planeIcon}${t('checkins.typeLongTerm')}</span>`;
+}
+
 // ── Edit reservation (contact + logistics) ───────────────────────────────
 // Agents/admins edit a booking's contact (name/email/phone) any time. The
 // plate stays editable only while `upcoming` (it keys the activeCheckIns row).
