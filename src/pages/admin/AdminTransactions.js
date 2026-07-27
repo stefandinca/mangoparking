@@ -13,6 +13,7 @@ import { pagerHtml } from '../../components/admin/ListControls.js';
 import { fmtDateTime, reservationStatusLabel } from '../../components/admin/bookingActions.js';
 import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
 import { anyToIso } from '../../utils/date.js';
+import { bookingDisplayCode } from '../../utils/bookingCode.js';
 
 // /admin/transactions — unified ledger.
 //
@@ -254,7 +255,7 @@ export default async function AdminTransactions(container) {
     if (resType && (b.type || 'longTerm') !== resType) return false;
     if (resSource && (b.source || 'web') !== resSource) return false;
     if (!q) return true;
-    return `${b.code || ''} ${b.licensePlate || ''} ${b.contact?.email || ''} ${b.contact?.phone || ''} ${b.contact?.name || ''}`
+    return `${bookingDisplayCode(b)} ${b.licensePlate || ''} ${b.contact?.email || ''} ${b.contact?.phone || ''} ${b.contact?.name || ''}`
       .toLowerCase().includes(q);
   }
 
@@ -300,7 +301,7 @@ export default async function AdminTransactions(container) {
             <tbody class="divide-y divide-frost-deep/60">
               ${slice.map((b) => `
                 <tr data-res-row="${escapeHtml(b.id)}" class="hover:bg-frost transition-colors cursor-pointer">
-                  <td class="px-4 py-3 font-mono font-semibold text-blueberry">${escapeHtml(b.code || b.id.slice(0, 6))}</td>
+                  <td class="px-4 py-3 font-mono font-semibold text-blueberry">${escapeHtml(bookingDisplayCode(b))}</td>
                   <td class="px-4 py-3">${escapeHtml(b.contact?.name || '—')}</td>
                   <td class="px-4 py-3 font-mono">${escapeHtml(b.licensePlate || '—')}</td>
                   <td class="px-4 py-3 text-charcoal/70 whitespace-nowrap">${escapeHtml(fmtDateTime(b.dropoffAt || b.startDate, locale))} → ${escapeHtml(fmtDateTime(b.pickupAt || b.endDate, locale))}</td>
@@ -345,7 +346,7 @@ export default async function AdminTransactions(container) {
     const filtered = sortedBookings.filter(reservationMatches);
     const headers = ['code', 'type', 'status', 'payment', 'customer', 'email', 'phone', 'plate', 'dropoff', 'pickup', 'days', 'total', 'source'];
     const csvRows = filtered.map((b) => [
-      b.code || b.id, b.type || 'longTerm', b.status || '', b.paymentStatus || '',
+      bookingDisplayCode(b), b.type || 'longTerm', b.status || '', b.paymentStatus || '',
       b.contact?.name || '', b.contact?.email || '', b.contact?.phone || '', b.licensePlate || '',
       b.dropoffAt || b.startDate || '', b.pickupAt || b.endDate || '', b.days ?? '',
       b.totalPrice ?? '', b.source || '',

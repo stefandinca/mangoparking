@@ -23,6 +23,7 @@ import { showToast } from '../../components/core/Toast.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { hasPermission, PERM } from '../../utils/permissions.js';
 import { copyText } from '../../utils/clipboard.js';
+import { bookingDisplayCode } from '../../utils/bookingCode.js';
 
 // ── Small render helpers ─────────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ function editChanges(h, locale) {
 // Plain-text block for pasting into WhatsApp / a phone call.
 function summaryText(b, locale) {
   const lines = [
-    `${t('reservations.code')}: ${b.code || b.id}`,
+    `${t('reservations.code')}: ${bookingDisplayCode(b)}`,
     `${t('reservations.customer')}: ${b.contact?.name || '—'}`,
     b.contact?.phone ? `${t('reservations.phone')}: ${b.contact.phone}` : null,
     b.contact?.email ? `${t('reservations.email')}: ${b.contact.email}` : null,
@@ -140,7 +141,7 @@ export default async function AdminReservationDetail(container, { bookingId } = 
   const canCancel = hasPermission(getUserProfile()?.role, PERM.REFUNDS);
 
   let booking = await getDocument('bookings', id).catch(() => null);
-  updateMeta({ title: `${booking?.code || t('reservations.title')} — Admin — ManGO Parking` });
+  updateMeta({ title: `${(booking && bookingDisplayCode(booking)) || t('reservations.title')} — Admin — ManGO Parking` });
 
   const backLink = `<a href="${localePath('/admin/transactions?tab=reservations')}" data-link class="inline-flex items-center gap-1.5 text-[14px] font-semibold text-blueberry hover:underline mb-4">‹ ${escapeHtml(t('reservations.title'))}</a>`;
 
@@ -193,7 +194,7 @@ export default async function AdminReservationDetail(container, { bookingId } = 
         warning: 'bg-mango hover:bg-mango-hover text-charcoal',
         danger: 'bg-red-100 hover:bg-red-200 text-red-700',
       };
-      return `<button type="button" data-action="${key}" data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(b.code || '')}" data-order="${escapeHtml(b.paymentId || '')}" class="${styles[variant]} font-semibold text-[13px] px-4 py-2 rounded-xl transition-colors">${escapeHtml(label)}</button>`;
+      return `<button type="button" data-action="${key}" data-booking="${escapeHtml(b.id)}" data-code="${escapeHtml(bookingDisplayCode(b))}" data-order="${escapeHtml(b.paymentId || '')}" class="${styles[variant]} font-semibold text-[13px] px-4 py-2 rounded-xl transition-colors">${escapeHtml(label)}</button>`;
     };
     const out = [];
     if (b.status === 'upcoming') out.push(btn('checkin', t('checkins.actionCheckIn'), 'primary'));
@@ -216,7 +217,7 @@ export default async function AdminReservationDetail(container, { bookingId } = 
       <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-3">
-            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep font-mono">${escapeHtml(b.code || b.id)}</h1>
+            <h1 class="font-heading text-3xl font-bold tracking-tight text-blueberry-deep font-mono">${escapeHtml(bookingDisplayCode(b))}</h1>
             ${badge(b.status)} ${badge(b.paymentStatus)}
           </div>
           <p class="text-dim text-[15px] mt-1">${escapeHtml(isCredit ? t('checkins.typeCommuter') : t('checkins.typeLongTerm'))} · ${escapeHtml(t(`reservations.source.${b.source || 'web'}`) || b.source || '')}</p>
@@ -316,7 +317,7 @@ export default async function AdminReservationDetail(container, { bookingId } = 
                 <div class="flex flex-wrap items-center gap-3">
                   <span class="font-mono text-[12px] text-dim w-28 shrink-0">${escapeHtml(fmtAuditTime(h.timestamp, locale))}</span>
                   <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${actionStyle(h.action)}">${escapeHtml(actionLabel(h.action))}</span>
-                  <span class="text-[14px] text-charcoal/80 flex-1 min-w-0">${escapeHtml(describeAction(h, locale))}</span>
+                  <span class="text-[14px] text-charcoal/80 flex-1 min-w-0">${escapeHtml(describeAction(h, locale, bookingDisplayCode(b)))}</span>
                   <span class="text-[12px] text-dim font-mono shrink-0 hidden sm:inline" title="${escapeHtml(h.user || '')}">${escapeHtml((h.user || '').split('@')[0])}</span>
                 </div>
                 ${changes.length ? `

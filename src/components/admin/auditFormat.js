@@ -165,11 +165,15 @@ export function fmtAuditTime(iso, locale) {
  * id. The alternative — dumping raw `{old} → {new}` JSON — is unreadable for
  * non-engineers, which is the whole point of this feed.
  */
-export function describeAction(item, locale) {
+export function describeAction(item, locale, entityCode = '') {
   const a = item.action;
   const nv = item.newValueObj || {};
   const id = item.entityId || '';
-  const idShort = id ? id.slice(0, 8) : '';
+  // How a row refers to its entity. Prefer a human booking code (LT-/CR-…):
+  // the caller's override first (the reservation detail knows its booking),
+  // then a code recorded in the row itself — a raw doc-id fragment reads
+  // like a second, confusing code format and is only the last resort.
+  const idShort = entityCode || nv.code || (id ? id.slice(0, 8) : '');
   const ro = locale === 'ro';
 
   switch (a) {

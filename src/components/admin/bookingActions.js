@@ -22,6 +22,7 @@ import { dateTimeFieldHtml, wireDateTime } from '../core/FormDateTime.js';
 import { geoFieldsHtml, wireGeoFields, readGeoFields } from '../widgets/BillingFields.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate } from '../../utils/validators.js';
 import { bucharestLocalToIso, isoToBucharestLocal, anyToIso } from '../../utils/date.js';
+import { bookingDisplayCode } from '../../utils/bookingCode.js';
 
 const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
@@ -226,7 +227,7 @@ export function openEditBookingDialog({ booking }) {
     const form = html`<form class="space-y-4" data-edit-form>
       <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.editTitle')}</h3>
       <div class="rounded-xl bg-frost border border-frost-deep px-3 py-2 flex items-center gap-2">
-        <span class="font-mono text-[13px] font-bold text-blueberry-deep">${escapeHtml(booking.code || '')}</span>
+        <span class="font-mono text-[13px] font-bold text-blueberry-deep">${escapeHtml(bookingDisplayCode(booking))}</span>
         ${typeBadge(booking)}
       </div>
       <div class="grid sm:grid-cols-2 gap-3">
@@ -460,7 +461,7 @@ export function openCheckActionConfirm({ booking, action, locale, over = null, o
     const confirmLabel = isCheckin ? t('checkins.confirmCheckInBtn') : t('checkins.confirmCheckOutBtn');
     const dropoff = booking.dropoffAt || booking.startDate;
     const pickup = booking.pickupAt || booking.endDate;
-    const code = booking.code || `LT-${String(booking.id).slice(0, 5).toUpperCase()}`;
+    const code = bookingDisplayCode(booking);
     const name = booking.contact?.name || booking.contact?.email || '—';
 
     const row = (label, value) => `
@@ -753,7 +754,7 @@ export async function runBookingAction({ action, booking, dataset = {} }, { loca
       return done();
     }
     if (action === 'cancel') {
-      const code = dataset.code || bookingId.slice(0, 5);
+      const code = dataset.code || bookingDisplayCode(booking || { id: bookingId });
       const ok = await confirmModal(t('checkins.cancelConfirm', { code }), {
         danger: true, confirmText: t('checkins.actionCancelReservation'),
       });
@@ -767,7 +768,7 @@ export async function runBookingAction({ action, booking, dataset = {} }, { loca
       return done();
     }
     if (action === 'resend-email') {
-      const code = dataset.code || bookingId.slice(0, 5);
+      const code = dataset.code || bookingDisplayCode(booking || { id: bookingId });
       const res = await resendConfirmationFn({ bookingId });
       showToast(t('checkins.resendOk', { code, recipient: res?.data?.recipient || '' }), 'success');
       return false;

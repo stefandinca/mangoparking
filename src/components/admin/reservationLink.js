@@ -15,6 +15,7 @@ import { escapeHtml, delegate } from '../../utils/dom.js';
 import { localePath } from '../../i18n/index.js';
 import { navigate } from '../../router/index.js';
 import { getDocument } from '../../firebase/db.js';
+import { bookingDisplayCode } from '../../utils/bookingCode.js';
 // openBookingDetail is imported dynamically in the handler: BookingDetailModal
 // imports openUserDetail from UserDetailModal, which imports this module, so a
 // static import would form a load-time cycle. Deferring it sidesteps that.
@@ -53,7 +54,7 @@ function liveTarget(b) {
 // A clickable reservation code. `b` needs { id, code, status, type,
 // dropoffAt|startDate, pickupAt|endDate }.
 export function reservationCodeHtml(b, { className = '' } = {}) {
-  const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+  const code = bookingDisplayCode(b);
   return `<button type="button" data-reservation-link data-id="${escapeHtml(b.id)}" class="font-mono text-blueberry hover:underline ${className}">${escapeHtml(code)}</button>`;
 }
 

@@ -106,7 +106,9 @@ export async function checkInBooking(bookingId, spotId = null) {
     });
   }
 
-  await auditLog('booking_checkin', 'booking', bookingId, { status: old.status }, { status: 'active', spotId: assignedSpot });
+  // `code` lets the audit surfaces name the booking (LT-/CR-…) instead of
+  // falling back to a doc-id fragment (see describeAction).
+  await auditLog('booking_checkin', 'booking', bookingId, { status: old.status }, { status: 'active', spotId: assignedSpot, code: old.code || null });
 }
 
 /**
@@ -131,7 +133,7 @@ export async function checkOutBooking(bookingId) {
     const normPlate = String(old.licensePlate).toUpperCase().replace(/[\s-]/g, '');
     if (normPlate) await removeDocument('activeCheckIns', normPlate).catch(() => {});
   }
-  await auditLog('booking_checkout', 'booking', bookingId, { status: old.status }, { status: 'completed' });
+  await auditLog('booking_checkout', 'booking', bookingId, { status: old.status }, { status: 'completed', code: old.code || null });
 }
 
 /**
@@ -192,5 +194,5 @@ export async function cancelBooking(bookingId) {
       console.warn('cancelBooking: spot release failed', err?.message);
     });
   }
-  await auditLog('booking_cancelled', 'booking', bookingId, { status: old.status }, { status: 'cancelled' });
+  await auditLog('booking_cancelled', 'booking', bookingId, { status: old.status }, { status: 'cancelled', code: old.code || null });
 }

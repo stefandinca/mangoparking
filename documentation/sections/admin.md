@@ -105,6 +105,18 @@ Three things it surfaces that had no UI at all:
   server-stamped `createdBy` uid, else the source channel (a "Site" booking was
   created by the customer).
 
+**Booking codes.** Everything renders through
+`bookingDisplayCode` (`src/utils/bookingCode.js`): the real `code` when the doc
+has one, else a stable LT-/CR- pseudo-code derived from the doc id. Raw
+Firestore ids ("aTUFw5tp…") must never surface — staff read them as a second,
+confusing code format. Applies to the archive/ledger, detail header + summary,
+check-in board rows, refunds queue, dialogs/toasts, `reservationCodeHtml`
+links, and audit descriptions (`describeAction` prefers a caller-supplied code
+or `newValue.code`; client audit writes now stamp `code` on
+check-in/out/cancel rows so the dashboard/audit feeds can use it — server rows
+recorded by Cloud Functions still fall back to an id fragment in the global
+feeds until their payloads carry `code` too).
+
 **Actions** (check-in, check-out, collect payment, edit, charge overstay,
 resend confirmation, cancel + refund) run through
 `src/components/admin/bookingActions.js` — extracted from `AdminCheckIns` so

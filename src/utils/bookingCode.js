@@ -23,3 +23,16 @@ export function generateBookingCode(type) {
   }
   return `${bookingCodePrefix(type)}-${suffix}`;
 }
+
+/**
+ * The code to DISPLAY for a booking, everywhere. Real `code` when the doc has
+ * one; otherwise a stable pseudo-code derived from the Firestore doc id, in
+ * the same LT-/CR- shape — staff must never see a raw doc id ("aTUFw5tp…"),
+ * it reads like a second, confusing code format. Needs `{ id, code?, type? }`.
+ */
+export function bookingDisplayCode(b) {
+  if (!b) return '';
+  if (b.code) return b.code;
+  const suffix = String(b.id || '').slice(0, 5).toUpperCase();
+  return suffix ? `${bookingCodePrefix(b.type || 'longTerm')}-${suffix}` : '';
+}

@@ -10,8 +10,11 @@ import { t, getLocale } from '../../i18n/index.js';
 import { openModal } from '../core/Modal.js';
 import { getDocument } from '../../firebase/db.js';
 import { openUserDetail } from './UserDetailModal.js';
+import { anyToIso } from '../../utils/date.js';
+import { bookingDisplayCode } from '../../utils/bookingCode.js';
 
 function fmt(iso, locale) {
+  iso = anyToIso(iso);
   if (!iso) return '—';
   const dateOnly = typeof iso === 'string' && iso.length <= 10;
   try {
@@ -91,7 +94,7 @@ export function openBookingDetail(booking) {
       <div class="flex items-start justify-between gap-4 mb-4">
         <div class="min-w-0">
           <h2 class="font-heading text-xl font-bold text-blueberry-deep">${t('bookingDetail.title')}</h2>
-          <p class="text-[13px] text-dim font-mono mt-0.5">${esc(b.code || b.id || '—')}</p>
+          <p class="text-[13px] text-dim font-mono mt-0.5">${esc(bookingDisplayCode(b) || '—')}</p>
         </div>
         <button type="button" data-close class="w-9 h-9 rounded-xl bg-frost hover:bg-frost-deep text-charcoal/70 flex items-center justify-center transition-colors shrink-0" aria-label="${esc(t('common.close'))}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>

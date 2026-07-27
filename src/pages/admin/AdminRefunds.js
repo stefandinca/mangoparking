@@ -9,6 +9,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
+import { bookingDisplayCode } from '../../utils/bookingCode.js';
 
 const adminMarkRefundedFn = httpsCallable(functions, 'adminMarkRefunded');
 const adminResendRefundEmailFn = httpsCallable(functions, 'adminResendRefundEmail');
@@ -97,7 +98,7 @@ function emailStatusBadge(refundEmail) {
 
 function rowHtml(b, locale) {
   const paidBy = b.paidBy || '—';
-  const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+  const code = bookingDisplayCode(b);
   const isNetopia = paidBy === 'netopia';
   return `
     <tr class="border-t border-frost-deep">
@@ -154,7 +155,7 @@ export default async function AdminRefunds(container) {
   const failedCount = history.filter((b) => b.refundEmail?.status === 'failed').length;
 
   const historyRowHtml = (b) => {
-    const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+    const code = bookingDisplayCode(b);
     const failed = b.refundEmail?.status === 'failed';
     return `
       <tr class="border-t border-frost-deep">
@@ -204,7 +205,7 @@ export default async function AdminRefunds(container) {
   `;
 
   const partialRowHtml = (b) => {
-    const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+    const code = bookingDisplayCode(b);
     const amt = Number(b.pendingRefundAmount || 0);
     return `
       <tr class="border-t border-frost-deep">

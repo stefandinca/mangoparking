@@ -32,6 +32,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { getUserProfile } from '../../firebase/auth.js';
 import { hasPermission, PERM } from '../../utils/permissions.js';
+import { bookingDisplayCode } from '../../utils/bookingCode.js';
 import { openCreateTransactionModal } from '../../components/admin/CreateTransactionModal.js';
 import {
   fmtDateTime, pickupDeadlineMs, perCreditPrice, overstayInfo, paymentStatusBadge,
@@ -119,7 +120,7 @@ function matchesSearch(b, q) {
   if (!q) return true;
   const haystacks = [
     b.licensePlate,
-    b.code,
+    bookingDisplayCode(b),
     b.contact?.name,
     b.contact?.email,
     b.id,
@@ -221,7 +222,7 @@ function flightSlot(b, tab) {
 }
 
 function rowHtml(b, { tab, locale, canCancel }) {
-  const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+  const code = bookingDisplayCode(b);
   const dropoff = b.dropoffAt || b.startDate;
   const pickup = b.pickupAt || b.endDate;
   const name = b.contact?.name || b.contact?.email || '—';
@@ -289,7 +290,7 @@ function rowHtml(b, { tab, locale, canCancel }) {
 }
 
 function overdueRowHtml(b, { locale, canCancel }) {
-  const code = b.code || `LT-${String(b.id).slice(0, 5).toUpperCase()}`;
+  const code = bookingDisplayCode(b);
   const overHrs = hoursOver(b);
   const severity = overHrs >= 24 ? 'red' : overHrs >= 4 ? 'orange' : 'mango';
   const sevClass = severity === 'red'
