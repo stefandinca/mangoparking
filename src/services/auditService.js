@@ -27,7 +27,7 @@ const actorLabelCache = new Map();
 // already as readable as it is going to get — don't try to look it up.
 const looksLikeUid = (v) => /^[A-Za-z0-9]{20,}$/.test(v);
 
-async function resolveActorLabel(uid) {
+export async function resolveActorLabel(uid) {
   if (!uid) return '';
   // Not cached: the label is locale-dependent and must follow a language switch.
   if (SYSTEM_ACTORS[uid]) return t(SYSTEM_ACTORS[uid]);
@@ -105,6 +105,27 @@ export async function getAuditLog(limitCount = 50) {
   try {
     const entries = await getCollection('auditLog', orderBy('timestamp', 'desc'), limit(limitCount));
     return await resolveActors(entries.map(toRow));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Every audit row for one entity (a booking's own history), newest first,
+ * shaped like every other audit surface — actors resolved, `newValueObj` /
+ * `oldValueObj` unified across the client (newValue) and server (payload)
+ * writer shapes. Feeding RAW docs into describeAction/`row.user` instead
+ * rendered generic labels and an empty actor on every server-written row.
+ *
+ * Equality on a single field → automatic index, no composite needed; sorted
+ * client-side because adding orderBy would require one.
+ */
+export async function listEntityAudit(entityId) {
+  if (!entityId) return [];
+  try {
+    const entries = await getCollection('auditLog', where('entityId', '==', entityId));
+    const rows = await resolveActors(entries.map(toRow));
+    return rows.sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
   } catch {
     return [];
   }

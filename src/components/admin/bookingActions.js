@@ -21,7 +21,7 @@ import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { dateTimeFieldHtml, wireDateTime } from '../core/FormDateTime.js';
 import { geoFieldsHtml, wireGeoFields, readGeoFields } from '../widgets/BillingFields.js';
 import { isValidEmail, isValidPhone, isValidLicensePlate } from '../../utils/validators.js';
-import { bucharestLocalToIso, isoToBucharestLocal } from '../../utils/date.js';
+import { bucharestLocalToIso, isoToBucharestLocal, anyToIso } from '../../utils/date.js';
 
 const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
@@ -34,6 +34,7 @@ const adminRepriceBookingFn = httpsCallable(functions, 'adminRepriceBooking');
 const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
 export function fmtDateTime(iso, locale) {
+  iso = anyToIso(iso);
   if (!iso) return '—';
   try {
     const d = new Date(iso);
@@ -152,6 +153,17 @@ export function paymentStatusBadge(b) {
     ? `<span class="ml-1 text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-blueberry/10 text-blueberry">${paidBy}</span>`
     : '';
   return `<span class="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls}">${label}${partnerChip}</span>`;
+}
+
+// Localized label for a booking status / payment-status value. Guards the two
+// failure modes of a raw t() lookup: a missing value builds the literal key
+// "reservations.status.undefined", and an unknown value echoes the key back —
+// both of which used to render verbatim in the reservation archive.
+export function reservationStatusLabel(v) {
+  if (!v) return '—';
+  const key = `reservations.status.${v}`;
+  const label = t(key);
+  return label === key ? String(v) : label;
 }
 
 // Reservation-type chip — lets staff tell long-term, commuter and broker /

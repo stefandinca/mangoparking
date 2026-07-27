@@ -13,10 +13,11 @@
 import { html, delegate, escapeHtml, qs } from '../../utils/dom.js';
 import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
-import { getDocument, getCollection, where } from '../../firebase/db.js';
+import { getDocument } from '../../firebase/db.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { actionStyle, actionLabel, describeAction, fmtAuditTime } from '../../components/admin/auditFormat.js';
-import { runBookingAction, fmtDateTime, perCreditPrice, overstayInfo } from '../../components/admin/bookingActions.js';
+import { runBookingAction, fmtDateTime, perCreditPrice, overstayInfo, reservationStatusLabel } from '../../components/admin/bookingActions.js';
+import { listEntityAudit, resolveActorLabel } from '../../services/auditService.js';
 import { getTokenPacks } from '../../services/tokenService.js';
 import { showToast } from '../../components/core/Toast.js';
 import { getUserProfile } from '../../firebase/auth.js';
@@ -62,7 +63,59 @@ const BADGES = {
 };
 function badge(v) {
   if (!v) return '';
-  return `<span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${BADGES[v] || 'bg-gray-100 text-gray-600'}">${escapeHtml(t(`reservations.status.${v}`) || v)}</span>`;
+  return `<span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${BADGES[v] || 'bg-gray-100 text-gray-600'}">${escapeHtml(reservationStatusLabel(v))}</span>`;
+}
+
+// ── Edit-history diff ────────────────────────────────────────────────────
+// booking_edited rows record the BEFORE values of exactly the keys that
+// changed (bookingService.updateBookingDetails), so the timeline can show
+// each edit as "field: old → new" instead of only naming what changed.
+
+// updatedAt is noise; startDate/endDate mirror dropoffAt/pickupAt in the patch.
+const EDIT_SKIP = new Set(['updatedAt', 'startDate', 'endDate']);
+
+function editFieldLabel(k) {
+  const map = {
+    'contact.name': t('reservations.customer'),
+    'contact.email': t('reservations.email'),
+    'contact.phone': t('reservations.phone'),
+    licensePlate: t('reservations.plate'),
+    dropoffAt: t('reservations.dropoff'),
+    pickupAt: t('reservations.pickup'),
+    days: t('reservations.days'),
+    notes: t('reservations.notes'),
+  };
+  return map[k] || k;
+}
+
+function editValue(k, v, locale) {
+  if (v == null || v === '') return '—';
+  if (k === 'dropoffAt' || k === 'pickupAt') return fmtDateTime(v, locale);
+  return String(v);
+}
+
+function editChanges(h, locale) {
+  const oldV = h.oldValueObj || {};
+  const newV = h.newValueObj || {};
+  const out = [];
+  for (const k of Object.keys(newV)) {
+    if (EDIT_SKIP.has(k)) continue;
+    if (k === 'contact') {
+      for (const sub of ['name', 'email', 'phone']) {
+        const from = oldV.contact?.[sub] ?? '';
+        const to = newV.contact?.[sub] ?? '';
+        if (String(from) !== String(to)) {
+          out.push({ label: editFieldLabel(`contact.${sub}`), from: editValue(sub, from, locale), to: editValue(sub, to, locale) });
+        }
+      }
+      continue;
+    }
+    const from = oldV[k];
+    const to = newV[k];
+    if (String(from ?? '') === String(to ?? '')) continue;
+    out.push({ label: editFieldLabel(k), from: editValue(k, from, locale), to: editValue(k, to, locale) });
+  }
+  return out;
 }
 
 // Plain-text block for pasting into WhatsApp / a phone call.
@@ -76,7 +129,7 @@ function summaryText(b, locale) {
     `${t('reservations.dropoff')}: ${fmtDateTime(b.dropoffAt || b.startDate, locale)}`,
     `${t('reservations.pickup')}: ${fmtDateTime(b.pickupAt || b.endDate, locale)}`,
     b.totalPrice != null ? `${t('reservations.total')}: ${b.totalPrice} ${t('common.lei')}` : null,
-    `${t('reservations.statusLabel')}: ${t(`reservations.status.${b.status}`) || b.status}`,
+    `${t('reservations.statusLabel')}: ${reservationStatusLabel(b.status)}`,
   ];
   return lines.filter(Boolean).join('\n');
 }
@@ -107,18 +160,28 @@ export default async function AdminReservationDetail(container, { bookingId } = 
   let order = null;
   let history = [];
   let creditPerDay = 0;
+  let createdByLabel = '';
 
   async function loadSideData() {
     const [ord, hist, packs] = await Promise.all([
       booking.paymentId ? getDocument('pendingOrders', booking.paymentId).catch(() => null) : Promise.resolve(null),
-      // Equality on a single field → automatic index, no composite needed.
-      // Sorted client-side because adding orderBy would require one.
-      getCollection('auditLog', where('entityId', '==', id)).catch(() => []),
+      // Shaped like every other audit surface (actors resolved, value objects
+      // unified) — raw docs rendered generic labels and an empty "who" column.
+      listEntityAudit(id),
       getTokenPacks().catch(() => []),
     ]);
     order = ord;
-    history = hist.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+    history = hist;
     creditPerDay = perCreditPrice(packs);
+
+    // Who created the booking: the booking_created audit row's actor when one
+    // exists (admin / broker / client rows all carry one), else the server-
+    // stamped createdBy uid, else the source channel ("Site" ≙ the customer).
+    const createdRow = history.find((h) => ['booking_created', 'create'].includes(h.action));
+    const rowActor = createdRow?.user && createdRow.user !== 'anonymous' ? createdRow.user : '';
+    createdByLabel = rowActor
+      || (booking.createdBy ? await resolveActorLabel(booking.createdBy) : '')
+      || t(`reservations.source.${booking.source || 'web'}`);
   }
 
   function actionsHtml() {
@@ -234,6 +297,7 @@ export default async function AdminReservationDetail(container, { bookingId } = 
           row(t('reservations.parkviaNoShow'), b.parkvia?.noShowReportedAt ? fmtDateTime(b.parkvia.noShowReportedAt, locale) : ''),
           row(t('reservations.noShowAt'), b.noShowAt ? fmtDateTime(b.noShowAt, locale) : ''),
           row(t('reservations.createdAt'), b.createdAt ? fmtDateTime(b.createdAt, locale) : ''),
+          row(t('reservations.createdBy'), createdByLabel),
           row(t('reservations.confirmEmail'), b.confirmEmailSentAt ? fmtDateTime(b.confirmEmailSentAt, locale) : ''),
           row(t('reservations.reminderCheckin'), b.reminderCheckinSentAt ? fmtDateTime(b.reminderCheckinSentAt, locale) : ''),
           row(t('reservations.reminderCheckout'), b.reminderCheckoutSentAt ? fmtDateTime(b.reminderCheckoutSentAt, locale) : ''),
@@ -245,13 +309,22 @@ export default async function AdminReservationDetail(container, { bookingId } = 
       ${history.length ? `
         <div class="card-solid rounded-2xl overflow-hidden">
           <div class="divide-y divide-frost-deep/60">
-            ${history.map((h) => `
-              <div class="flex flex-wrap items-center gap-3 px-6 py-3.5">
-                <span class="font-mono text-[12px] text-dim w-28 shrink-0">${escapeHtml(fmtAuditTime(h.timestamp, locale))}</span>
-                <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${actionStyle(h.action)}">${escapeHtml(actionLabel(h.action))}</span>
-                <span class="text-[14px] text-charcoal/80 flex-1 min-w-0">${escapeHtml(describeAction(h, locale))}</span>
-                <span class="text-[12px] text-dim font-mono shrink-0 hidden sm:inline">${escapeHtml((h.user || '').split('@')[0])}</span>
-              </div>`).join('')}
+            ${history.map((h) => {
+              const changes = h.action === 'booking_edited' ? editChanges(h, locale) : [];
+              return `
+              <div class="px-6 py-3.5">
+                <div class="flex flex-wrap items-center gap-3">
+                  <span class="font-mono text-[12px] text-dim w-28 shrink-0">${escapeHtml(fmtAuditTime(h.timestamp, locale))}</span>
+                  <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${actionStyle(h.action)}">${escapeHtml(actionLabel(h.action))}</span>
+                  <span class="text-[14px] text-charcoal/80 flex-1 min-w-0">${escapeHtml(describeAction(h, locale))}</span>
+                  <span class="text-[12px] text-dim font-mono shrink-0 hidden sm:inline" title="${escapeHtml(h.user || '')}">${escapeHtml((h.user || '').split('@')[0])}</span>
+                </div>
+                ${changes.length ? `
+                <div class="mt-1.5 sm:pl-[7.75rem] space-y-0.5">
+                  ${changes.map((c) => `<div class="text-[13px] text-charcoal/60"><span class="font-semibold text-charcoal/80">${escapeHtml(c.label)}:</span> <span class="line-through decoration-charcoal/40">${escapeHtml(c.from)}</span> → <span class="text-charcoal">${escapeHtml(c.to)}</span></div>`).join('')}
+                </div>` : ''}
+              </div>`;
+            }).join('')}
           </div>
         </div>`
       : `<div class="card-solid rounded-2xl p-8 text-center text-dim">${escapeHtml(t('reservations.noHistory'))}</div>`}

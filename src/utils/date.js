@@ -5,6 +5,33 @@ export function intlLocale(locale) {
   return locale === 'ro' ? 'ro-RO' : 'en-GB';
 }
 
+/**
+ * Normalize any stored date value to an ISO string, or null.
+ *
+ * Most writers store ISO strings, but everything written through
+ * db.js `addDocument`/`updateDocument` gets `serverTimestamp()` — a
+ * Firestore Timestamp object. Formatting one with `new Date(obj)` fails
+ * and the raw "Timestamp(seconds=…, nanoseconds=…)" leaks into the UI.
+ * Every display formatter and string-compare sort must go through this.
+ */
+export function anyToIso(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'string') return v;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString();
+  if (typeof v === 'number') return Number.isFinite(v) ? new Date(v).toISOString() : null;
+  if (typeof v.toDate === 'function') {
+    try { return v.toDate().toISOString(); } catch { return null; }
+  }
+  // Serialized Timestamp shapes ({seconds}/{_seconds}) survive JSON round-trips.
+  const secs = typeof v.seconds === 'number' ? v.seconds
+    : typeof v._seconds === 'number' ? v._seconds : null;
+  if (secs != null) {
+    const nanos = Number(v.nanoseconds ?? v._nanoseconds ?? 0);
+    return new Date(secs * 1000 + Math.floor(nanos / 1e6)).toISOString();
+  }
+  return null;
+}
+
 // ── Europe/Bucharest wall-clock ↔ instant ────────────────────────────────
 // Bookings are FOR the lot in Otopeni, so a picked "10:00" always means
 // 10:00 Romanian time — regardless of the timezone of the device making the

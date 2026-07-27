@@ -10,8 +10,9 @@ import { reservationCodeHtml, wireReservationLinks } from '../../components/admi
 import { navigate } from '../../router/index.js';
 import { localePath } from '../../i18n/index.js';
 import { pagerHtml } from '../../components/admin/ListControls.js';
-import { fmtDateTime } from '../../components/admin/bookingActions.js';
+import { fmtDateTime, reservationStatusLabel } from '../../components/admin/bookingActions.js';
 import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
+import { anyToIso } from '../../utils/date.js';
 
 // /admin/transactions — unified ledger.
 //
@@ -88,7 +89,9 @@ export default async function AdminTransactions(container) {
 
   for (const tx of txns) {
     rows.push({
-      timestamp: tx.timestamp,
+      // Normalized to ISO — a Firestore Timestamp here used to render as
+      // "Timestamp(seconds=…, nanoseconds=…)" and break the string sort.
+      timestamp: anyToIso(tx.timestamp) || '',
       type: tx.type || 'purchase',
       status: tx.type === 'use' ? 'used'
             : tx.type === 'refund' ? 'refunded'
@@ -110,7 +113,7 @@ export default async function AdminTransactions(container) {
   for (const b of bookings) {
     if (b.type !== 'longTerm') continue;
     rows.push({
-      timestamp: b.createdAt || b.startDate || b.dropoffAt,
+      timestamp: anyToIso(b.createdAt) || b.startDate || b.dropoffAt || '',
       type: 'longTerm',
       status: b.status || 'upcoming',
       sum: typeof b.totalPrice === 'number' ? `${b.totalPrice} ${t('common.lei')}` : '',
@@ -255,8 +258,8 @@ export default async function AdminTransactions(container) {
       .toLowerCase().includes(q);
   }
 
-  const sortedBookings = bookings.slice().sort((a, b) =>
-    String(b.createdAt || b.dropoffAt || b.startDate || '').localeCompare(String(a.createdAt || a.dropoffAt || a.startDate || '')));
+  const sortKey = (b) => anyToIso(b.createdAt) || b.dropoffAt || b.startDate || '';
+  const sortedBookings = bookings.slice().sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
 
   function renderReservations() {
     const filtered = sortedBookings.filter(reservationMatches);
@@ -301,8 +304,8 @@ export default async function AdminTransactions(container) {
                   <td class="px-4 py-3">${escapeHtml(b.contact?.name || '—')}</td>
                   <td class="px-4 py-3 font-mono">${escapeHtml(b.licensePlate || '—')}</td>
                   <td class="px-4 py-3 text-charcoal/70 whitespace-nowrap">${escapeHtml(fmtDateTime(b.dropoffAt || b.startDate, locale))} → ${escapeHtml(fmtDateTime(b.pickupAt || b.endDate, locale))}</td>
-                  <td class="px-4 py-3"><span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_STYLES[b.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml(t(`reservations.status.${b.status}`) || b.status || '—')}</span></td>
-                  <td class="px-4 py-3"><span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_STYLES[b.paymentStatus] || 'bg-gray-100 text-gray-600'}">${escapeHtml(t(`reservations.status.${b.paymentStatus}`) || b.paymentStatus || '—')}</span></td>
+                  <td class="px-4 py-3"><span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_STYLES[b.status] || 'bg-gray-100 text-gray-600'}">${escapeHtml(reservationStatusLabel(b.status))}</span></td>
+                  <td class="px-4 py-3"><span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_STYLES[b.paymentStatus] || 'bg-gray-100 text-gray-600'}">${escapeHtml(reservationStatusLabel(b.paymentStatus))}</span></td>
                   <td class="px-4 py-3 text-right font-semibold whitespace-nowrap">${b.totalPrice != null ? `${Number(b.totalPrice)} ${escapeHtml(t('common.lei'))}` : '—'}</td>
                 </tr>`).join('')}
             </tbody>
@@ -396,13 +399,16 @@ export default async function AdminTransactions(container) {
 
 
 function fmtMoment(iso, locale) {
+  iso = anyToIso(iso);
   if (!iso) return '—';
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
+    // Pinned to the lot's timezone, like every other admin board.
     return d.toLocaleString(locale === 'ro' ? 'ro-RO' : 'en-GB', {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
+      timeZone: 'Europe/Bucharest',
     });
   } catch {
     return iso;

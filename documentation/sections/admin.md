@@ -58,8 +58,16 @@ callables `checkInBooking`, `checkOutBooking`, `adminMarkOrderPaid`,
 `setTransferStatus`, etc. Walkthrough:
 [01-checkin-checkout-walkin](../admin-flows/01-checkin-checkout-walkin.md).
 
-### Transactions — `/admin/transactions` (`AdminTransactions.js`)
-Three tabs over the same fetch:
+### History ("Istoric") — `/admin/transactions` (`AdminTransactions.js`)
+Renamed from "Tranzacții" (2026-07); the route is unchanged. Three tabs over
+the same fetch. All timestamps render through `anyToIso` (`src/utils/date.js`)
+— client-written docs carry Firestore `Timestamp` objects in
+`createdAt`/`updatedAt` (db.js stamps `serverTimestamp()`), which used to leak
+as raw `Timestamp(seconds=…)` text in the date columns and to corrupt the
+newest-first string sort. Status/payment chips render via
+`reservationStatusLabel` (bookingActions.js), which falls back to `—` / the raw
+value instead of echoing a `reservations.status.undefined` key for bookings
+with no `paymentStatus`.
 
 - **Toate / Credite** — the original unified ledger merging credit
   `tokenTransactions` and long-term `bookings` (~500 most recent). Filter by
@@ -83,10 +91,19 @@ Three things it surfaces that had no UI at all:
   shown when they differ — the gap behind [BUGS.md #2](../admin-flows/BUGS.md).
 - **The fiscal trail** — SmartBill proforma / invoice / storno numbers, status
   and last error.
-- **History** — the booking's own `auditLog` rows (`where entityId == id`,
-  sorted client-side, so no composite index), rendered with the shared
-  `describeAction`. `updateBookingDetails` now records the *before* values of
-  the changed keys, so an edit reads as a change and not just a new value.
+- **History** — the booking's own `auditLog` rows via
+  `auditService.listEntityAudit(id)` (equality on `entityId` → automatic index,
+  sorted client-side), shaped like every other audit surface: actors resolved
+  (server rows only carry `actorUid`; feeding raw docs left the "who" column
+  empty) and value objects unified, then rendered with the shared
+  `describeAction`. `booking_edited` rows additionally expand into per-field
+  **old → new** diff lines (contact sub-fields split out, dates formatted),
+  possible because `updateBookingDetails` records the *before* values of the
+  changed keys.
+- **Who created it** — a "Creată de" row in the operations card: the
+  `booking_created` audit row's resolved actor when one exists, else the
+  server-stamped `createdBy` uid, else the source channel (a "Site" booking was
+  created by the customer).
 
 **Actions** (check-in, check-out, collect payment, edit, charge overstay,
 resend confirmation, cancel + refund) run through

@@ -8,6 +8,8 @@
 // Row shape comes from auditService.getAuditLog / listAuditRange:
 //   { action, entityId, entityType, entity, user, newValueObj, timestamp }
 
+import { anyToIso } from '../../utils/date.js';
+
 export const ACTION_STYLES = {
   booking_checkin: 'bg-leaf/10 text-leaf',
   booking_checkout: 'bg-blue-100 text-blue-600',
@@ -147,6 +149,7 @@ export function actionLabel(action) {
  * is recorded as having happened.
  */
 export function fmtAuditTime(iso, locale) {
+  iso = anyToIso(iso);
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
