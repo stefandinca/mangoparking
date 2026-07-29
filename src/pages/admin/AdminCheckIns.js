@@ -38,6 +38,7 @@ import {
 import { parkviaSyncNow } from '../../services/parkviaService.js';
 import { setTransferStatus, deleteTransfer } from '../../services/transferService.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
+import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
 import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
@@ -259,6 +260,7 @@ function rowHtml(b, { tab, locale, canCancel }) {
 
   return `
     <tr class="border-t border-frost-deep" data-row data-booking-id="${escapeHtml(b.id)}">
+      <td class="px-4 py-3 align-top text-[13px]">${reservationCodeHtml(b)}</td>
       <td class="px-4 py-3 align-top">
         <div class="text-[13px] font-mono">${fmtDateTime(dropoff, locale)}</div>
         <div class="text-[12px] text-dim font-mono mt-0.5">→ ${fmtDateTime(pickup, locale)}</div>
@@ -325,6 +327,7 @@ function overdueRowHtml(b, { locale, canCancel }) {
       </button>
       <div class="hidden border-t border-frost-deep px-4 py-4 bg-frost/30" data-overdue-body>
         <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1 mb-4">
+          ${detail(t('checkins.colCode'), reservationCodeHtml(b))}
           ${detail(t('checkins.detailDropoff'), fmtDateTime(b.dropoffAt || b.startDate, locale))}
           ${detail(t('checkins.detailPickup'), fmtDateTime(b.pickupAt || b.endDate, locale))}
           ${detail(t('checkins.detailDays'), String(b.days || '—'))}
@@ -521,6 +524,7 @@ export default async function AdminCheckIns(container) {
 
   initAdminNav(page);
   wireUserLinks(page);
+  wireReservationLinks(page);
   container.appendChild(page);
 
   const tabsEl = page.querySelector('[data-tabs]');
@@ -644,6 +648,7 @@ export default async function AdminCheckIns(container) {
           <table class="w-full">
             <thead class="bg-frost">
               <tr class="text-left text-[12px] font-mono uppercase tracking-wider text-dim">
+                <th class="px-4 py-3 font-medium">${t('checkins.colCode')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colTimes')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colCustomer')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colPlate')}</th>

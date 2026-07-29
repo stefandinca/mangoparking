@@ -16,7 +16,7 @@ import { updateMeta } from '../../utils/seo.js';
 import { subscribeCollection } from '../../firebase/db.js';
 import { navigate } from '../../router/index.js';
 import { openUserDetail } from '../../components/admin/UserDetailModal.js';
-import { openBookingDetail } from '../../components/admin/BookingDetailModal.js';
+import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
 import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
@@ -169,7 +169,7 @@ function bookingDetailHtml(b, locale) {
     detailLine(t('activity.detailPhone'), telLink(b.contact?.phone)),
     detailLine(t('activity.detailEmail'), b.contact?.email ? esc(b.contact.email) : ''),
     detailLine(t('activity.detailPlate'), `<span class="font-mono">${esc(b.licensePlate || '—')}</span>`),
-    detailLine(t('activity.detailBooking'), b.code ? `<button type="button" data-booking-detail data-id="${esc(b.id)}" class="font-mono text-blueberry hover:underline">${esc(b.code)}</button>` : ''),
+    detailLine(t('activity.detailBooking'), reservationCodeHtml(b)),
     detailLine(t('activity.detailPeriod'), esc(period)),
     detailLine(t('activity.detailStatus'), statusBadge(b.status)),
     detailLine(t('activity.detailTotal'), b.totalPrice != null ? `${Number(b.totalPrice)} ${esc(t('common.lei'))}` : ''),
@@ -468,19 +468,14 @@ export default function AdminActivity(container) {
     openUserDetail({ customerId: el.dataset.uid || null, email: el.dataset.email || null, displayName: el.textContent.trim() });
   });
 
-  // Reservation number → reservation details + who created it and when.
-  delegate(page, 'click', '[data-booking-detail]', (e, el) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const b = bookings.find((x) => x.id === el.dataset.id);
-    if (b) openBookingDetail(b);
-  });
+  // Reservation number → the full record in Istoric.
+  wireReservationLinks(page);
 
   // Upcoming rows: jump to the relevant check-in tab, scoped to the clicked
   // event's day, and ask that page to scroll to + highlight the reservation.
   // A click on the name / reservation-number is handled above — skip it here.
   delegate(page, 'click', '[data-go]', (e, btn) => {
-    if (e.target.closest('[data-user-link], [data-booking-detail]')) return;
+    if (e.target.closest('[data-user-link], [data-reservation-link]')) return;
     const goParams = new URLSearchParams({ tab: btn.dataset.go });
     const day = localDayKey(btn.dataset.at);
     if (day) goParams.set('window', `${day}..${day}`);

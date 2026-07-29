@@ -300,10 +300,8 @@ export default async function AdminRefunds(container) {
   const page = AdminLayout('/admin/refunds', content);
   initAdminNav(page);
   wireUserLinks(page);
-  // Refund rows are all historical (cancelled / refund-pending / refunded), so
-  // the reservation code opens the read-only detail modal rather than the
-  // check-in page (which has no row for them).
-  wireReservationLinks(page, (id) => [...pending, ...partial, ...history].find((b) => b.id === id));
+  // A reservation code navigates to the full record in Istoric.
+  wireReservationLinks(page);
   container.appendChild(page);
 
   page.addEventListener('click', async (e) => {

@@ -260,7 +260,7 @@ America/New_York browser — 15/15 checks incl. TZ-pinned payloads):
   Check-out tab. A non-empty search now bypasses the window (global finder).
   (`AdminCheckIns.js`)
 - Check-in board timestamps now render pinned to Europe/Bucharest (matches
-  BookingDetailModal + emails). (`AdminCheckIns.js`)
+  the reservation record + emails). (`AdminCheckIns.js`)
 
 Third wave — backend + rules hardening (needs `firebase deploy --only
 functions,firestore:rules` to take effect; verified `node --check` on every

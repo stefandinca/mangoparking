@@ -93,9 +93,9 @@ Delete.
      so a guest reservation's plate is visible even before the plate reaches
      `vehicles` (see `addPlateToProfile` / `mergeGuestData` in
      [../backend/cloud-functions.md](../backend/cloud-functions.md)). The
-     reservation **code is a clickable link** (`reservationCodeHtml`): a live
-     booking closes the modal and jumps to the check-in page focused on the row;
-     a historical one opens the read-only booking-detail modal.
+     reservation **code is a clickable link** (`reservationCodeHtml`): it closes
+     the modal and opens the reservation's full record on Istoric
+     (`/admin/transactions?booking=<id>`).
    - **Vouchers** — `promoVouchers` assigned to the uid + `voucherRedemptions`
      (to flag spent codes) + legacy `vouchers/{uid}` (now admin-readable, see
      rules note).

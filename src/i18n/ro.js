@@ -1716,6 +1716,7 @@ export default {
     overdueEmpty: 'Nicio depășire. ✓',
     noShowEmpty: 'Nicio neprezentare în acest interval. ✓',
     // Columns
+    colCode: 'Cod',
     colTimes: 'Sosire / Plecare',
     colCustomer: 'Client',
     colPlate: 'Plăcuță',
@@ -1965,32 +1966,6 @@ export default {
       noshow: 'Neprezentat',
       scheduled: 'Programat',
     },
-  },
-
-  // Reservation detail modal (click a reservation number)
-  bookingDetail: {
-    title: 'Detalii rezervare',
-    customer: 'Client',
-    phone: 'Telefon',
-    email: 'Email',
-    plate: 'Nr. înmatriculare',
-    passengers: 'Pasageri',
-    flightDropoff: 'Zbor (predare)',
-    flightPickup: 'Zbor (preluare)',
-    type: 'Tip',
-    period: 'Perioadă',
-    status: 'Status',
-    payment: 'Plată',
-    total: 'Total',
-    checkedIn: 'Check-in efectuat',
-    checkedOut: 'Check-out efectuat',
-    notes: 'Note',
-    viewCustomer: 'Vezi profilul clientului',
-    typeLongterm: 'Termen lung',
-    typeCredit: 'Credite',
-    madeByStaff: 'Rezervare făcută de {name} pe {date}',
-    madeByStaffGeneric: 'Rezervare făcută de personal pe {date}',
-    madeOnline: 'Rezervare făcută online pe {date}',
   },
 
   // Cashbook (admin)

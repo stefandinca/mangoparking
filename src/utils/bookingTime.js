@@ -16,8 +16,8 @@ export function fmtDateTime(iso, locale) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    // Pinned to the lot's timezone (matches BookingDetailModal and the
-    // customer emails) so a staff device with a foreign/mis-set timezone
+    // Pinned to the lot's timezone (matches the admin reservation record and
+    // the customer emails) so a staff device with a foreign/mis-set timezone
     // still shows the times the customer was promised.
     return d.toLocaleString(locale === 'en' ? 'en-GB' : 'ro-RO', {
       day: '2-digit', month: '2-digit', year: '2-digit',

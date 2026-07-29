@@ -78,10 +78,10 @@ The `booking.spotId` links a reservation to its tile.
 ## Key files
 
 - `src/services/capacityService.js` — aggregation, subscription, spot writes.
-- `src/pages/admin/AdminCapacity.js` — the zone map + status-cycle + popup.
+- `src/pages/admin/AdminCapacity.js` — the zone map + status-cycle; a booked
+  tile navigates to the reservation's full record
+  (`/admin/transactions?booking=<id>`).
 - `src/utils/constants.js` — `TOTAL_CAPACITY` (`:1`), `SPOT_STATUSES`, `ZONES`.
-- `src/components/admin/BookingDetailModal.js` — the reservation popup opened
-  from a booked tile (`openBookingDetail`).
 - `functions/src/index.js` — `reserveAvailableSpot` (`:198`) + its callers.
 - `firestore.rules` — `spots` (`:170`): public read, `isStaff()` write.
 

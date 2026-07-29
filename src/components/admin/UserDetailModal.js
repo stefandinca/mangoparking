@@ -575,9 +575,9 @@ export function openUserDetailModal(user) {
   loadAndRender(user, body);
   // Reservation codes in the Bookings section: a live one navigates to the
   // check-in page (close this modal first so it doesn't linger over it); a
-  // historical one opens the read-only detail modal. No resolver — the handler
-  // fetches the booking by id, so the detail modal gets the full record.
-  wireReservationLinks(body, null, close);
+  // A reservation code navigates to the full record in Istoric; close this
+  // modal first so it doesn't linger over the new page.
+  wireReservationLinks(body, close);
   return { close };
 }
 

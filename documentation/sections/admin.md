@@ -52,7 +52,10 @@ The core daily-ops screen. Five tabs: **Check-in** (upcoming, pay-first),
 `bookings` subscription is scoped to `status in [upcoming, active, no-show]`
 (single-field filter, automatic index) — the board never renders
 completed/cancelled rows, so it no longer re-streams the whole archive on
-every snapshot as lifetime volume grows. Plate/name/code
+every snapshot as lifetime volume grows. Every row leads with its **booking
+code** (also in the expanded overdue card), linked — like every code across
+the admin — to the reservation's full record on Istoric
+(`/admin/transactions?booking=<id>`, via `reservationCodeHtml`). Plate/name/code
 search and a today/week/month/custom window selector. Actions: check-in, check-out,
 charge overstay, collect payment, cancel+refund, edit booking details, resend
 confirmation email, reprice, and transfer complete/cancel/delete. **Walk-ins** are

@@ -41,11 +41,11 @@ booking becomes `refund-pending` and enters the Refunds queue.
    hidden). Header shows "Total de rambursat" summed from `totalPrice`.
 2. Each pending row: Code · Plate · Customer · Cancelled-at · Paid-via · Amount
    (`totalPrice`) · actions. Netopia rows get an "Open in Netopia" link; all rows
-   get a green "Marchează rambursat". The **Code is clickable** — refund rows are
-   all historical (cancelled/refund-pending/refunded), so it opens the read-only
-   booking-detail modal (`reservationCodeHtml` / `wireReservationLinks`; the same
-   helper deep-links live reservations to the check-in page elsewhere). Applies to
-   the pending, partial, and history tables.
+   get a green "Marchează rambursat". The **Code is clickable** — it opens the
+   reservation's full record on Istoric (`/admin/transactions?booking=<id>`,
+   via `reservationCodeHtml` / `wireReservationLinks` — the one destination for
+   every reservation code across the admin). Applies to the pending, partial,
+   and history tables.
 3. Admin issues the refund **out of band** (Netopia panel / cash at lot / POS
    void), then clicks **Marchează rambursat**.
 4. Dialog opens pre-selecting a channel via `suggestedVia(paidBy)`: radio

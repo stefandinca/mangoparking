@@ -46,12 +46,13 @@ submit (`:1114`) they're cleaned identically and passed to the
 callable does the same. So every long-term booking carries these three fields
 (possibly empty/null).
 
-### Reservation-detail popup — `src/components/admin/BookingDetailModal.js`
+### Reservation record — `src/pages/admin/AdminReservationDetail.js`
 
-`openBookingDetail(booking)` renders read-only rows for **Passengers** (`:110`),
-**Flight (drop-off)** (`:113`) and **Flight (pick-up)** (`:114`). The generic
-`row()` helper omits empty values, so absent flight/passenger data simply doesn't
-appear. This popup opens from booking codes, the capacity map, etc.
+The full record at `/admin/transactions?booking=<id>` shows **Passengers**,
+**Flight (drop-off)** and **Flight (pick-up)** among every other stored field;
+its `row()` helper omits empty values, so absent flight/passenger data simply
+doesn't appear. Every booking code across the admin (and a booked capacity
+tile) navigates here — the old read-only detail modal is retired.
 
 ### Flight-status warnings — `src/services/flightStatusService.js` (client)
 
@@ -100,8 +101,8 @@ don't re-bill the third party. Full provider/key details:
   `:232`, `:1030`).
 - `src/components/admin/CreateTransactionModal.js` — same fields, admin side
   (`:183`, `:196`, `:1114`).
-- `src/components/admin/BookingDetailModal.js` — read-only display (`:110`,
-  `:113`, `:114`).
+- `src/pages/admin/AdminReservationDetail.js` — read-only display on the full
+  reservation record.
 - `src/services/flightStatusService.js` — client warning enhancer + badge.
 - `functions/src/flightStatus.js` — `lookupFlightStatuses` callable (server).
 - `src/pages/admin/AdminCheckIns.js` / `AdminActivity.js` — the boards that emit

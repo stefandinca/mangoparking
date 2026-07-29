@@ -127,13 +127,9 @@ export default async function AdminTransactions(container) {
       customerId: b.customerId || null,
       email: b.contact?.email || (b.customerId && emailByUid.get(b.customerId)) || '',
       code: b.code || '',
-      // Kept so the code can deep-link to the reservation (reservationCodeHtml
-      // / liveTarget). Only longTerm booking rows carry a bookingId.
+      // Kept so the code can deep-link to the full record (reservationCodeHtml).
+      // Only longTerm booking rows carry a bookingId.
       bookingId: b.id,
-      dropoffAt: b.dropoffAt || null,
-      startDate: b.startDate || null,
-      pickupAt: b.pickupAt || null,
-      endDate: b.endDate || null,
     });
   }
 
@@ -397,7 +393,7 @@ export default async function AdminTransactions(container) {
         <td class="px-4 py-3 font-mono">${escapeHtml(r.plate || '—')}</td>
         <td class="px-4 py-3 font-mono text-[13px] text-dim">${userNameButton({ customerId: r.customerId, email: r.email, name: r.email })}</td>
         <td class="px-4 py-3 text-[13px]">${r.bookingId
-          ? reservationCodeHtml({ id: r.bookingId, code: r.code, status: r.status, type: 'longTerm', dropoffAt: r.dropoffAt, startDate: r.startDate, pickupAt: r.pickupAt, endDate: r.endDate })
+          ? reservationCodeHtml({ id: r.bookingId, code: r.code, type: 'longTerm' })
           : `<span class="font-mono">${escapeHtml(r.code || '—')}</span>`}</td>
       </tr>
     `).join('');

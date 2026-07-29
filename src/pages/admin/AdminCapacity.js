@@ -1,11 +1,11 @@
 import { delegate } from '../../utils/dom.js';
-import { t } from '../../i18n/index.js';
+import { t, localePath } from '../../i18n/index.js';
+import { navigate } from '../../router/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getAllSpots, updateSpotStatus, subscribeCapacity } from '../../services/capacityService.js';
 import { getCollection, subscribeCollection, where } from '../../firebase/db.js';
 import { TOTAL_CAPACITY } from '../../utils/constants.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
-import { openBookingDetail } from '../../components/admin/BookingDetailModal.js';
 
 const SPOT_STATES = ['available', 'occupied', 'reserved', 'maintenance'];
 const SPOT_COLORS = {
@@ -163,13 +163,17 @@ export default async function AdminCapacity(container) {
   `);
 
   // Click a spot: a booked tile (occupied / reserved by a real reservation)
-  // opens that reservation's details; any other tile cycles its manual status
-  // and persists to Firestore (with rollback on failure). Occupied/reserved
-  // tiles are booking-driven, so hand-cycling them would only desync.
+  // navigates to that reservation's full record in Istoric; any other tile
+  // cycles its manual status and persists to Firestore (with rollback on
+  // failure). Occupied/reserved tiles are booking-driven, so hand-cycling
+  // them would only desync.
   delegate(page, 'click', '[data-spot]', async (e, btn) => {
     const spotId = btn.dataset.spot;
     const booking = bookingBySpot[spotId];
-    if (booking) { openBookingDetail(booking); return; }
+    if (booking) {
+      navigate(`${localePath('/admin/transactions')}?booking=${encodeURIComponent(booking.id)}`);
+      return;
+    }
 
     const currentStatus = btn.dataset.spotStatus;
     const currentIdx = SPOT_STATES.indexOf(currentStatus);
