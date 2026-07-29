@@ -429,19 +429,23 @@ server-side.
   concurrent admin "Sync now" can't double-import.
 - **ID:** the sanitized ParkVia booking reference (`parkviaRefDocId`).
 - **Writer:** **server-only** (`runParkviaSync`).
-- **Shape:** `ref`, `bookingId`|null, `importedAt`, `lastStatus`, `lastSeenAt`, `lastRaw` (the
+- **Shape:** `ref`, `bookingId`|null, `importedAt`, `claimAt` (stale after 10 min — a
+  died-mid-import claim gets retried), `lastStatus`, `lastSeenAt`, `lastEventId` (newest event id
+  handled *for this ref* — what the overlap-window triage compares against), `lastRaw` (the
   raw reservation snapshot).
 - **Access:** staff read; no client writes.
 
-## parkviaSync (ParkVia poll cursor — live)
+## parkviaSync (ParkVia poll state — live)
 
-- **Purpose:** the ParkVia poll cursor/state (single doc `state`).
+- **Purpose:** the ParkVia poll state (single doc `state`).
 - **ID:** `state`.
 - **Writer:** **server-only** (`runParkviaSync`). A dedicated collection (not `settings/*`)
-  because the shared `settings/{doc}` rule allows admin client writes — a server cursor must not.
-- **Shape:** `lastEventId` (the ParkCloud booking-event id the sync has consumed — ParkCloud is
-  event-based, not modified-since), `primedAt` (set by the first, import-free run), `lastSyncAt`,
-  `lastRunAt`, `lastResult` (`{ imported, skipped, cancelled, amended, errors }`), `lastError`.
+  because the shared `settings/{doc}` rule allows admin client writes — server state must not.
+- **Shape:** `lastEventId` (high-water mark of consumed event ids — **not** a poll cutoff; the
+  sync polls an overlapping `events/age/{hours}` window because ParkCloud publishes events out
+  of id order), `primeEventId` (fences off the pre-go-live manual-desk era), `primedAt` (set by
+  the first, import-free run), `lastSyncAt`, `lastRunAt`,
+  `lastResult` (`{ imported, skipped, cancelled, amended, errors }`), `lastError`.
 - **Access:** staff read; no client writes.
 - ⚠️ Never delete this doc to "force a resync" — a missing `primedAt` makes the next run
   re-prime and silently skip every event since. See [../features/parkvia.md](../features/parkvia.md).

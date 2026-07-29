@@ -66,6 +66,7 @@ import {
   getParkviaBookingDetails,
   mapParkviaBookingToImport,
   parkviaRefDocId,
+  parkviaWindowHours,
   registerParkviaNoShow,
 } from './parkvia.js';
 
@@ -4556,10 +4557,18 @@ export const smartbillTestIssue = onCall(
 // button (parkviaSyncNow). Best-effort per reservation: one bad row is counted
 // as an error and skipped, never aborting the batch.
 //
-// Cursor lives in parkviaSync/state (server-only). Dedup is the authoritative
-// parkviaImports/{ref} ledger, claimed transactionally before a booking is made.
+// Sync state lives in parkviaSync/state (server-only). Dedup is the
+// authoritative parkviaImports/{ref} ledger, claimed transactionally before a
+// booking is made. The poll uses an OVERLAPPING age window, not a strict
+// since/{id} cursor — ParkCloud publishes event rows late and out of id order
+// (see parkviaWindowHours in parkvia.js), so lastEventId is only a high-water
+// mark that lets already-handled refs skip cheaply, never a hard cutoff.
 const PARKVIA_SYNC_DOC = 'parkviaSync/state';
 const PARKVIA_BACKFILL_HOURS = 720;   // first run: 30 days of events (verified live)
+// A parkviaImports claim with no bookingId older than this is a dead import
+// attempt (create threw after the claim) — safe to re-claim and retry. Runs
+// take seconds; 10 minutes comfortably outlives any in-flight one.
+const PARKVIA_CLAIM_STALE_MS = 10 * 60_000;
 
 export async function runParkviaSync(actorUid = 'scheduled') {
   const cfg = parkviaConfig();
@@ -4569,14 +4578,12 @@ export async function runParkviaSync(actorUid = 'scheduled') {
   const nowIso = new Date().toISOString();
   const summary = { configured: true, imported: 0, skipped: 0, cancelled: 0, amended: 0, errors: 0 };
 
-  // Cursor: the last-processed EVENT ID. ParkCloud is event-based (NEW / AMEND /
-  // CANCEL / NOSHOW rows with increasing ids) — we poll "events since {id}".
-  //
   // FIRST RUN PRIMES, NEVER IMPORTS (go-live decision 2026-07-23): the account
   // already held ~3 weeks of reservations that staff had entered manually at
   // the desk, so a historical backfill would duplicate them. The first pass
   // records the newest event id and stops; only bookings created/changed after
-  // go-live import automatically.
+  // go-live import automatically. primeEventId marks that boundary forever —
+  // the overlap window must never re-import the manual-desk era.
   const [syncColl, syncId] = PARKVIA_SYNC_DOC.split('/');
   const syncRef = db.collection(syncColl).doc(syncId);
   const syncSnap = await syncRef.get();
@@ -4591,6 +4598,7 @@ export async function runParkviaSync(actorUid = 'scheduled') {
       const result = { ...summary, primed: true, seenEvents: seen.length };
       await syncRef.set({
         lastEventId: maxId,
+        primeEventId: maxId,
         primedAt: nowIso,
         lastSyncAt: nowIso,
         lastRunAt: nowIso,
@@ -4599,12 +4607,9 @@ export async function runParkviaSync(actorUid = 'scheduled') {
       }, { merge: true });
       return result;
     }
-    const lastEventId = Number(state.lastEventId) || 0;
-    // since/0 semantics are unknown — if the prime saw an empty account, use a
-    // small age window instead; the parkviaImports ledger dedups any overlap.
-    events = lastEventId > 0
-      ? await listParkviaEvents({ sinceId: lastEventId })
-      : await listParkviaEvents({ hours: 24 });
+    // Overlapping age window (stretched to cover downtime). Re-seen events are
+    // cheap: the parkviaImports ledger says which refs are already handled.
+    events = await listParkviaEvents({ hours: parkviaWindowHours(state.lastSyncAt, Date.now()) });
   } catch (err) {
     console.warn('runParkviaSync: events fetch failed', err?.message);
     await syncRef.set({ lastRunAt: nowIso, lastError: String(err?.message || err) }, { merge: true });
@@ -4613,58 +4618,98 @@ export async function runParkviaSync(actorUid = 'scheduled') {
 
   // One pass per booking: several events for the same reference collapse to a
   // single details-fetch (Get Booking Details always returns the CURRENT state,
-  // so replaying intermediate events would be redundant). Processed in event-id
-  // order; the cursor advances over the whole batch even when a row errors —
-  // best-effort per reservation, a poisoned row must not wedge the cursor.
+  // so replaying intermediate events would be redundant). The window overlaps
+  // event ids we've already covered ON PURPOSE — late-visible rows land below
+  // lastEventId — so the ledger, not the id, decides what still needs work.
+  // Pre-go-live events (id ≤ primeEventId) are the manual-desk era and must
+  // never import.
+  const primeEventId = Number(state.primeEventId) || 0;
+  const lastEventId = Number(state.lastEventId) || 0;
   const byRef = new Map();
-  let maxEventId = Number(state.lastEventId) || 0;
+  let maxEventId = lastEventId;
   for (const ev of events.sort((a, b) => a.id - b.id)) {
+    if (ev.id <= primeEventId) continue;
     byRef.set(ev.ref, ev);
     maxEventId = Math.max(maxEventId, ev.id);
   }
 
   for (const ev of byRef.values()) {
-    let node;
-    let imp;
+    const ledgerRef = db.collection('parkviaImports').doc(parkviaRefDocId(ev.ref));
     try {
-      node = await getParkviaBookingDetails(ev.ref);
-      imp = mapParkviaBookingToImport(node);
-    } catch (err) {
-      summary.errors++;
-      console.warn('runParkviaSync: fetch/map failed', ev.ref, err?.message);
-      continue;
-    }
+      // Triage without a details fetch: the ledger row says whether this ref
+      // still needs work. Process when the ref is unknown (new or late-visible
+      // NEW), when a previous import never produced a booking (retry), or when
+      // the window carries a newer event id than the last one handled for this
+      // ref (late-visible CANCEL/AMEND rows too — per-ref, so the global
+      // high-water mark can't hide them). Everything else skips cheaply,
+      // without touching the counters. Ledger rows from before lastEventId
+      // stamping existed reprocess once, stamp, then skip cheaply.
+      const prior = (await ledgerRef.get()).data();
+      if (prior
+        && (prior.bookingId || prior.lastStatus !== 'active')
+        && ev.id <= (Number(prior.lastEventId) || 0)) continue;
 
-    // ENQUIRY = not a confirmed booking yet. Skip WITHOUT claiming the ledger
-    // so a later CONFIRMED event can still import it.
-    if (imp.rawStatus === 'enquiry') {
-      summary.skipped++;
-      continue;
-    }
+      const node = await getParkviaBookingDetails(ev.ref);
+      const imp = mapParkviaBookingToImport(node);
 
-    const ledgerRef = db.collection('parkviaImports').doc(parkviaRefDocId(imp.ref));
-    try {
-      // Atomic claim: create the ledger doc iff it doesn't exist. A losing
-      // racer (poller vs. "Sync now") throws and falls through to reconcile.
-      let claimed = false;
-      await db.runTransaction(async (tx) => {
-        const existing = await tx.get(ledgerRef);
-        if (existing.exists) return;                 // already imported → reconcile below
+      // ENQUIRY = not a confirmed booking yet. Skip WITHOUT claiming the ledger
+      // so a later CONFIRMED state can still import it.
+      if (imp.rawStatus === 'enquiry') {
+        summary.skipped++;
+        continue;
+      }
+
+      // Atomic triage on the ledger doc — decides who acts and claims when the
+      // action is an import, so the poller and a concurrent "Sync now" can't
+      // double-create. A claim whose import died (bookingId still null) goes
+      // stale after PARKVIA_CLAIM_STALE_MS and is re-claimed: a failed import
+      // is retried on a later pass, never poisoned forever.
+      const verdict = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ledgerRef);
+        const data = snap.exists ? snap.data() : null;
+        if (data?.bookingId) return 'reconcile';
+        if (imp.rawStatus === 'cancelled') {
+          // No booking exists and ParkVia says cancelled — record only.
+          tx.set(ledgerRef, {
+            ref: imp.ref,
+            bookingId: null,
+            importedAt: data?.importedAt || nowIso,
+            lastStatus: 'cancelled',
+            lastSeenAt: nowIso,
+            lastEventId: ev.id,
+            lastRaw: node,
+          }, { merge: true });
+          return 'record';
+        }
+        if (data?.claimAt && Date.now() - Date.parse(data.claimAt) < PARKVIA_CLAIM_STALE_MS) {
+          return 'busy';                             // another runner's import is in flight
+        }
         tx.set(ledgerRef, {
           ref: imp.ref,
           bookingId: null,
-          importedAt: nowIso,
+          importedAt: data?.importedAt || nowIso,
+          claimAt: nowIso,
           lastStatus: imp.rawStatus,
           lastSeenAt: nowIso,
+          lastEventId: ev.id,
           lastRaw: node,
-        });
-        claimed = true;
+        }, { merge: true });
+        return 'import';
       });
 
-      if (claimed) {
-        // Brand-new reservation. Skip creating a booking for one that already
-        // arrived cancelled — just record the ledger row.
-        if (imp.rawStatus === 'cancelled') {
+      if (verdict === 'record' || verdict === 'busy') {
+        summary.skipped++;
+        continue;
+      }
+
+      if (verdict === 'import') {
+        // Self-heal: if a booking for this ref already exists (a previous run
+        // created it but died before linking the ledger), link it instead of
+        // creating a duplicate.
+        const dupe = await db.collection('bookings')
+          .where('parkvia.ref', '==', imp.ref).limit(1).get();
+        if (!dupe.empty) {
+          await ledgerRef.update({ bookingId: dupe.docs[0].id, lastSeenAt: nowIso, lastEventId: ev.id });
           summary.skipped++;
           continue;
         }
@@ -4692,16 +4737,18 @@ export async function runParkviaSync(actorUid = 'scheduled') {
         continue;
       }
 
-      // Already known → reconcile against current ParkVia state.
+      // 'reconcile' — already imported → reconcile against current ParkVia state.
       const ledger = (await ledgerRef.get()).data() || {};
-      await ledgerRef.update({ lastSeenAt: nowIso, lastRaw: node });
+      await ledgerRef.update({ lastSeenAt: nowIso, lastEventId: ev.id, lastRaw: node });
       const changed = await reconcileParkviaBooking(imp, ledger, actorUid);
       if (changed === 'cancelled') summary.cancelled++;
       else if (changed === 'amended') summary.amended++;
       else summary.skipped++;
     } catch (err) {
+      // Best-effort per reservation — a poisoned row must not wedge the batch.
+      // The overlap window re-serves the ref on later runs, so this IS retried.
       summary.errors++;
-      console.warn('runParkviaSync: import/reconcile failed', imp?.ref, err?.message);
+      console.warn('runParkviaSync: sync failed for', ev.ref, err?.message);
     }
   }
 

@@ -40,29 +40,50 @@ extraction (`xmlText` — `<Field i:nil="true"/>` must read as `''`, not
 | Endpoint | Used for |
 |---|---|
 | `GET /operators` | Healthcheck probe — also verifies operator **15777** is visible to these credentials |
-| `GET /operator/{id}/bookings/events/since/{eventId}` | The poll cursor — booking-change events |
-| `GET /operator/{id}/bookings/events/age/{hours}` | First-run window (720 h, verified live) |
+| `GET /operator/{id}/bookings/events/age/{hours}` | **The poll** — overlapping window (72 h rolling, stretched over downtime; 720 h max, verified live) |
+| `GET /operator/{id}/bookings/events/since/{eventId}` | Diagnostics only — **not** used as a cursor (events become visible out of id order; see below) |
 | `GET /operator/{id}/booking/{reference}` | Full current state of one booking — what the mapper consumes |
 | `PUT /operator/{id}/booking/{reference}/NoShow` | Register No Show (verb probed live; needs an explicit empty body so IIS gets a `Content-Length`) |
 
 ### The sync pass (`runParkviaSync`, `functions/src/index.js`)
 
 ParkCloud is **event-based**, not modified-since: `NEW` / `AMEND` / `CANCEL` /
-`NOSHOW` rows with monotonically increasing ids. `parkviaSync/state.lastEventId`
-is the cursor.
+`NOSHOW` rows with monotonically increasing ids. Ids are assigned in order but
+**become visible in the feed late and out of id order** (proven live 2026-07-29:
+a NEW event stamped 11:17 was still absent at 12:21 while a 12:08 event with a
+higher id was already served — reservation PC90417080 was silently lost to the
+old strict `since/{id}` cursor). The sync therefore polls an **overlapping age
+window** and lets the ledger decide what still needs work; `lastEventId` is only
+a high-water mark, never a cutoff.
 
 1. **First run primes and imports nothing** (go-live decision 2026-07-23): the
    account already held ~3 weeks of reservations staff had entered by hand, so a
-   backfill would have duplicated them. The pass records the newest event id +
-   `primedAt` and stops. Production's prime returned
+   backfill would have duplicated them. The pass records the newest event id as
+   `lastEventId` **and `primeEventId`** + `primedAt` and stops. Events at or
+   below `primeEventId` are the manual-desk era and are ignored forever.
+   Production's prime returned
    `{"configured":true,"primed":true,"seenEvents":41,"imported":0,"errors":0}`.
-2. Fetch events since the cursor. Several events for the same reference
-   **collapse to one details fetch** — Get Booking Details always returns the
-   current state, so replaying intermediate events would be redundant.
-3. Per reference: fetch details → `mapParkviaBookingToImport` → skip `ENQUIRY`
-   **without claiming the ledger** (a later CONFIRMED event can still import it)
-   → transactionally claim `parkviaImports/{ref}` → import or reconcile.
-4. The cursor advances over the whole batch and the summary
+2. Fetch `events/age/{hours}` — `parkviaWindowHours`: 72 h rolling, stretched to
+   cover poller downtime (gap since `lastSyncAt` + 24 h margin), capped at the
+   feed's 720 h. Several events for the same reference **collapse to one details
+   fetch** — Get Booking Details always returns the current state.
+3. Per reference, **triage from the `parkviaImports/{ref}` ledger row** before
+   any details fetch: skip cheaply when the row has a `bookingId` (or a terminal
+   status) *and* its `lastEventId` stamp already covers the newest event seen
+   for that ref. What falls through is exactly the work list: brand-new refs,
+   **late-visible events** (NEW or CANCEL/AMEND), and **previously-failed
+   imports**.
+4. For each ref that needs work: fetch details → `mapParkviaBookingToImport` →
+   skip `ENQUIRY` **without claiming the ledger** (a later CONFIRMED state can
+   still import it) → a transactional triage on the ledger returns
+   `import` (claim taken — create the booking) / `record` (arrived already
+   cancelled — ledger row only) / `busy` (another runner's claim is fresh) /
+   `reconcile` (booking exists — reconcile). A claim whose import died
+   (`bookingId` still null) goes **stale after 10 min** and is re-claimed, so a
+   failed import is retried rather than poisoned; before re-creating, the run
+   checks for an existing booking with that `parkvia.ref` and links it instead
+   of duplicating.
+5. The high-water mark advances over the whole batch and the summary
    (`{ imported, skipped, cancelled, amended, errors }`) lands on
    `parkviaSync/state.lastResult`.
 
@@ -156,14 +177,19 @@ re-fetches details and reconciles to `unchanged` (Status stays `CONFIRMED`, only
   write touching `parkvia` (alongside `smartbill`).
 - **`parkviaImports/{ref}`** — the authoritative **dedup ledger**, one doc per
   ParkVia booking reference (doc id sanitized by `parkviaRefDocId`):
-  `{ ref, bookingId, importedAt, lastStatus, lastSeenAt, lastRaw }`. Claimed
-  transactionally before a booking is created, so the poller and a concurrent
-  "Sync now" can't double-import. Staff read; server-written only.
-- **`parkviaSync/state`** — the poll cursor and run state:
-  `{ lastEventId, primedAt, lastSyncAt, lastRunAt, lastResult, lastError }`.
-  Staff read; server-written only. A dedicated collection rather than
-  `settings/*` because the shared `settings/{doc}` rule allows admin client
-  writes — a server cursor must not.
+  `{ ref, bookingId, importedAt, claimAt, lastStatus, lastSeenAt, lastEventId,
+  lastRaw }`. Claimed transactionally before a booking is created, so the poller
+  and a concurrent "Sync now" can't double-import; `claimAt` ages out (10 min)
+  so a died-mid-import claim is retried; `lastEventId` is the newest event id
+  handled *for this ref* — the per-ref stamp the overlap-window triage compares
+  against. Staff read; server-written only.
+- **`parkviaSync/state`** — the poll state:
+  `{ lastEventId, primeEventId, primedAt, lastSyncAt, lastRunAt, lastResult,
+  lastError }`. `lastEventId` is a high-water mark (diagnostics; batch summary),
+  **not** a poll cutoff; `primeEventId` fences off the pre-go-live manual-desk
+  era from the overlap window. Staff read; server-written only. A dedicated
+  collection rather than `settings/*` because the shared `settings/{doc}` rule
+  allows admin client writes — server state must not.
 
 See [data-model.md](../backend/data-model.md) and
 [security-rules.md](../backend/security-rules.md).
@@ -184,10 +210,18 @@ bind them too, for the no-show report-back.
 - **No historical backfill.** The prime is one-shot on `primedAt`. Deleting
   `parkviaSync/state` would re-prime and **silently skip** every event in
   between — never clear it to "force a resync"; use Sync now.
-- **An errored reference is not retried.** The cursor advances across the whole
-  batch even when a row throws (a poisoned reservation must not wedge the
-  cursor), so a mapping failure is counted in `errors` + logged and only
-  reconsidered if ParkVia emits another event for that reference.
+- **The event feed is not visibility-ordered.** ParkCloud publishes event rows
+  late and out of id order (the 2026-07-29 PC90417080 incident: >1 h of
+  publication lag while newer ids were already served). This is *why* the poll
+  is an overlapping age window — any strict `since/{id}` cursor silently loses
+  late rows. Don't "optimize" it back.
+- **An errored reference IS retried** — the overlap window re-serves it on
+  every run (up to 72 h, longer after downtime) until it imports or reaches a
+  terminal state; `errors` in a run summary is therefore usually transient.
+  Only a reservation that *keeps* failing past the window needs a human.
+- **ParkCloud rate-limits the gateway** (HTTP 429, ~1 min back-off). Bursty
+  passes (first run after a deploy/downtime) can error a few refs; they
+  self-heal on the next 15-min tick via the overlap window.
 - **`totalPrice` is ParkVia's customer price**, not our net revenue. Partner
   settlement / commission is out of scope (as with the manual broker path).
 - **Broker bookings carry no billing** (`billing: null`) → no proforma, no
@@ -211,6 +245,17 @@ naive local dates) and the Register-No-Show verb were all confirmed live (raw
 captures in the gitignored `documentation/parkvia-response.txt`; mapper tests
 rewritten against the real shape, 10/10). Step-by-step onboarding record:
 [parkvia-setup-steps.md](../parkvia-setup-steps.md).
+
+**2026-07-29 — the PC90417080 incident** replaced the original strict
+`since/{lastEventId}` cursor with the overlap-window sync described above. A
+customer arrived with a ParkVia reservation that wasn't in the system: its NEW
+event (id 34783644, stamped 07-28 11:17) was published to the feed **after** a
+newer event (34784326, 12:08) had already been consumed, so the cursor
+fast-forwarded past it — no error, no ledger row, unreachable by Sync now. The
+same change made errored refs retryable, added the stale-claim retry +
+duplicate-link self-heal for imports that die mid-create, and fenced the
+pre-go-live era behind `primeEventId`. The orphan imported on the first
+post-deploy run (booking `LT-8S89S`).
 
 ## Planned / not built
 

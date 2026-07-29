@@ -7,7 +7,9 @@
 // MODEL: ParkVia's operator technology is the ParkCloud Operator API — a
 // REST/XML service on Azure API Management with API-key auth, PULL/poll (no
 // push webhook). It is EVENT-based: NEW/AMEND/CANCEL/NOSHOW rows with
-// increasing ids, and the last id is our cursor. A scheduled job (every 15 min)
+// increasing ids. The sync polls an OVERLAPPING age window (not a strict
+// since/{id} cursor — see parkviaWindowHours below for why) and the
+// parkviaImports ledger dedups re-seen events. A scheduled job (every 15 min)
 // + an admin "Sync now" button drive runParkviaSync (index.js).
 //
 // CONFIG-GATED, NOT DORMANT. Everything runs off parkviaConfig(): with no
@@ -144,9 +146,10 @@ export async function listParkviaOperators() {
 
 // CONFIRMED (2026-07-23): booking-change events — the sync driver. ParkCloud
 // is event-based: NEW / AMEND / CANCEL / NOSHOW rows, each with a
-// monotonically-increasing Id that serves as the poll cursor
-// (…/bookings/events/since/{id}). First run backfills by age
-// (…/bookings/events/age/{hours} — verified up to 720h).
+// monotonically-increasing Id. The sync polls by age window
+// (…/bookings/events/age/{hours} — verified up to 720h); the since/{id}
+// variant remains supported for diagnostics but ids become VISIBLE out of
+// order, so it must not be used as a strict cursor (see parkviaWindowHours).
 // GET → <ArrayOfEvent><Event><Id>34407328</Id><Date>2026-07-03T14:00:06.757</Date>
 //        <Type>NEW</Type><BookingReference>PC90243780</BookingReference></Event>…
 export async function listParkviaEvents({ sinceId, hours } = {}) {
@@ -265,6 +268,27 @@ export function mapParkviaBookingToImport(raw = {}) {
     brokerName: PARKVIA_BROKER_NAME,
     rawStatus: normalizeStatus(xmlText(raw.Status)),
   };
+}
+
+// ── Poll window (test-covered) ──────────────────────────────────────────────
+// The events feed is polled with an OVERLAPPING age window, never a strict
+// since/{lastEventId} cursor. Learned live (2026-07-29, PC90417080): ParkCloud
+// publishes event rows LATE and OUT OF ID ORDER — a NEW event stamped 11:17
+// was still absent from the feed at 12:21 while a 12:08 event with a higher id
+// was already served. A strict cursor fast-forwards past the late row and the
+// reservation is silently lost. The overlap re-serves recent events every run;
+// the parkviaImports ledger decides what still needs work.
+export const PARKVIA_FEED_MAX_HOURS = 720;   // deepest the feed goes (verified live)
+export const PARKVIA_LOOKBACK_HOURS = 72;    // rolling overlap on a normal run
+
+// Hours of events to request this run: the rolling lookback, stretched to
+// cover poller downtime (gap since the last successful sync + a day of
+// margin), capped at the feed maximum. Never synced → everything the feed has.
+export function parkviaWindowHours(lastSyncAt, nowMs) {
+  const last = Date.parse(lastSyncAt || '');
+  if (!Number.isFinite(last)) return PARKVIA_FEED_MAX_HOURS;
+  const gapHours = Math.ceil(Math.max(0, nowMs - last) / 3_600_000);
+  return Math.min(PARKVIA_FEED_MAX_HOURS, Math.max(PARKVIA_LOOKBACK_HOURS, gapHours + 24));
 }
 
 // ── Small pure helpers used by the mapper (also test-covered) ───────────────

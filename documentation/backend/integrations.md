@@ -185,8 +185,12 @@ the callables return `{ configured:false }`, the admin card shows "not configure
 
 - **Poller** `pollParkviaBookings` (`scheduled.js`, every 15 min) and the **`parkviaSyncNow`**
   (`assertStaff`) / **`parkviaHealthcheck`** (`assertAdmin`) callables all drive
-  `runParkviaSync` (`index.js`). ParkCloud is **event-based**: the cursor is the last event id
-  on `parkviaSync/state`; the first run primed it and imported nothing (no historical backfill).
+  `runParkviaSync` (`index.js`). ParkCloud is **event-based** but publishes events **out of id
+  order**, so the sync polls an **overlapping `events/age` window** (72 h rolling, stretched
+  over downtime) and triages per-ref from the `parkviaImports` ledger — never a strict
+  `since/{id}` cursor (the 2026-07-29 PC90417080 lost-reservation incident). The first run
+  primed `parkviaSync/state` and imported nothing (no historical backfill); `primeEventId`
+  fences that manual-desk era off from the window.
 - Imports route through **`createBrokerBookingCore`** (shared with the manual desk flow) →
   ordinary broker bookings (`source:'broker'`, `paidBy:'broker'`, `billing:null`, no cashbook,
   no SmartBill). Dedup is the **`parkviaImports/{ref}`** ledger (transactional claim); the
