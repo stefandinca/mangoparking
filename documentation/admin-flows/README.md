@@ -5,8 +5,15 @@ Generated review of every admin-facing flow in the Mango Parking admin panel
 what they see, click, type, the feedback that appears, and what changes in
 Firestore — then lists the bugs and inconsistencies found in that area.
 
-A consolidated, severity-ranked bug register lives in **[BUGS.md](BUGS.md)** —
-start there if you want the fix list rather than the walkthroughs.
+A severity-ranked bug register lives in **[BUGS.md](BUGS.md)** — start there if
+you want the fix list rather than the walkthroughs. It was **re-verified against
+source on 2026-07-31**; the per-wave fix history moved to
+[archive/bug-fix-waves.md](../archive/bug-fix-waves.md).
+
+> **Caveat on the numbered walkthroughs below.** They are the original
+> 2026-06 audit and have *not* been re-verified since. Where a walkthrough
+> and BUGS.md disagree, BUGS.md is current. Roughly a third of the bugs the
+> walkthroughs describe have since been fixed.
 
 ## Index
 
@@ -27,10 +34,15 @@ They are mutually consistent — no privilege-escalation gap was found.
 
 | Role | Permissions | Sidebar links shown |
 |------|-------------|---------------------|
-| **admin** | all 16 | every section (Users, Pricing, Legal, Vouchers, Promotions + the Website content hub) |
-| **agent** (legacy `staff`) | dashboard, activity, checkins, transactions, cashbook, capacity, shuttle, refunds, help | those 9 (**no** config, **no** reviews — reviews live under the admin-only Website hub) |
-| **driver** | dashboard, activity, checkins, capacity, shuttle, help | those 6 |
+| **admin** | all 17 | all 14 links (Users, Pricing, Vouchers + the Website content hub, which absorbs Promotions/Reviews/Legal) |
+| **agent** (legacy `staff`) | 10 — dashboard, activity, checkins, transactions, cashbook, capacity, shuttle, refunds, audit, help | those 10 (**no** config, **no** reviews — reviews live under the admin-only Website hub) |
+| **driver** | 7 — dashboard, activity, checkins, capacity, shuttle, audit, help | those 7 |
 | **customer** | none | no admin access |
+
+*(Counts corrected 2026-07-31: `PERM` has 17 entries, and `audit` was added to
+all three admin-access roles when `/admin/audit` shipped. Promotions, Reviews
+and Legal still hold permissions and routes but no sidebar link — hence 17
+permissions but 14 links.)*
 
 ## Cross-cutting issues (affect multiple pages)
 
@@ -40,23 +52,28 @@ These appear once here rather than being repeated in every doc:
    double-brace keys rewritten to single-brace `{name}` in both locales
    (BUGS #1). `t()` still only matches single-brace — that's the convention;
    never author a key with `{{ … }}`.
-2. **UTC vs Europe/Bucharest date boundaries** — dashboard "today" stats, the
-   cashbook day buckets, and most money-page date columns use the browser/UTC
-   day instead of Bucharest local time, so overnight figures drift by one day.
+2. **UTC vs Europe/Bucharest date boundaries** — *partly fixed.* The dashboard's
+   "today" stats now use Bucharest local time, and admin timestamps render
+   pinned to `Europe/Bucharest`. Still open: `recordCashEntry` stamps
+   `paidAtDay` from the UTC date, so a cash payment taken just after local
+   midnight buckets into the previous day (BUGS #16).
 3. **`.catch(() => [])` masks load failures as empty** — transactions, refunds,
    and cashbook all render a benign "nothing here" empty state when a Firestore
-   read actually fails. Staff can't tell "no data" from "broken".
+   read actually fails. Staff can't tell "no data" from "broken" (BUGS #17).
 4. **Raw server error strings** — callable failures surface `err.message`
    ("Admin only", "Cannot demote the last admin") untranslated in an otherwise
    RO/EN UI.
 5. **No sign-out inside the admin shell** — `AdminLayout` offers only "Back to
-   site"; logging out requires the public Navbar.
+   site"; logging out requires the public Navbar (BUGS #32, still open).
 
 ## Method & caveat
 
-This is a static read of the code as of the current `main` (post-v1.9). Line
-numbers cite files at that revision. Findings were verified against source; the
-highest-severity items (money math, XSS, the i18n regex) were re-confirmed
-directly. No runtime/browser testing was performed — a few items flagged as
-"dead button" should be smoke-tested before fixing in case a handler is wired
-somewhere unexpected.
+The numbered walkthroughs are a static read of the code as of 2026-06
+(post-v1.9), and their line numbers cite that revision. **They have not been
+re-verified since** — treat their bug lists as historical and
+[BUGS.md](BUGS.md) (re-verified 2026-07-31) as current.
+
+No runtime/browser testing was performed in either pass. The "dead button"
+items (BUGS #8b Add Departure, #29 Edit) were re-confirmed by tracing the event
+delegation — the buttons carry attributes no handler listens for — but a quick
+smoke test before fixing is still cheap insurance.

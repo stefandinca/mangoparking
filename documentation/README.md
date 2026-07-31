@@ -1,6 +1,10 @@
 # Mango Parking — Documentation
 
-_Last reconciled against the codebase: **2026-07-09**._
+_Last reconciled against the codebase: **2026-07-31**_ — that pass re-verified
+every row of the [admin bug register](admin-flows/BUGS.md) against source and
+corrected the stale line references in
+[backend/cloud-functions.md](backend/cloud-functions.md). The topic docs' own
+"Last verified" stamps are per-doc; trust those over this line.
 
 Reference documentation for Mango Parking — parking near Henri Coandă (Otopeni)
 airport with a free shuttle, run as two products (daily **credits** and
@@ -17,9 +21,9 @@ or feedback round.** The goal is that a fresh session can read this folder and
 | [`backend/`](backend/) | How the server works: data model, Cloud Functions, security rules, payments, email, external integrations, i18n & permissions. |
 | [`features/`](features/) | One doc per product feature (credits, long-term bookings, pricing, vouchers, billing, cashbook & refunds, capacity, transfers, shuttle, reviews, trip info, ParkVia import). |
 | [`sections/`](sections/) | The app surfaces: public site, customer account, admin panel. |
-| [`admin-flows/`](admin-flows/) | Detailed step-by-step staff walkthroughs, one per admin area, + the [BUGS.md](admin-flows/BUGS.md) register. |
+| [`admin-flows/`](admin-flows/) | Detailed step-by-step staff walkthroughs, one per admin area, + the [BUGS.md](admin-flows/BUGS.md) register (re-verified 2026-07-31). The walkthroughs themselves are the 2026-06 audit and are **not** kept current — BUGS.md wins where they disagree. |
 | [`roadmap/`](roadmap/) | **Planned / not built** — design docs for future work. |
-| [`archive/`](archive/) | **Historical** — superseded plans, raw change notes, past feedback rounds. |
+| [`archive/`](archive/) | **Historical** — superseded plans, raw change notes, past feedback rounds, and [bug-fix-waves.md](archive/bug-fix-waves.md) (what each review pass changed and why). |
 
 > **Maintenance rule.** After any task that changes behavior, structure, or plans,
 > update the affected doc(s) here in the same commit (and `CLAUDE.md` / `Brief.md`

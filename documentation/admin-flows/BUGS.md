@@ -1,349 +1,140 @@
-# Admin Flows — Consolidated Bug Register
+# Admin Flows — Bug Register
 
-Severity-ranked across all admin flows. Each row links to the flow doc with the
-full context. Verified items are marked ✔ (re-confirmed directly against source
-during this review).
+> **Re-verified against source on 2026-07-31.** Every row below was checked
+> directly in the current code — not carried forward from the original audit.
+> Each open item cites the file/line that proves it is still open; each closed
+> item cites what closed it. Line numbers drift: grep the cited symbol if a
+> reference looks off.
 
-> **⚠️ Read this first (status, 2026-07-01).** This register is a *static
-> snapshot* from the original admin-flows audit. A **2026-06 deep-review pass
-> fixed a batch of the items** — see the **"2026-06 deep review"** section at the
-> bottom of this file for exactly what was applied (repay pricing, promo
-> double-redeem race, handover/mark-unpaid cashbook reconciliation, overstay
-> `0 lei` display, dashboard UTC→Bucharest, the AdminCheckIns listener leak,
-> `saveVoucher` count rollback, and more). The HIGH/MEDIUM rows below were **not
-> struck through individually**, so before actioning any row, cross-check it
-> against that "applied" list. Known-still-open highlights: over-refund on
-> voucher bookings (#2) and cash-refund reconciliation (#3). The `{{ }}` i18n
-> interpolation bug (#1) was **fixed 2026-07-23** (all 8 keys rewritten to
-> single-brace in both locales); both XSS sinks are now closed — #20 (users
-> delete confirm) earlier, #6 (dashboard activity feed) on **2026-07-27**,
-> together with the "unknown" author it shared a render site with.
-
-## HIGH — fix first
-
-| # | Area | Bug | Symptom | Ref |
-|---|------|-----|---------|-----|
-| 1 | All | ~~✔ **`{{ … }}` i18n keys never interpolate.**~~ **FIXED 2026-07-23** — all 8 double-brace keys (`vouchers.deleteConfirm`/`errorCodeTaken`, `refunds.historySubtitle`/`failedCount`/`resendOk`, `seasonal.deleteConfirm`/`errorOverlap`/`appliedBadge`) rewritten to single-brace in both locales; `t()`'s single-brace regex is unchanged and now documented as the convention. Reported live by the client on the booking page ("Tarif {{ name }}"). | ~~Admins (and on `appliedBadge`, customers) saw the braces verbatim.~~ | [03](03-cancellations-refunds-cashbook.md), [05](05-vouchers-promotions-pricing-capacity.md) |
-| 2 | Refunds | ✔ **Over-refund on voucher bookings.** Refund queue/dialog/dashboard/audit show `booking.totalPrice` (gross, pre-voucher; `index.js:209`); the charged amount is `pendingOrders.amount` (`index.js:405`). | Admin refunds more than the customer ever paid, by the discount. | [03](03-cancellations-refunds-cashbook.md) #1 |
-| 3 | Cashbook | **Cash refunds never reconciled.** Marking an admin-cash booking refunded writes no reversing `cashEntries` row. | Cashbook + printed report overstate cash on hand after every cash refund; agent "owes" returned money. | [03](03-cancellations-refunds-cashbook.md) #2 |
-| 4 | Check-ins | **Credit/commuter check-ins invisible & uncheckoutable.** Page subscribes only to `bookings` (`AdminCheckIns.js:507`); credit check-ins write `activeCheckIns` + tx, no booking. `tokenService.checkOut` is imported by no page. | Commuter checked in via credits never appears on any tab; spot stuck `occupied` with no UI to release. Contradicts v1.8 doc. | [01](01-checkin-checkout-walkin.md) #1 |
-| 5 | Pricing | **Long-term tier table has no validation.** Gaps/overlaps/inverted ranges/`perDay=0` all save; server falls back to the last tier for uncovered days. | Misconfigured tiers silently mis-price bookings (e.g. day-7 gap bills at catch-all rate). | [05](05-vouchers-promotions-pricing-capacity.md) #2 |
-| 6 | Dashboard | ~~✔ **Audit content rendered unescaped (XSS).**~~ **FIXED 2026-07-27** — the activity feed now escapes the action badge, the `describeAction` description and the actor (`AdminDashboard.js`); `AdminAudit.js` (hidden route, same data) escaped alongside it. | ~~Crafted display name/email injects markup into the dashboard.~~ | [06](06-dashboard-shuttle-reviews-legal.md) #3 |
-| 7 | Check-ins | **No-show plate normalization mismatch.** `normalizePlate` strips spaces+hyphens; cleanup/`markNoShows` strip spaces only. | Hyphenated-plate arrival can be flagged no-show; cancel leaves a dangling `activeCheckIns` row. | [01](01-checkin-checkout-walkin.md) #2 |
-| 8 | Shuttle | **`admin.trainToParking` key missing** in both locales; **"+ Add Departure" button dead.** | A schedule row shows the literal key; the page's primary action no-ops. | [06](06-dashboard-shuttle-reviews-legal.md) #1,#2 |
-
-## MEDIUM
-
-| # | Area | Bug | Ref |
-|---|------|-----|-----|
-| 9 | Refunds/docs | Fully-voucher cancellation: v1.9 doc says "refund queue", code routes it to plain `cancelled`; refund page has no `paidBy:'voucher'` label/channel either. Money-safe but inconsistent. | [03](03-cancellations-refunds-cashbook.md) #3 |
-| 10 | Check-ins | `activeCheckIns` lifecycle inconsistent — check-in tab doesn't write it, check-out never deletes it → dangling rows / false `ALREADY_CHECKED_IN`. | [01](01-checkin-checkout-walkin.md) #4 |
-| 11 | Check-ins | Listener + popstate leak; page returns no cleanup, sidebar nav uses `pushState` (no popstate). Listeners accumulate. | [01](01-checkin-checkout-walkin.md) #5 |
-| 12 | Check-ins | Double-click race: live re-render replaces the disabled button; no idempotency guard on check-in/out → double spot assignment. | [01](01-checkin-checkout-walkin.md) #6 |
-| 13 | Check-ins | Pay-at-pickup amount not shown on the row; collection optional & unguarded — car can leave unpaid. | [01](01-checkin-checkout-walkin.md) #7 |
-| 14 | Check-ins | Overstay charge button is a dead placeholder. | [01](01-checkin-checkout-walkin.md) #3 |
-| 15 | Refunds | No No-show surface; `markNoShows` misses bookings with `dropoffAt:null` (they stay `upcoming` forever). | [03](03-cancellations-refunds-cashbook.md) #5 |
-| 16 | Cashbook/Dashboard | UTC vs Europe/Bucharest day boundaries — cashbook buckets, dashboard "today" stats, most date columns drift overnight. | [03](03-cancellations-refunds-cashbook.md) #6,#7, [06](06-dashboard-shuttle-reviews-legal.md) #7 |
-| 17 | All money pages | `.catch(() => [])` masks load failures as benign empty states ("Nicio rambursare ✓"). | [02](02-reservations-transactions.md) #3, [03](03-cancellations-refunds-cashbook.md) #8 |
-| 18 | Transactions | Status badges raw/unlocalized; `no-show` has no style and no filter option. | [02](02-reservations-transactions.md) #1 |
-| 19 | Transactions | "Sumă" column mixes token counts and RON with no unit. | [02](02-reservations-transactions.md) #2 |
-| 20 | Users | Stored-XSS in delete confirm via `dataset` round-trip into `confirmModal` `innerHTML`. | [04](04-users-accounts-roles.md) #1 |
-| 21 | Users | Wide tables clipped on mobile (no `overflow-x-auto`). | [04](04-users-accounts-roles.md) #2 |
-| 22 | Vouchers | Editing type/value after redemptions: no warning; days balances silently zeroed/re-granted. | [05](05-vouchers-promotions-pricing-capacity.md) #3 |
-| 23 | Vouchers | No admin visibility into redemptions / day-balances; "Usage" column conflates holders vs days. | [05](05-vouchers-promotions-pricing-capacity.md) #4 |
-| 24 | Vouchers | Delete orphans `voucherDayBalances`; reusing a code resurrects stale balances. | [05](05-vouchers-promotions-pricing-capacity.md) #5 |
-| 25 | Vouchers | Delete/recreate doesn't reset `voucherRedemptions` — global cap resets but per-identity dup-block persists. | [05](05-vouchers-promotions-pricing-capacity.md) #6 |
-| 26 | Pricing | Edits break in-flight checkouts with a hard "price mismatch" 400; no "new bookings only", no preview. | [05](05-vouchers-promotions-pricing-capacity.md) #7 |
-| 27 | Pricing | Pack name rendered unescaped into `value=""`. | [05](05-vouchers-promotions-pricing-capacity.md) #8 |
-| 28 | Pricing | Tier rows / modal non-responsive on mobile. | [05](05-vouchers-promotions-pricing-capacity.md) #9 |
-| 29 | Shuttle | "Edit" button dead; status writes silently fail on mock ids; summary cards never refresh. | [06](06-dashboard-shuttle-reviews-legal.md) #4,#5,#6 |
-| 30 | Reviews | Auto-save gives no success feedback; visible Save button is hidden/dead. | [06](06-dashboard-shuttle-reviews-legal.md) #8 |
-| 31 | Legal | Saves only the active locale per click; other-locale edits silently lost. | [06](06-dashboard-shuttle-reviews-legal.md) #9 |
-| 32 | Shell | No sign-out anywhere in the admin panel. | [06](06-dashboard-shuttle-reviews-legal.md) #10 |
-| 33 | Check-ins | Mobile uses a horizontally-scrolling table, not the documented card layout. | [01](01-checkin-checkout-walkin.md) #8 |
-
-## LOW / polish
-
-Raw `err.message` leaks (Users), generic invalid-email feedback, `fmtDate` vs
-Firestore Timestamp, re-invite can't change an existing role, full-collection
-client reads (Users/Vouchers), plate search doesn't strip spaces, unbounded refund
-history query, missing re-entrancy guards on refund/handover buttons, capacity
-headline constant + tooltip plate loss, online-discount silent clamp, dead
-"add tier after unlimited", fixed voucher accepts non-integer lei, past-window
-vouchers allowed with no notice, hardcoded `'to'` / `'Nume'` strings, dead code/
-unused imports, Reviews local `escape()` divergence, no Quick Actions block, no
-empty/loading state on shuttle, legal blank-line hint mismatch, dashboard missing
-review/legal action badges, full-page reload after transaction create. See the
-per-flow docs for line refs.
+The original register (2026-06) was a static snapshot that accumulated fix
+notes at the bottom without striking the rows through, so items stayed listed
+as open long after they were fixed. This pass reconciles the two: **12 of the
+original 33 rows are fixed**, 4 are partially fixed, and 17 remain open.
 
 ---
+
+## OPEN — money correctness (fix first)
+
+| # | Area | Bug | Evidence |
+|---|------|-----|----------|
+| 2 | Refunds | **Over-refund on voucher bookings.** The refund queue, its dialog and the audit payload all read `booking.totalPrice` — the **gross**, pre-discount, pre-voucher figure. What the customer actually paid is `pendingOrders.amount` (post online-discount, post-voucher). An admin refunding a discounted booking hands back more than was ever taken. | `AdminRefunds.js:110,116,154,167` all `Number(b.totalPrice)`; `adminMarkRefunded` audit `amount: booking.totalPrice` (`index.js`). The reservation detail view already shows both figures when they differ — that's the correct source to adopt. |
+| 3 | Cashbook | **Cash refunds are never reconciled.** Marking an `admin-cash` booking refunded writes no reversing `cashEntries` row, so the drawer and the printed report keep counting money that left the till. The agent "owes" cash they already returned. | `adminMarkRefunded` (`index.js:2620`) patches the booking, mirrors `pendingOrders`, audit-logs and emails — no `recordCashEntry` call anywhere in the body. |
+| 16 | Cashbook | **Cash entries bucket on the UTC day, not the Bucharest day.** `recordCashEntry` stamps `paidAtDay` from `nowIso.slice(0,10)`. Between local midnight and 03:00 (summer, UTC+3) a payment lands on the **previous** day's card and the previous day's close. The dashboard half of this bug was fixed in 2026-06; the cashbook half was not. | `index.js:1661` — `paidAtDay: nowIso.slice(0, 10)`. Compare `bucharestToday()` at `index.js:551`, which exists and does the right thing for SmartBill. |
+| 5 | Pricing | **The long-term tier table saves with no validation.** Gaps, overlaps, inverted ranges and `perDay: 0` all persist; the server's `tierForDays` then falls back to the last tier for any uncovered day count, silently mis-pricing. Seasonal periods *do* get overlap detection (`findOverlap`) — the default table never got the same treatment. | `AdminPricing.js:423` — the save handler calls `saveLongTermRates(working)` directly. `pricingValidate.js:46` `tierForDays` is the silent fallback. |
+
+## OPEN — correctness / data integrity
+
+| # | Area | Bug | Evidence |
+|---|------|-----|----------|
+| 12 | Check-ins | **No idempotency guard on check-in/check-out.** `checkInBooking` reads then writes without a transaction, so two agents (or a double-tap that outruns the confirm) can both assign a spot. *Mitigated but not fixed:* the action now sits behind a confirm dialog and a disabled submit, which narrows the window considerably. Compare `checkInWithCredits`, which claims the plate via `tx.create` in the same transaction as the deduction — that's the pattern to copy. | `bookingService.js:72-112`; contrast `index.js:3718`. |
+| 17 | All money pages | **`.catch(() => [])` masks load failures as benign empty states.** A permission error or outage renders "no refunds pending ✓" instead of an error. Worst on the refunds queue, where an empty list reads as "nothing owed". | 20 sites; money-bearing ones at `AdminRefunds.js:133,134,137`, `AdminDashboard.js:113-115`, `AdminReservationDetail.js:172`. |
+| 26 | Pricing | **A rate edit breaks in-flight checkouts** with a hard "price mismatch" 400 — the authoritative pricer has 0 RON tolerance by design, and there is no "applies to new bookings only" or preview. A customer mid-funnel when an admin saves gets a dead end. | `pricingValidate.js:16` documents the 0-tolerance choice; `createPayment` rejects on mismatch. |
+| 10 | Check-ins | **Long-term check-in never writes an `activeCheckIns` row**, so a long-term car sitting in the lot doesn't hold its plate. A credit check-in on the same plate isn't blocked. *Scope reduced:* the dangling-row half is fixed (check-out and cancel both delete the row with matching normalization). | `bookingService.js:97` writes only the booking; `activeCheckIns` writers are the walk-in/credit callables (`index.js:3280,3432,3718`). |
+| 22 | Vouchers | Editing a voucher's type or value after redemptions exist gives no warning; day balances are silently re-based against the new value. | `promoVoucherService.js:73` `saveVoucher` — no redemption check. |
+| 24 | Vouchers | Deleting a voucher orphans its `voucherDayBalances`; reusing the code resurrects the stale balances. Unfixable client-side — those docs are server-write-only, so this needs a callable. | `firestore.rules:95` (`voucherDayBalances` all writes false); `deleteVoucher` at `promoVoucherService.js:101`. |
+| 25 | Vouchers | Delete + recreate doesn't clear `voucherRedemptions`: the global cap resets but the per-identity duplicate block persists, so returning holders stay locked out. Same server-side constraint as #24. | `firestore.rules:87`. |
+
+## OPEN — UX / visibility
+
+| # | Area | Bug | Evidence |
+|---|------|-----|----------|
+| 32 | Shell | **No sign-out anywhere in the admin panel** — the sidebar footer offers only "Back to site". Staff on a shared desk machine cannot end their session from where they work. | `AdminLayout.js:60-65`. |
+| 8b | Shuttle | **"+ Add Departure" is dead.** The button carries `data-add-departure`, but the page's only delegate listens for `[data-action]` and handles `delay`/`cancel`/`depart`. The page's primary action no-ops. *(The `admin.trainToParking` half of this row is fixed — see below.)* | `AdminShuttle.js:41` vs the delegate at `:108-119`. |
+| 29 | Shuttle | **"Edit" is dead** — `data-action="edit"` reaches the dispatcher and falls through `else return`. Status writes on mock-id rows fail silently (`.catch(console.error)`), and the summary cards never refresh after a status change. | `AdminShuttle.js:96`, `:118`, `:128`. |
+| 31 | Legal | **Saves only the currently-selected locale.** The page buffers both locales in `working[slug][locale]`, but the save handler persists `editLocale` only — edits made in the other tab are silently dropped. | `AdminLegal.js:234` — `saveLegalPage(activeSlug, editLocale, payload)`. |
+| 30 | Reviews | Per-row auto-save gives no success feedback (only an error toast), and the visible Save button is `hidden`, so there is no confirmation that anything was written. | `AdminReviews.js:37` (`hidden`), `:94` (error toast only). |
+| 23 | Vouchers | No admin visibility into who redeemed what. The "Usage" column shows only `redeemedCount / cap`, which conflates distinct holders with days consumed for splittable vouchers. | `AdminVouchers.js:56-58,76`. |
+| 21 | Users | Wide tables clip on mobile — `AdminUsers.js` is the one admin page with no `overflow-x-auto` wrapper (ten others have it). | `AdminUsers.js`. |
+| 33 | Check-ins | Mobile uses a horizontally-scrolling table rather than the card layout the v1.7 spec describes. Some responsive trimming exists (`hidden sm:inline` on phone/time), but the table still scrolls. | `AdminCheckIns.js:647`. |
+| 9 | Refunds/docs | A fully-voucher-covered cancellation routes to plain `cancelled`, while the v1.9 doc says "refund queue"; the refunds page also has no `paidBy: 'voucher'` label or channel. Money-safe — nothing was charged — but the doc and the code disagree. | `cancelBookingWithRefund` routes only `netopia` / `admin-cash` / `admin-card` to `refund-pending`. |
+
+## OPEN — cosmetic
+
+| # | Area | Bug | Evidence |
+|---|------|-----|----------|
+| 18b | Transactions | `no-show` has no `STATUS_STYLES` entry, so it renders in the neutral gray fallback rather than a warning colour. Label and filter are fixed; only the colour is missing. | `AdminTransactions.js:55-64`. |
+| 19 | Transactions | The "Sumă" column still mixes units: money rows carry `lei`, credit rows show a bare count (`+5`, `-1`). Better than before (the `+` signals credits) but still two scales in one column. | `AdminTransactions.js:109-111`. |
+| 27 | Pricing | Pack name/nameRo interpolate into `value="…"` unescaped. Only admins can write `tokenPacks`, so this is a self-inflicted break (an apostrophe truncates the field) rather than a cross-user XSS. | `AdminPricing.js:46-47`. |
+| 28 | Pricing | Tier rows use a fixed `grid-cols-12` that doesn't reflow on narrow screens. The surrounding tables did gain `overflow-x-auto`. | `AdminPricing.js:64,510`. |
+
+## LOW / polish (unverified this pass)
+
+Raw `err.message` leaks (Users), generic invalid-email feedback, re-invite can't
+change an existing role, full-collection client reads (Users/Vouchers), plate
+search doesn't strip spaces, unbounded refund-history query, capacity headline
+constant + tooltip plate loss, online-discount silent clamp, dead "add tier
+after unlimited", fixed voucher accepts non-integer lei, past-window vouchers
+allowed with no notice, hardcoded `'to'` / `'Nume'` strings, Reviews' local
+`escape()` divergence, no Quick Actions block, no empty/loading state on
+shuttle, legal blank-line hint mismatch, full-page reload after transaction
+create. Carried over from the original audit; not re-checked.
+
+---
+
+## FIXED — verified closed
+
+| # | Bug | Closed by |
+|---|-----|-----------|
+| 1 | `{{ … }}` i18n keys never interpolated | 2026-07-23 — all 8 keys rewritten to single-brace. **Verified:** no `{{` remains in `ro.js`/`en.js`. `t()`'s single-brace regex is now the documented convention. |
+| 4 | Credit/commuter check-ins invisible & uncheckoutable | `createCreditCheckInBooking` (`index.js:3616`) writes a real `bookings` doc; `checkInWithCredits` (`:3660`) calls it; the board subscribes to `status in [upcoming, active, no-show]`, so credit check-ins appear on Check-out like any other. |
+| 6 | Audit content rendered unescaped (XSS) | 2026-07-27 — `AdminDashboard.js:247-250` escapes timestamp, badge, description and actor. |
+| 7 | No-show plate-normalization mismatch | `scheduled.js:327` now strips spaces **and** hyphens, matching `normalizePlate`. Both cleanup paths agree: `checkOutBooking` (`bookingService.js:133`) and `cancelBookingWithRefund` (`index.js:2533`). |
+| 8a | `admin.trainToParking` key missing | Present in both locales at `ro.js:123` / `en.js:123`. |
+| 11 | AdminCheckIns listener + popstate leak | The page returns a cleanup the router invokes (`AdminCheckIns.js:971`). |
+| 13 | Pay-at-pickup amount not shown; collection unguarded | `openCollectPaymentDialog` (`bookingActions.js:419`) leads with the amount due, refines it from the order's authoritative `amount`, and confirms before recording. `checkInBooking` also hard-refuses an unpaid booking (`UNPAID_BOOKING`, `bookingService.js:80`). |
+| 14 | Overstay charge button was a dead placeholder | `openOverstayDialog` → `adminChargeOverstay`; check-out now *forces* the overstay prompt and requires an explicit "check out anyway" override to skip it (`bookingActions.js:632-648`). |
+| 15 | No no-show surface; `markNoShows` missed `dropoffAt: null` | A No-show tab exists on the check-in board; `markNoShows` filters in memory and falls back to `startDate` (`scheduled.js:311-313`). |
+| 18a | Status badges raw/unlocalized; no `no-show` filter | `reservationStatusLabel` localizes with a `—`/raw-value fallback; `no-show` is in the filter options (`AdminTransactions.js:280`). |
+| 20 | Stored XSS in the users delete confirm | `AdminUsers.js:234` escapes into `safeName` before the `dataset` round-trip. |
+| — | Everything in the 2026-06 and 2026-07 waves | See *Fix history* below. |
+
+---
+
+## Fix history
+
+The detailed per-wave records — what was applied and why — moved to
+[archive/bug-fix-waves.md](../archive/bug-fix-waves.md): the 2026-06 deep review
+(repay pricing, promo double-redeem race, handover reconciliation, dashboard
+timezone, listener leak), the 2026-07 modal-lifecycle / walk-in-billing wave,
+the timezone + Safari wave, the backend/rules hardening wave, and the
+orphaned-guest-bookings wave.
+
+## Known limits — reviewed, deliberately not fixed
+
+- **Non-atomic money accumulators** (`adminChargeOverstay`, `adminRepriceBooking`
+  extension branch, `grantCreditsForCash` walk-in): the booking mutation, the
+  ledger row and the cashbook entry are separate awaits, so a mid-sequence
+  failure + retry can double-add `latePrice`/`extensionPrice`. Needs an
+  idempotency-key design.
+- **Promo redemption is committed at order creation, not released on an
+  abandoned or declined online payment** — a one-shot code is burned and a
+  days-balance loses days even though nothing was paid. Proper fix: write the
+  redemption `pending`, finalize or roll back on IPN outcome, plus a sweep for
+  abandoned holds. Spans the money-critical IPN path.
+- **`adminMarkOrderUnpaid`'s cash-row deletion is post-transaction
+  best-effort** — a failure leaves the drawer overstating cash (reversal-path
+  sibling of #3).
+- **Expired pay-later orders leave a phantom `upcoming` booking** —
+  `expireStaleHolds` flips only the order.
+- **Reprice across a seasonal boundary bills the whole stay at the pick-up
+  day's period rate.** Consistent with how the booking was priced originally,
+  but the settle difference can surprise. Product decision, not a code fix.
+
+> Note: the IPN double-fulfilment risk listed here previously **was** fixed —
+> `netopiaCallback` now claims the order transactionally via
+> `pendingOrders.ipnProcessingAt` (5-minute lease) before fulfilment.
 
 ## Suggested fix order
 
-1. ~~**One-liners with outsized reach:** the `{{ }}` i18n bug (#1)~~ — **done
-   2026-07-23** (all 8 keys rewritten to single-brace in both locales).
-2. **Money correctness:** refund amount source (#2), cash-refund reconciliation
-   (#3) — these are real financial discrepancies.
-3. **Security:** the two XSS sinks (#6 dashboard, #20 users delete) — small,
-   contained fixes.
-4. **The check-in data-model gap (#4)** — the biggest structural item; surfacing
-   credit check-ins on the Check-out tab needs either an `activeCheckIns`
-   subscription on the page or a booking-shaped record for credit check-ins.
-   Worth a short design note before coding.
-5. Everything else as normal backlog, batched by file.
-
-> None of these were changed during this review — it is read-only documentation.
-> Recommend smoke-testing the "dead button" items (#8 Add Departure, #29 Edit) in
-> a browser before fixing, in case a handler is wired in a path not covered here.
-
----
-
-## 2026-06 deep review — voucher / booking / admin (applied this round)
-
-Fixed in this pass (verified: vite build, `node --check`, i18n parity 1357/1357,
-headless smoke of both booking pages):
-
-- **Repay stored the standard price, not the discounted charge.** The IPN repay
-  branch patched only payment fields, leaving the pre-created booket at the
-  standard `totalPrice`; it now reconciles `totalPrice`/`basePrice`/order `amount`
-  to `repayAmount`. (`functions/src/index.js`, IPN longTerm repay)
-- **Fixed/percent promo double-redeem race.** The in-transaction dup check was a
-  non-transactional `where` query writing an auto-id doc. Fixed/percent now use a
-  deterministic `voucherRedemptions/{CODE}_{identityKey}` id with `tx.create`, so a
-  concurrent second redemption is rejected. (`createPayment`)
-- **Online promo redemptions never got their `bookingId`.** IPN now stamps it
-  (mirrors the free-order path). (`netopiaCallback`)
-- **Handover recorded by an admin for another agent dropped from that agent's
-  closed cashbook.** `closeCashbook` matched `handedBy`; now matches the cash
-  owner (`forAgentUid`, falling back to `handedBy`).
-- **mark-unpaid left the cash-drawer entry.** `adminMarkOrderUnpaid` now deletes
-  the OPEN `cashEntries` row it reversed (closed/reported entries untouched).
-- **Overstay late-fee always showed `0 lei`** in /admin/transactions — read
-  `tx.amount`, not the non-existent `tx.feeAmount`. (`AdminTransactions.js`)
-- **Dashboard `today` tallies used UTC**, disagreeing with the Bucharest-day
-  chart — now both use Europe/Bucharest. (`AdminDashboard.js`)
-- **AdminCheckIns bookings listener leaked** on SPA navigation (torn down only on
-  `popstate`) — page now returns a cleanup the router invokes.
-- **`saveVoucher` could roll `redeemedCount` back** to a stale list value on edit —
-  now preserves the live server count. (`promoVoucherService.js`)
-- **Credits headline ignored the applied promo** — now shows the post-voucher
-  total like the long-term page. (`BookingCredits.js`)
-- **Voucher rejected at pay time showed a generic error** — both booking pages now
-  strip the dead code and show `voucher.payFailed`.
-- Removed dead `data-pay-total`/`data-paymethod-amount` refs left by the accordion
-  rebuild. (`BookingLongTerm.js`)
-
-### Deferred (need Netopia-sandbox testing before touching the capture path)
-
-- **Promo redemption is committed at order creation, not released on an
-  abandoned/declined/cancelled online payment** — a one-shot code is burned and a
-  days-balance loses days even though nothing was paid. Proper fix: write the
-  redemption `pending` and finalize/roll back on IPN outcome + on cancel/refund,
-  plus a scheduled sweep for abandoned holds. High value, but spans the
-  money-critical IPN path.
-- **IPN fulfilment is not transactional** — the `status===paid` idempotency guard
-  is a non-atomic read, so two near-simultaneous Netopia confirmations could
-  double-create a booking / double-grant credits. Fix: claim+fulfil inside a
-  transaction or key the booking doc by order id.
-
----
-
-## 2026-07 deep review — modal lifecycle / walk-in billing (applied this round)
-
-Triggered by a client report: a manual reservation "cancelled half-way" on a
-phone appeared to resurface its dates in a reservation created later on a
-laptop. Investigation conclusion: **no code path syncs unsaved form state
-across devices** (no drafts, no localStorage, `autocomplete="off"`, dates read
-from the DOM only at submit) — but a submit whose HTTPS callable was still in
-flight COULD be "cancelled": the modal's Cancel button, backdrop and Escape
-stayed active during the await, dismissing the form while the server went on
-to create the booking. The staff member then believes nothing was saved. The
-ghost booking (with the phone's dates) later shows up next to the genuinely new
-reservation and reads as "my new booking got the old dates". Check
-`bookings.createdBy` + `auditLog` for two `booking_created` entries by the same
-uid to confirm any specific incident.
-
-Fixed in this pass (verified: vite build + a Puppeteer runtime harness driving
-the real modal — 14/14 checks: lock while in flight, unlock on error, picker
-teardown, days payload):
-
-- **Modals stayed cancellable while a submit was in flight.** Create-transaction
-  (all three branches: long-term/credit-sale, credit check-in, transfer), the
-  edit-booking dialog, the collect-payment dialog and the overstay dialog now
-  disable Cancel and suspend backdrop/Escape dismissal (`setDismissible(false)`)
-  for the duration of the request, restoring them on error.
-  (`CreateTransactionModal.js`, `AdminCheckIns.js`, `Modal.js`)
-- **`openModal` leaked its Escape handler.** The document-level keydown listener
-  was only removed when Escape itself closed the modal; closing via button,
-  backdrop or code left it attached forever. `close()` now always removes it,
-  and is guarded against double-invocation. (`Modal.js`)
-- **flatpickr calendars outlived their modal.** The pickers' calendar overlays
-  live on `document.body`; closing a modal (esp. mid-pick on mobile) left them
-  orphaned — visibly stuck on screen if open, and swallowing taps aimed at a
-  later modal's picker. `close()` now destroys any `data-datetime` picker
-  mounted in the modal via its `__fpInstance`. (`Modal.js`, key documented in
-  `FormDateTime.js`)
-- **Admin walk-in `days` ignored the 2h grace.** The create-transaction submit
-  sent `ceil((pickup−dropoff)/24h)` while the auto-filled price used the graced
-  `walkInBillingDays` (and the public funnel + server reprice use the same
-  graced rule) — a 25h stay was priced as 1 day but stored `days: 2`, skewing
-  the `totalPrice/days` per-day rate that overstay and reprice math derive.
-  Now uses `walkInBillingDays`. (`CreateTransactionModal.js`)
-
-Second wave (from the same review, verified with a Puppeteer run emulating an
-America/New_York browser — 15/15 checks incl. TZ-pinned payloads):
-
-- **Stored booking instants depended on the DEVICE timezone.** Every picker
-  submit path converted the flatpickr wall-clock (`Y-m-d H:i`) to ISO via the
-  device's timezone, while emails/admin render pinned to Europe/Bucharest — a
-  customer abroad (or a staff device with a mis-set clock) silently created a
-  TZ-shifted booking. Picked times now ALWAYS mean Europe/Bucharest, via
-  `bucharestLocalToIso`/`isoToBucharestLocal` (`src/utils/date.js`), used by
-  the public funnel, the admin create modal (defaults + submit + transfer
-  prefill) and the edit/reprice dialog. This also makes the client's
-  seasonal-tier day match the server's Bucharest-day derivation near period
-  boundaries (was: possible hard "price mismatch" for out-of-TZ browsers).
-- **Editing a legacy date-only booking fired a spurious reprice.** The edit
-  dialog's "current dates" baseline (local midnight) disagreed with the picker
-  prefill (UTC midnight) for bookings without `dropoffAt`, so ANY save — even a
-  phone-number fix — reported changed dates and called `adminRepriceBooking`,
-  rewriting the booking's dates to 03:00. The baseline is now the round-trip of
-  the actual prefill, so untouched pickers always compare equal. (`AdminCheckIns.js`)
-- **Safari/iOS could not complete a long-term booking.** `recompute()` parsed
-  the space-separated picker value with `new Date()` (Invalid Date on WebKit) —
-  quote stuck at "—" and submit sent `totalPrice: 0`, which the server rejects.
-  Now parses via the shared helper. (`BookingLongTerm.js`)
-- **Time-slider could silently WIPE the picked date.** flatpickr's `setDate`
-  filters (clears) out-of-range dates instead of clamping — dragging the slider
-  below the min time on the min day emptied the field with no feedback. The
-  slider now clamps to minDate/maxDate; its bubble also shows the true
-  committed minutes (was: grid-rounded display disagreeing with the value), and
-  its no-selection base is a fresh `new Date()` (was: frozen `instance.now`,
-  which back-dated after midnight). Preloaded values filtered by min/max are
-  cleared from the hidden input (an empty-looking field could submit an
-  invisible date). (`FormDateTime.js`)
-- **Clearing the pick-up via a drop-off move left a stale quote.**
-  `set('minDate')` empties the pick-up without a native change event; the
-  summary kept showing the old days/total. The drop-off handler now recomputes
-  unconditionally. (`BookingLongTerm.js`)
-- **Validation errors on date fields were invisible** — `setFieldError` styled
-  the flatpickr-hidden original input; it now styles the visible altInput.
-  (`utils/dom.js`)
-- **Stored XSS via billing fields.** `billingFieldsHtml` interpolated
-  profile-stored billing values into `value="…"` unescaped; a crafted
-  companyName in a customer profile executed in the ADMIN's browser when
-  opening that customer (UserDetailModal renders the same block). All eight
-  attributes are now escaped. (`BillingFields.js`)
-- **Credits funnel showed a stale voucher discount.** A percent code's
-  `discountAmount` was computed once at apply time; switching packs (or payment
-  method) kept subtracting the old amount, so the shown total diverged from
-  what `createPayment` charges. The discount is now re-derived from the live
-  base on every summary refresh, mirroring the long-term page. (`BookingCredits.js`)
-- **Spot status flips threw permission-denied for agents/drivers.**
-  `updateSpotStatus` still incremented the legacy admin-only
-  `settings/global.occupiedSpots` counter (which nothing reads — capacity
-  aggregates the spots collection), failing AFTER the spot doc changed and
-  rolling back the capacity-map UI to a wrong state. Counter write removed.
-  (`capacityService.js`)
-- **Capacity-map tiles were painted once at mount.** Another device's check-in
-  updated the legend but not the tiles; the stale green tile also hand-cycled a
-  real occupancy's status when clicked. Tiles + spot→booking maps now refresh
-  on a live spots subscription. (`AdminCapacity.js`)
-- **Check-ins custom-range flatpickr leaked one calendar per live re-render**
-  (the destroy guard checked the NEW node), and mid-selection state was torn
-  down by every bookings snapshot. The instance is now tracked in the page
-  closure and destroyed before each window-bar rebuild + on route cleanup.
-  (`AdminCheckIns.js`)
-- **Searching couldn't find bookings outside the date window.** The check-in /
-  check-out / no-show / transfers filters ANDed the search with the window, so
-  an early-arriving long-term customer was unfindable by exact plate on the
-  Check-out tab. A non-empty search now bypasses the window (global finder).
-  (`AdminCheckIns.js`)
-- Check-in board timestamps now render pinned to Europe/Bucharest (matches
-  the reservation record + emails). (`AdminCheckIns.js`)
-
-Third wave — backend + rules hardening (needs `firebase deploy --only
-functions,firestore:rules` to take effect; verified `node --check` on every
-functions file + client/consumer field-read audit):
-
-- **createPayment spread the raw request body into `pendingOrders`.** A caller
-  could smuggle server-owned fields into the order — most severely `bookingId`:
-  the IPN honors `pending.bookingId` by patching that booking to `paid`, so a
-  cheap 1-day online charge could flip an arbitrary (e.g. 30-day pay-at-pickup)
-  booking to paid; injected `repayAmount` could also rewrite its stored price.
-  The order doc is now built from an explicit whitelist (with sanitized
-  customerData + billing and the server-authoritative day count), and the IPN
-  additionally refuses `pending.bookingId` on non-pay-at-pickup orders (covers
-  orders written before the hardening). (`functions/src/index.js`)
-- **Firestore rules let anyone mint credit balances / forge bookings.**
-  `tokenBalances` had `create: if true` and world-writable/readable `plate_*`
-  docs (mint a balance → staff plate-lookup deducts from it = free parking;
-  read guest PII); `bookings` had `create: isAuthenticated()` + owner update
-  (forge a paid/active booking, or flip your own pay-at-pickup booking to
-  `paid` and check in without paying). Both are now staff-write only — every
-  legitimate writer was audited: balances move exclusively server-side, and
-  customer self-cancel already used the callable. (`firestore.rules`)
-- **`mergeGuestData` trusted an unverified email.** Registering with a
-  victim's address (unverified) absorbed the victim's guest balances, bookings
-  and PII into the attacker's account. Merge now requires
-  `email_verified` — idempotent, so password signups merge on first login
-  after verification. (`functions/src/index.js`)
-- **`checkInWithCredits` could double-charge on concurrent submits.** The
-  ALREADY_CHECKED_IN guard was a plain read before the balance transaction;
-  two agents (or a double-tap) both passed it and both deducted. The plate is
-  now claimed via `tx.create` on `activeCheckIns/{plate}` inside the same
-  transaction as the deduction. (`functions/src/index.js`)
-- **Check-out reminder e-mailed before drop-off.** The 24h-before-pickup
-  branch had no status gate, so a short booking created ~24h before its
-  pick-up got "your car is ready" before the customer even arrived. Now
-  `active`-only. (`functions/src/scheduled.js`)
-- `lookupCui` no longer fails a successful ANAF lookup when the cache write
-  blips (best-effort `.catch`). (`functions/src/cui.js`)
-
-Fourth wave — orphaned guest bookings (client incident LT-D96ZN: a web
-reservation with `customerId: null` never appeared in the customer's profile,
-which lists — and rules-wise may only read — bookings keyed to the uid):
-
-- **The guest-merge never ran on invite completion.** `mergeGuestData` was
-  called only from Login/Register, so a customer whose account was created via
-  a staff invite (the usual follow-up to a manual reservation), or who booked
-  as a guest during an already-signed-in session, never got earlier bookings
-  linked. FinishSignup now runs the merge after the email-link sign-in (which
-  counts as verified, so the merge's email_verified gate passes).
-  (`FinishSignup.js`)
-- **Email matching was case-sensitive.** Bookings/balances stored the email as
-  typed (phone keyboards auto-capitalize) while the merge compared against the
-  lowercased auth email with Firestore exact-equality — `Roxana@…` never
-  matched `roxana@…`. Emails are now stored lowercased at every write point
-  (both funnels, admin modal, staff edit dialog, `createPayment`,
-  `createBookingFromOrder`, `adminCreateLongtermBooking`, `creditTokens`), and
-  `mergeGuestData` matches legacy mixed-case docs in memory (bookings via a
-  `customerId == null` scan, plate balances via a `plate_*` doc-id range scan)
-  — so no backfill is needed. (`functions/src/index.js` + client funnels)
-- **Manual reservations only linked to an account on an exact picker match.**
-  Staff typing a customer's email free-text created the booking with
-  `customerId: null` even when that email belongs to a registered account.
-  `adminCreateLongtermBooking` now resolves the payer email against Firebase
-  Auth and stamps the uid when an account exists (booking, pay-later order,
-  billing cache and walk-in check-in row all use the linked id).
-  (`functions/src/index.js`) — note: `grantCreditsForCash` has the same
-  pattern for credit sales (balance keyed by plate unless the picker matched);
-  left unchanged for now since re-keying balances changes money routing.
-
-### Known — reviewed 2026-07, deliberately not fixed yet
-
-- **Non-atomic money accumulators** (`adminChargeOverstay`, `adminRepriceBooking`
-  extension branch, `grantCreditsForCash` walk-in): the booking/balance
-  mutation, the ledger row and the cashbook entry are separate awaits — a
-  mid-sequence failure + retry can double-add `latePrice`/`extensionPrice`.
-  Needs an idempotency-key design; same family as the deferred transactional
-  IPN work.
-- **`adminMarkOrderUnpaid` cash-row deletion is post-transaction best-effort** —
-  a failure leaves the reversal recorded but the drawer overstating cash
-  (reversal-path sibling of open bug #3).
-- **Expired pay-later orders leave a phantom `upcoming` booking** —
-  `expireStaleHolds` flips only the order; a far-future pay-later booking
-  whose order expired lingers until manually cancelled.
-- **Reprice across a seasonal boundary bills the whole stay at the pickup-day
-  period's rate** (consistent with original pricing, but the settle difference
-  can surprise) — product decision needed, not a code fix.
+1. **Money correctness** — #2 (refund amount source), #3 (cash-refund
+   reconciliation), #16 (cashbook UTC day). All three are real financial
+   discrepancies and all three are small, contained changes.
+2. **#5 tier-table validation** — cheap to add, prevents silent mis-pricing.
+   Reuse the shape of the seasonal `findOverlap` check.
+3. **#32 sign-out** — one-line addition, real security hygiene on shared
+   machines.
+4. **The dead buttons** — #8b, #29, #30, #31. Each is small and each currently
+   loses staff work or wastes their time.
+5. **#12 idempotent check-in** — copy the `tx.create` claim pattern from
+   `checkInWithCredits`.
+6. Everything else as normal backlog, batched by file.

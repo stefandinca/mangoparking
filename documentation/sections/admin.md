@@ -1,6 +1,7 @@
 # Admin Panel
 
-> Status: ✅ Shipped · Last verified: 2026-07-09
+> Status: ✅ Shipped · Last verified: 2026-07-31 (routes, permissions and
+> sidebar re-checked against `routes.js` / `permissions.js` / `AdminLayout.js`)
 
 The `/admin/*` back office where staff run the lot: check-ins, cash, refunds,
 config, and public-site content. Every admin route declares
@@ -309,7 +310,11 @@ These have page files but their route entries are commented out in
   per-page feature/service lists were compiled from reading each `Admin*.js`
   module — treat specific handler names as accurate but grep before relying on
   exact line numbers.
-- The [admin-flows README](../admin-flows/README.md) role matrix predates the
-  move of **reviews** under the admin-only *Website* section; the current code
-  (agents no longer have `reviews`) is authoritative — see
+- The [admin-flows README](../admin-flows/README.md) role matrix was corrected
+  on 2026-07-31 (it under-counted permissions and predated both the `audit`
+  permission and the move of **reviews** under the admin-only *Website*
+  section). It now matches `PERM` — 17 permissions, 14 sidebar links. See
   [i18n & permissions](../backend/i18n-and-permissions.md#role--permission-table).
+- The numbered admin-flows **walkthroughs** are the 2026-06 audit and are not
+  kept current; [BUGS.md](../admin-flows/BUGS.md) (re-verified 2026-07-31) is
+  the authoritative bug status.

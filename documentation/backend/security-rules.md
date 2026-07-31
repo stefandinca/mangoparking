@@ -1,6 +1,7 @@
 # Security Rules
 
-> Status: ✅ Shipped · Last verified: 2026-07-22
+> Status: ✅ Shipped · Last verified: 2026-07-31 (line references re-checked
+> against `firestore.rules`; they had drifted by 7–35 lines)
 
 How [`firestore.rules`](../../firestore.rules) and [`storage.rules`](../../storage.rules)
 gate access. Sibling docs: [data-model.md](./data-model.md) · [cloud-functions.md](./cloud-functions.md).
@@ -57,7 +58,7 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
 - **write:** `isAdmin()`. The public branch is first so anonymous `where('visibility','==','public')`
   list queries pass without touching the authed branches.
 
-### tokenBalances (line 101)
+### tokenBalances (line 108)
 - **read:** `isStaff()` **or** the owning uid (`docId == request.auth.uid`).
 - **create/update:** `isStaff()`. **delete:** `isAdmin()`.
 - All balance movement is server-side (`creditTokens`, `checkInWithCredits`,
@@ -67,7 +68,7 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
   that let anyone mint a guest balance the staff plate-lookup would deduct from, and leak
   guest contact PII.
 
-### tokenTransactions (line 113) — append-only
+### tokenTransactions (line 119) — append-only
 - **read:** `isStaff()` or the owning customer (`resource.data.customerId == uid`).
 - **create:** `if request.resource.data.type != 'use'` **and no `smartbill` key** — clients
   may seed purchase/checkout/refund rows but **not `use`** (those originate from staff actions
@@ -75,7 +76,7 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
   and never the server-written `smartbill` fiscal-document block.
 - **update/delete:** denied.
 
-### bookings (line 154)
+### bookings (line 169)
 - **read:** `isStaff()` or the owning customer (`resource.data.customerId == uid`).
 - **create/update:** `isStaff()`, **and neither may touch `smartbill` or `parkvia`** — create
   rejects those keys, update rejects them in `affectedKeys()`. The fiscal-document trail
@@ -88,22 +89,22 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
   `create: isAuthenticated()` + owner-update rules let any account forge a paid/active
   booking or flip its own pay-at-pickup booking to `paid` without paying.
 
-### activeCheckIns (line 120)
+### activeCheckIns (line 128)
 - `read/write: if isStaff()` — on-lot tracker, staff only.
 
-### vouchers (legacy signup bonus, line 130)
+### vouchers (legacy signup bonus, line 138)
 - **read:** admin or the owning user.
 - **create:** the caller, and only the signup voucher: `voucherId == uid`,
   `userId == uid`, `source == 'signup-incentive'`, `status == 'unused'`, `amount == 20`.
   Doc-ID `== uid` enforces one voucher per account (a second create collides).
 - **update/delete:** denied — only the IPN callback (admin SDK) flips `status` to `'redeemed'`.
 
-### pendingOrders (line 148) — server-written
+### pendingOrders (line 156) — server-written
 - **read:** `if true` (the `/booking/return` poller reads by orderId).
 - **create/update/delete:** **denied to all clients.** `adminMarkOrderPaid` /
   `adminMarkOrderUnpaid` exist precisely to perform the side-effects a raw write would skip.
 
-### users (line 188)
+### users (line 207)
 - **read:** owner or any staff.
 - **create:** owner **and** `request.resource.data.role == 'customer'` (new users are always
   customers; privilege escalation on signup is impossible).
@@ -111,7 +112,7 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
   or `isAdmin()`. So a user can edit their profile but not their own role.
 - **delete:** `isAdmin()`.
 
-### auditLog (line 196) — append-only
+### auditLog (line 215) — append-only
 - **read:** `isStaff()`. **create:** any authenticated user. **update/delete:** denied.
 
 ### Voucher ledgers (server-written)
@@ -119,32 +120,32 @@ anything touching money. This mirrors `assertStaff` / `assertAgent` server-side.
 - `voucherDayBalances` (line 95): read by staff; all writes denied.
 
 ### Cash ledgers (server-written)
-- `cashHandovers` (line 257): read by `isAgent()` (drivers excluded); all writes denied.
-- `cashEntries` (line 265): read by admin, or the owning agent (`resource.data.agentUid == uid`);
+- `cashHandovers` (line 291): read by `isAgent()` (drivers excluded); all writes denied.
+- `cashEntries` (line 299): read by admin, or the owning agent (`resource.data.agentUid == uid`);
   all writes denied (written by `recordCashEntry` / `closeCashbook`).
-- `cashbookReports` (line 272): same read model; immutable once generated.
+- `cashbookReports` (line 306): same read model; immutable once generated.
 
-### contactMessages (line 203)
+### contactMessages (line 222)
 - **create:** `if true` (public form). **read/update:** `isStaff()`. **delete:** `isAdmin()`.
 
-### transfers (line 231)
+### transfers (line 250)
 - **read/create/update:** `isStaff()`. **delete:** `isAgent()` (so a driver can't remove records).
 - Client-written (no money fields — `price` is a free-text note), like reviews/contact messages.
 
-### subscriptions (line 162, hidden feature)
+### subscriptions (line 181, hidden feature)
 - **read:** staff or owner. **create:** authenticated. **update:** staff or owner. **delete:** `isAdmin()`.
 
 ### Fully server-only (all client access denied)
-- `pendingInvites` (line 237): `read, write: if false` — admin SDK only
+- `pendingInvites` (line 256): `read, write: if false` — admin SDK only
   (`adminSendInvite` / `finishInviteSignup`).
-- `lookupCache` (line 242): `read, write: if false` — ANAF cache, `lookupCui` only.
+- `lookupCache` (line 261): `read, write: if false` — ANAF cache, `lookupCui` only.
 - `flightStatusCache`: no explicit rule → **default-deny** to clients; written only by
   `lookupFlightStatuses` (admin SDK).
 - `parkviaImports` / `parkviaSync`: `read: if isStaff(); write: if false` — ParkVia auto-import
   dedup ledger + poll cursor, written only by `runParkviaSync` (admin SDK). Staff-readable so an
   admin tool can show import history.
 
-### clientErrors — in-house error monitoring (2026-07)
+### clientErrors (line 315) — in-house error monitoring (2026-07)
 - **create:** anyone, including anonymous — crashes happen to guests too. Guarded by a strict
   field allowlist (`kind/message/stack/route/locale/ua/uid/ts/createdAt`) with size caps
   (message ≤500, stack ≤1500, route/ua ≤300) so the open create can't be abused as free storage.
