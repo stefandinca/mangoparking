@@ -51,7 +51,7 @@ every template with an ID:
 | `signup-welcome` | 4 / 5 | `onUserCreated` |
 | `password-reset` | 6 / 7 | `requestPasswordReset` |
 | `admin-invite` | 8 / 1 | `adminSendInvite` |
-| `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail` |
+| `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail`. **Broker/prepaid bookings** (ParkVia et al.) pass `broker:true`, which suppresses the pay-online-and-save-`{discountPct}`% block and the total — see [Broker bookings](#broker-prepaid-bookings-never-get-the-pay-online-promo). |
 | `booking-refunded` | 22 / 21 | `sendRefundIssuedEmail` |
 | `booking-cancelled` | 29 / 30 | `sendBookingCancelledEmail` — cancellation confirmation; with `refundPending:true`, adds a "refund on its way" box (card vs desk wording via `channel`). |
 | `booking-repriced` | 28 / 27 | `sendBookingRepricedEmail`, `sendExtensionPaidEmail`, `sendBookingRequoteEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up; with `requote:true`, the unpaid-re-quote variant showing the new total instead of a difference. |
@@ -104,6 +104,30 @@ assigned ID dropped into the map before its send stops returning `{ skipped:
 'no-template-id' }`; only bump an ID if you delete + recreate. One-shot wording
 rounds live in `email-templates/wording-edits/` (source .docx from the team; the
 2026-07 round is applied).
+
+### Broker / prepaid bookings never get the pay-online promo
+
+A reservation booked through a broker (ParkVia et al.) was paid **to the third
+party, at the third party's price**. The confirmation email must not:
+
+- offer "pay online and save `{discountPct}`%" — the customer owes us nothing,
+  and our online discount does not apply to their reservation;
+- print our `totalPrice` — it is not the amount they agreed to, and showing it
+  invites a "why is this different?" support call.
+
+`sendBookingConfirmationEmail` therefore derives
+`isBroker = source === 'broker' || paidBy === 'broker' || !!brokerName` and
+passes `broker: true` + `brokerName`. That forces `paid` true (so the promo
+block is skipped regardless of `paymentStatus`), zeroes `discountPct` and blanks
+`payOnlineLink`. The template gates the payment row on it — rendering
+"Achitată la ParkVia" / "Paid at ParkVia" — and drops the total row entirely.
+
+> **This only fires for bookings actually marked as broker.** A prepaid
+> third-party reservation typed in as a plain pay-at-pickup booking carries no
+> broker marker, still reads as `unpaid`, and *will* get the promo. Enter those
+> through the New-reservation modal's **Broker / prepaid** payment option (which
+> also asks for the broker name), or let the ParkVia auto-import create them.
+> Reported by the client 2026-08-01 for Parkos reservations.
 
 ---
 

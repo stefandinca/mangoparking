@@ -39,12 +39,14 @@
 </tr>
 <tr>
 <td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">💳 Payment</td>
-<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{% if params.paid %}Paid online{% else %}Pay on arrival{% endif %}</td>
+<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{% if params.broker %}Paid at {% if params.brokerName %}{{ params.brokerName }}{% else %}partner{% endif %}{% elif params.paid %}Paid online{% else %}Pay on arrival{% endif %}</td>
 </tr>
+{% if params.broker == false %}
 <tr>
 <td style="padding:12px 0 4px;font-size:14px;color:#666;border-top:1px solid #EDE3CC;font-weight:600;">Total {% if params.paid %}paid{% else %}due on arrival{% endif %}</td>
 <td style="padding:12px 0 4px;font-size:18px;color:#0F2D66;font-weight:700;text-align:right;border-top:1px solid #EDE3CC;">{{ params.totalAmount }} lei</td>
 </tr>
+{% endif %}
 </table>
 </td></tr>
 </table>

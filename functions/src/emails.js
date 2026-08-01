@@ -241,7 +241,18 @@ export async function sendBookingConfirmationEmail(bookingId) {
   });
   if (!recipient) return { ok: false, reason: 'no-recipient' };
 
-  const paid = booking.paymentStatus !== 'unpaid';
+  // A broker / prepaid reservation (ParkVia et al.) was paid to the THIRD
+  // PARTY, at the third party's price. It must never be offered the
+  // pay-online discount: the customer owes us nothing, our discount does not
+  // apply to their booking, and our list price is not what they paid —
+  // showing it invites a "why is this different?" support call. Detected from
+  // the booking's own broker markers so it holds no matter what
+  // `paymentStatus` says.
+  const isBroker = booking.source === 'broker'
+    || booking.paidBy === 'broker'
+    || !!booking.brokerName;
+
+  const paid = isBroker || booking.paymentStatus !== 'unpaid';
   const discountPct = paid ? 0 : await getOnlineDiscount();
   // Pay-online recovery link — the orderId is in the URL; the /pay page
   // re-enters Netopia for an existing pay-at-pickup order, applying the
@@ -267,6 +278,11 @@ export async function sendBookingConfirmationEmail(bookingId) {
       paid,
       payOnlineLink,
       discountPct,
+      // Lets the template drop the payment row + total entirely for a
+      // prepaid broker booking (our figures aren't the ones the customer
+      // agreed to) and name who they booked through instead.
+      broker: isBroker,
+      brokerName: booking.brokerName || '',
     },
   });
   return result?.ok

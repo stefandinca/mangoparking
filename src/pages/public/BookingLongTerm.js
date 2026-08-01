@@ -184,7 +184,17 @@ export default function BookingLongTerm(container) {
                     <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mango text-charcoal text-[11px] font-bold">2</span>
                     ${t('longTerm.pickupAt')} *
                   </label>
-                  ${dateTimeFieldHtml({ name: 'pickupAt', value: defaultPickupValue, min: defaultDropoffValue, required: true })}
+                  ${/* Floor is the earliest possible DROP-OFF (now), not the
+                       drop-off's suggested default. Seeding it with
+                       `defaultDropoffValue` (tomorrow 10:00) grey-ed out today
+                       and every earlier hour for anyone who opened the pick-up
+                       picker before touching the drop-off — a customer wanting
+                       to park today saw "can't pick before tomorrow 10:00" and
+                       assumed same-day booking was closed. The drop-off change
+                       handler below tightens this to the real drop-off the
+                       moment one is chosen, and an inverted range is caught by
+                       validateStep + the submit check + the server. */''}
+                  ${dateTimeFieldHtml({ name: 'pickupAt', value: defaultPickupValue, min: minDropoffValue, required: true })}
                   <p class="text-[12px] text-charcoal/70 mt-1.5 leading-snug">${t('longTerm.pickupHint')}</p>
                   ${flightField('flightNumberPickup')}
                 </div>

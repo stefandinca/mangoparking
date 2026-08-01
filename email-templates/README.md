@@ -7,8 +7,22 @@ Cloud Function picks the right template ID.
 
 ## Workflow
 
-These `.html` files are **reference copies kept in the repo**. The
-live versions live in your Brevo dashboard. To set them up:
+> **Updated 2026-08-01 — these files are the SOURCE OF TRUTH, not reference
+> copies.** Since 2026-07-20 they are pushed to Brevo over the template API by
+> `scripts/sync-brevo-templates.mjs`; editing a file here and running `push` is
+> the supported way to change an email. The hand-pasting steps below are the
+> original one-time setup, kept for creating a brand-new template (which still
+> needs an ID assigned in `functions/src/emailTemplates.js`).
+>
+> ```powershell
+> $env:BREVO_API_KEY = (firebase functions:secrets:access BREVO_API_KEY)
+> node scripts/sync-brevo-templates.mjs diff          # check for UI-side drift first
+> node scripts/sync-brevo-templates.mjs push --all    # or: push <key> [...]
+> ```
+>
+> Full detail: [documentation/backend/email-brevo.md](../documentation/backend/email-brevo.md).
+
+The original one-time setup (per template):
 
 1. **Brevo dashboard → Templates → Create a new template → HTML editor.**
 2. Paste the entire contents of one `.html` file.
