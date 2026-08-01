@@ -17,6 +17,7 @@ import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/fire
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
 import { templateId } from './emailTemplates.js';
+import { isBrokerBooking } from './brokerBooking.js';
 
 const SITE_URL = process.env.SITE_URL || 'https://mangoparking.ro';
 
@@ -241,16 +242,16 @@ export async function sendBookingConfirmationEmail(bookingId) {
   });
   if (!recipient) return { ok: false, reason: 'no-recipient' };
 
-  // A broker / prepaid reservation (ParkVia et al.) was paid to the THIRD
-  // PARTY, at the third party's price. It must never be offered the
-  // pay-online discount: the customer owes us nothing, our discount does not
-  // apply to their booking, and our list price is not what they paid —
-  // showing it invites a "why is this different?" support call. Detected from
-  // the booking's own broker markers so it holds no matter what
-  // `paymentStatus` says.
-  const isBroker = booking.source === 'broker'
-    || booking.paidBy === 'broker'
-    || !!booking.brokerName;
+  // A broker / prepaid reservation (ParkVia auto-import OR a manual desk
+  // "Broker / prepaid" entry — both produce the same doc via
+  // createBrokerBookingCore) was paid to the THIRD PARTY, at the third party's
+  // price. It must never be offered the pay-online discount: the customer owes
+  // us nothing, our discount does not apply to their booking, and our list
+  // price is not what they paid — showing it invites a "why is this
+  // different?" support call. Forcing `paid` here also means the promo stays
+  // hidden even if the booking's paymentStatus is somehow not 'paid'.
+  // See functions/src/brokerBooking.js + functions/test/broker.test.js.
+  const isBroker = isBrokerBooking(booking);
 
   const paid = isBroker || booking.paymentStatus !== 'unpaid';
   const discountPct = paid ? 0 : await getOnlineDiscount();
@@ -282,7 +283,6 @@ export async function sendBookingConfirmationEmail(bookingId) {
       // prepaid broker booking (our figures aren't the ones the customer
       // agreed to) and name who they booked through instead.
       broker: isBroker,
-      brokerName: booking.brokerName || '',
     },
   });
   return result?.ok
@@ -323,6 +323,10 @@ export async function sendRepayPaidEmail(bookingId) {
       paid: true,
       payOnlineLink: '',
       discountPct: 0,
+      // Shares the booking-longterm-confirm template, so it must supply every
+      // flag that template branches on — an absent `broker` would leave the
+      // payment/total rows resolving against an undefined param.
+      broker: isBrokerBooking(booking),
     },
   });
 }

@@ -37,11 +37,13 @@
 <td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">🚗 Mașina</td>
 <td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-family:'JetBrains Mono',Consolas,monospace;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.plate }}</td>
 </tr>
+{# Broker/prepaid: the customer paid the broker, at the broker's price. We
+   show NO payment information at all — neither method nor amount. #}
+{% if not params.broker %}
 <tr>
 <td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">💳 Plata</td>
-<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{% if params.broker %}Achitată la {% if params.brokerName %}{{ params.brokerName }}{% else %}partener{% endif %}{% elif params.paid %}Achitat online{% else %}Plata la sosire{% endif %}</td>
+<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{% if params.paid %}Achitat online{% else %}Plata la sosire{% endif %}</td>
 </tr>
-{% if params.broker == false %}
 <tr>
 <td style="padding:12px 0 4px;font-size:14px;color:#666;border-top:1px solid #EDE3CC;font-weight:600;">Total {% if params.paid %}plătit{% else %}de plată la sosire{% endif %}</td>
 <td style="padding:12px 0 4px;font-size:18px;color:#0F2D66;font-weight:700;text-align:right;border-top:1px solid #EDE3CC;">{{ params.totalAmount }} lei</td>
