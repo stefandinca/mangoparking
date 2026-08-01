@@ -140,7 +140,21 @@ bookings.
 > create them. Reported by the client 2026-08-01 for Parkos reservations.
 
 Template edits need a push to reach customers:
-`node scripts/sync-brevo-templates.mjs push booking-longterm-confirm`.
+`node scripts/sync-brevo-templates.mjs push booking-longterm-confirm-ro booking-longterm-confirm-en`
+(push takes the per-locale keys, not the shared template name).
+
+**Two template-syntax traps, both learned the hard way:**
+
+1. **`{# … #}` comments must stay on ONE line.** A newline inside one makes
+   Brevo reject the whole push with
+   `invalid_parameter … Newline not permitted in a single-line comment`.
+   The API validates before writing, so a bad template fails loudly rather than
+   corrupting the live one — but the push does abort partway through a batch.
+2. **Test an absent param with `{% if not params.x %}`, never `{% if params.x == false %}`.**
+   Brevo resolves a missing param to `''`, and `'' == false` is falsy — so the
+   `== false` form silently *hides* a block for every sender that doesn't pass
+   the flag. `booking-longterm-confirm` has three senders; only some pass
+   `broker`.
 
 ---
 
