@@ -8,8 +8,12 @@
 
 The original register (2026-06) was a static snapshot that accumulated fix
 notes at the bottom without striking the rows through, so items stayed listed
-as open long after they were fixed. This pass reconciles the two: **12 of the
-original 33 rows are fixed**, 4 are partially fixed, and 17 remain open.
+as open long after they were fixed. That pass reconciled the two: 12 of the
+original 33 rows were already fixed, 4 partially, 17 open.
+
+**Updated 2026-08-01** — #2 (over-refund on voucher bookings) and #3 (cash
+refunds never reconciled) are now **fixed**; see the closed table below.
+Running total: **14 fixed**, 4 partial, 15 open.
 
 ---
 
@@ -17,9 +21,7 @@ original 33 rows are fixed**, 4 are partially fixed, and 17 remain open.
 
 | # | Area | Bug | Evidence |
 |---|------|-----|----------|
-| 2 | Refunds | **Over-refund on voucher bookings.** The refund queue, its dialog and the audit payload all read `booking.totalPrice` — the **gross**, pre-discount, pre-voucher figure. What the customer actually paid is `pendingOrders.amount` (post online-discount, post-voucher). An admin refunding a discounted booking hands back more than was ever taken. | `AdminRefunds.js:110,116,154,167` all `Number(b.totalPrice)`; `adminMarkRefunded` audit `amount: booking.totalPrice` (`index.js`). The reservation detail view already shows both figures when they differ — that's the correct source to adopt. |
-| 3 | Cashbook | **Cash refunds are never reconciled.** Marking an `admin-cash` booking refunded writes no reversing `cashEntries` row, so the drawer and the printed report keep counting money that left the till. The agent "owes" cash they already returned. | `adminMarkRefunded` (`index.js:2620`) patches the booking, mirrors `pendingOrders`, audit-logs and emails — no `recordCashEntry` call anywhere in the body. |
-| 16 | Cashbook | **Cash entries bucket on the UTC day, not the Bucharest day.** `recordCashEntry` stamps `paidAtDay` from `nowIso.slice(0,10)`. Between local midnight and 03:00 (summer, UTC+3) a payment lands on the **previous** day's card and the previous day's close. The dashboard half of this bug was fixed in 2026-06; the cashbook half was not. | `index.js:1661` — `paidAtDay: nowIso.slice(0, 10)`. Compare `bucharestToday()` at `index.js:551`, which exists and does the right thing for SmartBill. |
+| 16 | Cashbook | **Cash entries bucket on the UTC day, not the Bucharest day.** `recordCashEntry` stamps `paidAtDay` from `nowIso.slice(0,10)`. Between local midnight and 03:00 (summer, UTC+3) a payment lands on the **previous** day's card and the previous day's close. The dashboard half of this bug was fixed in 2026-06; the cashbook half was not. | `index.js` — `paidAtDay: nowIso.slice(0, 10)` in `recordCashEntry`. Compare `bucharestToday()` in the same file, which exists and does the right thing for SmartBill. |
 | 5 | Pricing | **The long-term tier table saves with no validation.** Gaps, overlaps, inverted ranges and `perDay: 0` all persist; the server's `tierForDays` then falls back to the last tier for any uncovered day count, silently mis-pricing. Seasonal periods *do* get overlap detection (`findOverlap`) — the default table never got the same treatment. | `AdminPricing.js:423` — the save handler calls `saveLongTermRates(working)` directly. `pricingValidate.js:46` `tierForDays` is the silent fallback. |
 
 ## OPEN — correctness / data integrity
@@ -75,6 +77,8 @@ create. Carried over from the original audit; not re-checked.
 
 | # | Bug | Closed by |
 |---|-----|-----------|
+| 2 | **Over-refund on voucher bookings** | **2026-08-01.** The refund figure is now computed server-side by `resolveChargedAmount` (charged order amount + `extensionPrice` + `latePrice`, gross `totalPrice` only as the desk-sale fallback) and **pinned on the booking** — `refundAmount` at cancel, `refundedAmount` at mark-refunded. Every surface reads that one number: the queue, its dialog, the dashboard tile (which had the same bug independently), the audit payload and the refund-issued email (which was also quoting the gross). Client mirror `refundDueFrom` is pure + unit-tested (`tests/refundAmount.test.mjs`, 12 cases); legacy rows without the pinned field derive from their linked order. A tooltip explains any amount that differs from the list price. |
+| 3 | **Cash refunds never reconciled** | **2026-08-01.** `adminMarkRefunded` and `adminResolvePendingRefund` now write a negative `cashEntries` row (`source: 'refund'`) when `refundedVia === 'cash-returned'`, so the drawer, the close-out and the printed report net out. Keyed on the refund channel rather than the original payment method; a reversing row rather than a deletion (the original may already be closed into a report); negatives are opt-in per call site so other callers keep their old drop-on-negative guard. |
 | 1 | `{{ … }}` i18n keys never interpolated | 2026-07-23 — all 8 keys rewritten to single-brace. **Verified:** no `{{` remains in `ro.js`/`en.js`. `t()`'s single-brace regex is now the documented convention. |
 | 4 | Credit/commuter check-ins invisible & uncheckoutable | `createCreditCheckInBooking` (`index.js:3616`) writes a real `bookings` doc; `checkInWithCredits` (`:3660`) calls it; the board subscribes to `status in [upcoming, active, no-show]`, so credit check-ins appear on Check-out like any other. |
 | 6 | Audit content rendered unescaped (XSS) | 2026-07-27 — `AdminDashboard.js:247-250` escapes timestamp, badge, description and actor. |
@@ -126,9 +130,10 @@ orphaned-guest-bookings wave.
 
 ## Suggested fix order
 
-1. **Money correctness** — #2 (refund amount source), #3 (cash-refund
-   reconciliation), #16 (cashbook UTC day). All three are real financial
-   discrepancies and all three are small, contained changes.
+1. ~~**Money correctness** — #2 (refund amount source), #3 (cash-refund
+   reconciliation)~~ — **done 2026-08-01**. **#16 (cashbook UTC day)** is the
+   remaining financial discrepancy: small and contained, and
+   `bucharestToday()` already exists in the same file.
 2. **#5 tier-table validation** — cheap to add, prevents silent mis-pricing.
    Reuse the shape of the seasonal `findOverlap` check.
 3. **#32 sign-out** — one-line addition, real security hygiene on shared

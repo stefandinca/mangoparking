@@ -3,6 +3,7 @@ import { t, getLocale } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import { getCollection, where } from '../../firebase/db.js';
+import { attachRefundDue } from '../../services/bookingService.js';
 import { openModal, confirmModal } from '../../components/core/Modal.js';
 import { showToast } from '../../components/core/Toast.js';
 import { httpsCallable } from 'firebase/functions';
@@ -57,6 +58,15 @@ function fmtDate(iso, locale) {
   } catch { return iso; }
 }
 
+// Tooltip explaining a refund that differs from the booking's list price, so
+// the smaller number reads as deliberate rather than as a display bug.
+function refundAmountTitle(b) {
+  const gross = Number(b.totalPrice) || 0;
+  const due = Number(b.refundDue) || 0;
+  if (!gross || gross === due) return '';
+  return ` title="${escapeHtml(t('refunds.amountNetHint', { gross }))}"`;
+}
+
 function paidByLabel(paidBy) {
   switch (paidBy) {
     case 'netopia':     return t('refunds.paidByNetopia');
@@ -107,13 +117,13 @@ function rowHtml(b, locale) {
       <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
       <td class="px-4 py-3 text-[13px] text-dim">${fmtDate(b.cancelledAt, locale)}</td>
       <td class="px-4 py-3 text-[13px]">${escapeHtml(paidByLabel(paidBy))}</td>
-      <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right">${Number(b.totalPrice || 0)} ${t('common.lei')}</td>
+      <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right"${refundAmountTitle(b)}>${Number(b.refundDue || 0)} ${t('common.lei')}</td>
       <td class="px-4 py-3 text-right">
         <div class="inline-flex items-center gap-2">
           ${isNetopia ? `
             <a href="${NETOPIA_ADMIN_URL}" target="_blank" rel="noopener" class="text-[12px] text-blueberry hover:underline font-semibold">${t('refunds.openInNetopia')}</a>
           ` : ''}
-          <button type="button" data-mark-refunded="${escapeHtml(b.id)}" data-paidby="${escapeHtml(paidBy)}" data-amount="${Number(b.totalPrice || 0)}" data-code="${escapeHtml(code)}" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[12px] px-3 py-1.5 rounded-lg transition-colors">${t('refunds.markRefunded')}</button>
+          <button type="button" data-mark-refunded="${escapeHtml(b.id)}" data-paidby="${escapeHtml(paidBy)}" data-amount="${Number(b.refundDue || 0)}" data-code="${escapeHtml(code)}" class="bg-leaf hover:bg-leaf/90 text-white font-semibold text-[12px] px-3 py-1.5 rounded-lg transition-colors">${t('refunds.markRefunded')}</button>
         </div>
       </td>
     </tr>
@@ -151,7 +161,13 @@ export default async function AdminRefunds(container) {
     .filter((b) => Number(b.pendingRefundAmount) > 0)
     .sort((a, b) => String(b.pendingRefundCreatedAt || '').localeCompare(String(a.pendingRefundCreatedAt || '')));
 
-  const totalAmount = pending.reduce((acc, b) => acc + (Number(b.totalPrice) || 0), 0);
+  // Resolve the real refund figure for both tables before rendering. (Partial
+  // rows already carry `pendingRefundAmount`, a computed difference, so they
+  // never had the gross-price problem.)
+  await attachRefundDue(pending);
+  await attachRefundDue(history);
+
+  const totalAmount = pending.reduce((acc, b) => acc + (Number(b.refundDue) || 0), 0);
   const failedCount = history.filter((b) => b.refundEmail?.status === 'failed').length;
 
   const historyRowHtml = (b) => {
@@ -164,7 +180,7 @@ export default async function AdminRefunds(container) {
         <td class="px-4 py-3 text-[13px]">${userNameButton({ customerId: b.customerId, email: b.contact?.email, name: b.contact?.name || b.contact?.email })}</td>
         <td class="px-4 py-3 text-[13px] text-dim">${fmtDateTime(b.refundedAt, locale)}</td>
         <td class="px-4 py-3 text-[13px]">${escapeHtml(refundedViaLabel(b.refundedVia))}</td>
-        <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right">${Number(b.totalPrice || 0)} ${t('common.lei')}</td>
+        <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right"${refundAmountTitle(b)}>${Number(b.refundDue || 0)} ${t('common.lei')}</td>
         <td class="px-4 py-3">${emailStatusBadge(b.refundEmail)}</td>
         <td class="px-4 py-3 text-right">
           <button type="button" data-resend-email="${escapeHtml(b.id)}" data-code="${escapeHtml(code)}" class="${failed ? 'bg-mango hover:bg-mango-hover text-charcoal' : 'bg-frost hover:bg-frost-deep text-charcoal/80'} font-semibold text-[12px] px-3 py-1.5 rounded-lg transition-colors">${t('refunds.resendEmail')}</button>

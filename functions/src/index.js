@@ -1631,6 +1631,44 @@ export const mergeGuestData = onCall(
 // for both the "my open day" view and the close-and-generate-report flow.
 // Only CASH is recorded here — card payments are tracked on the source doc
 // (booking / pendingOrder / tokenTransaction) but never reach the cashbook.
+// What the customer ACTUALLY handed over for this booking — the only safe
+// basis for a refund.
+//
+// `booking.totalPrice` is the GROSS list price. The amount charged is on the
+// linked pendingOrders doc (`amount`), which is already net of the online
+// discount and any voucher. Refunding totalPrice hands back money that was
+// never taken — by the whole discount, on every discounted or voucher booking.
+// Desk-created bookings skip pendingOrders entirely, so totalPrice is the
+// correct fallback there.
+//
+// Extensions and overstay fees are real money collected on top and tracked in
+// their own accumulators (adminRepriceBooking deliberately does NOT fold an
+// extension back into totalPrice), so a full refund owes those too.
+async function resolveChargedAmount(db, booking) {
+  let base = Number(booking.totalPrice) || 0;
+  if (booking.paymentId) {
+    try {
+      const snap = await db.collection('pendingOrders').doc(booking.paymentId).get();
+      const charged = snap.exists ? Number(snap.data().amount) : NaN;
+      if (Number.isFinite(charged) && charged > 0) base = charged;
+    } catch { /* order unreadable — fall back to the booking's own figure */ }
+  }
+  const total = base + (Number(booking.extensionPrice) || 0) + (Number(booking.latePrice) || 0);
+  return Math.max(0, Math.round(total));
+}
+
+// A cash-drawer row.
+//
+// With `allowNegative`, `amount` may be NEGATIVE: a cash refund physically
+// takes money back out of the till, so it is recorded as a reversing entry
+// rather than by deleting the original (which would erase the fact that cash
+// was collected at all, and is impossible once the entry has been closed into
+// a report). Every consumer sums with `+`, so negatives net out correctly.
+//
+// It is opt-in because every OTHER caller passes an amount it collected, and
+// not all of them validate it upstream (`grantCreditsForCash` takes `amount`
+// straight from the request). For those a negative is a bug worth dropping
+// silently, exactly as before — only the refund paths mean it.
 async function recordCashEntry({
   agentUid,
   amount,
@@ -1640,9 +1678,11 @@ async function recordCashEntry({
   bookingId = null,
   orderId = null,
   tokenBalanceDocId = null,
+  allowNegative = false,
 }) {
   const amt = Number(amount);
-  if (!Number.isFinite(amt) || amt <= 0) return null;
+  if (!Number.isFinite(amt)) return null;
+  if (allowNegative ? amt === 0 : amt <= 0) return null;
   if (!agentUid) return null;
   const db = getFirestore();
   let agentName = agentUid;
@@ -2503,6 +2543,12 @@ export const cancelBookingWithRefund = onCall(
     if (paidViaNetopia || paidViaAdmin) {
       patch.paymentStatus = 'refund-pending';
       patch.refundRequestedAt = nowIso;
+      // Pin what is owed back AT CANCEL TIME, so the refund queue, the
+      // confirmation dialog, the audit row, the customer email and the
+      // cash reversal all quote one server-computed number instead of each
+      // re-deriving it (they didn't agree: the email already netted the
+      // discount while the admin queue showed the gross).
+      patch.refundAmount = await resolveChargedAmount(db, booking);
       refundOutcome = paidViaNetopia ? 'netopia-pending' : 'cash-pending';
     }
     await bookingRef.update(patch);
@@ -2645,11 +2691,21 @@ export const adminMarkRefunded = onCall(
     }
 
     const nowIso = new Date().toISOString();
+    // `refundAmount` is stamped by cancelBookingWithRefund. Bookings cancelled
+    // before that shipped don't carry it, so re-derive for those rather than
+    // falling back to the gross totalPrice (the bug this replaced).
+    const refundAmount = Number.isFinite(Number(booking.refundAmount))
+      ? Number(booking.refundAmount)
+      : await resolveChargedAmount(db, booking);
+
     const patch = {
       paymentStatus: 'refunded',
       refundedAt: nowIso,
       refundedBy: uid,
       refundedVia,
+      // Persist what was actually returned so the history table and the
+      // customer email quote the refund, not the list price.
+      refundedAmount: refundAmount,
       refundNotes: String(notes || '').trim() || null,
     };
     await ref.update(patch);
@@ -2665,6 +2721,32 @@ export const adminMarkRefunded = onCall(
         .catch((err) => console.warn('pendingOrders refund mirror failed:', err?.message));
     }
 
+    // Cash handed back at the desk leaves the drawer, so it must reverse out of
+    // the cashbook — otherwise the day's total and the printed report keep
+    // counting money that is no longer there and the agent appears to owe it.
+    // Keyed on the refund CHANNEL, not on how the booking was paid: a
+    // card-paid booking refunded in cash still empties the till, and a
+    // cash-paid booking refunded to a card does not.
+    let cashEntryId = null;
+    if (refundedVia === 'cash-returned' && refundAmount > 0) {
+      try {
+        cashEntryId = await recordCashEntry({
+          agentUid: uid,
+          amount: -refundAmount,
+          source: 'refund',
+          plate: booking.licensePlate || null,
+          payerName: booking.contact?.name || null,
+          bookingId,
+          orderId: booking.paymentId || null,
+          allowNegative: true,
+        });
+      } catch (err) {
+        // The money is already back in the customer's hand — never fail the
+        // refund over the ledger row. Surfaced via the audit payload below.
+        console.warn('refund cash reversal failed:', err?.message);
+      }
+    }
+
     await db.collection('auditLog').add({
       action: 'booking_refunded',
       entityType: 'booking',
@@ -2673,8 +2755,13 @@ export const adminMarkRefunded = onCall(
       payload: {
         code: booking.code || null,
         refundedVia,
-        amount: booking.totalPrice || null,
+        amount: refundAmount,
+        // Kept alongside so a discrepancy between the two is visible in the
+        // trail rather than silently averaged away.
+        grossTotalPrice: Number(booking.totalPrice) || null,
         paidBy: booking.paidBy || null,
+        cashEntryId,
+        cashReversalFailed: refundedVia === 'cash-returned' && refundAmount > 0 && !cashEntryId,
         notes: patch.refundNotes,
       },
       timestamp: nowIso,
@@ -4257,12 +4344,39 @@ export const adminResolvePendingRefund = onCall(
       checkoutRefundedAmount: amount,
     });
 
+    // Same drawer reconciliation as the full-refund path — a shortening
+    // refund paid out in cash also empties the till. `pendingRefundAmount` is
+    // already a computed difference, so it needs no gross/net correction.
+    let cashEntryId = null;
+    if (refundedVia === 'cash-returned' && amount > 0) {
+      try {
+        cashEntryId = await recordCashEntry({
+          agentUid: uid,
+          amount: -amount,
+          source: 'refund',
+          plate: b.licensePlate || null,
+          payerName: b.contact?.name || null,
+          bookingId,
+          orderId: b.paymentId || null,
+          allowNegative: true,
+        });
+      } catch (err) {
+        console.warn('partial-refund cash reversal failed:', err?.message);
+      }
+    }
+
     await db.collection('auditLog').add({
       action: 'booking_checkout_refund_resolved',
       entityType: 'booking',
       entityId: bookingId,
       actorUid: uid,
-      payload: { code: b.code || null, amount, refundedVia },
+      payload: {
+        code: b.code || null,
+        amount,
+        refundedVia,
+        cashEntryId,
+        cashReversalFailed: refundedVia === 'cash-returned' && amount > 0 && !cashEntryId,
+      },
       timestamp: nowIso,
     });
 

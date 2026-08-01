@@ -408,14 +408,39 @@ export async function sendBookingRequoteEmail(bookingId) {
   return result?.ok ? { ok: true, recipient: recipient.email } : { ok: false, reason: result?.reason || 'unknown' };
 }
 
+// What a refund on this booking is worth, for anything customer-facing.
+//
+// Prefers the figure the server pinned when the money decision was made
+// (`refundedAmount` once processed, `refundAmount` while queued — both written
+// by index.js). Bookings cancelled before those fields existed fall back to
+// the live derivation: the CHARGED amount on the linked order (online orders
+// are discounted and voucher-reduced below `totalPrice`), then the booking's
+// own total for desk sales that never created an order.
+//
+// Never quote `totalPrice` alone — it is the gross list price, and on a
+// discounted booking it promises the customer more than they paid.
+async function refundAmountFor(db, booking) {
+  const pinned = Number(booking.refundedAmount ?? booking.refundAmount);
+  if (Number.isFinite(pinned) && pinned > 0) return pinned;
+
+  let base = Number(booking.totalPrice) || 0;
+  if (booking.paymentId) {
+    try {
+      const order = await db.collection('pendingOrders').doc(booking.paymentId).get();
+      const charged = order.exists ? Number(order.data().amount) : NaN;
+      if (Number.isFinite(charged) && charged > 0) base = charged;
+    } catch { /* fall back to totalPrice */ }
+  }
+  const total = base + (Number(booking.extensionPrice) || 0) + (Number(booking.latePrice) || 0);
+  return Math.max(0, Math.round(total));
+}
+
 // Called from cancelBookingWithRefund after the cancellation lands. Confirms
 // the booking is void; when the payment was routed to the refund queue it also
 // explains how the money comes back (card vs desk) — the booking-refunded
-// email follows later, when staff actually process the refund. The amount
-// shown is the CHARGED amount (pendingOrders.amount — online orders are
-// discounted below totalPrice), falling back to the booking's totalPrice for
-// desk-paid bookings with no linked order. The no-show branch deliberately
-// sends nothing (the fee is forfeited — a different conversation).
+// email follows later, when staff actually process the refund. The no-show
+// branch deliberately sends nothing (the fee is forfeited — a different
+// conversation).
 export async function sendBookingCancelledEmail(bookingId) {
   const db = getFirestore();
   const snap = await db.collection('bookings').doc(bookingId).get();
@@ -430,14 +455,9 @@ export async function sendBookingCancelledEmail(bookingId) {
   if (!recipient) return { ok: false, reason: 'no-recipient' };
 
   const refundPending = booking.paymentStatus === 'refund-pending';
-  let refundAmount = Number(booking.totalPrice) || 0;
-  if (refundPending && booking.paymentId) {
-    try {
-      const order = await db.collection('pendingOrders').doc(booking.paymentId).get();
-      const charged = order.exists ? Number(order.data().amount) : NaN;
-      if (Number.isFinite(charged) && charged > 0) refundAmount = charged;
-    } catch { /* fall back to totalPrice */ }
-  }
+  const refundAmount = refundPending
+    ? await refundAmountFor(db, booking)
+    : (Number(booking.totalPrice) || 0);
 
   const result = await sendBrevoEmail({
     to: recipient.email,
@@ -551,7 +571,9 @@ export async function sendRefundIssuedEmail(bookingId) {
       firstName: recipient.firstName,
       code: booking.code || `LT-${bookingId.slice(0, 5).toUpperCase()}`,
       plate: booking.licensePlate,
-      totalAmount: booking.totalPrice,
+      // The refunded amount, not the gross list price — this email tells the
+      // customer what is coming back to them.
+      totalAmount: await refundAmountFor(db, booking),
       channel,
       refundedAt: fmtDateTime(booking.refundedAt, recipient.locale),
     },

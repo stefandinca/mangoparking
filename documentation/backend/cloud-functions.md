@@ -110,15 +110,15 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 ### Bookings, refunds & repricing
 | Fn | Line | Auth | Does / side effects |
 |---|---|---|---|
-| `cancelBookingWithRefund` | 2392 | authed (owner) or `assertAgent` (staff) | Cancels an upcoming/active longTerm booking. Routes paid bookings to `refund-pending` (Netopia or cash), releases spot + `activeCheckIns`, mirrors onto `pendingOrders`, audit-logs, and **emails the customer a cancellation confirmation** (`sendBookingCancelledEmail`, best-effort — includes a "refund on its way" note when one was queued). Auto-routes to **no-show** (forfeit) when drop-off is >12h past and never arrived — the no-show path sends no email but **reports ParkVia-imported bookings back to ParkVia** (`reportParkviaNoShowSafe`). Binds `BREVO_API_KEY` + ParkVia secrets. |
-| `adminMarkRefunded` | 2620 | `assertStaff` | `refund-pending` → `refunded`; stamps `refundedVia`, mirrors onto pendingOrders, audit-logs, sends the customer refund email. Idempotent. Secret: `BREVO_API_KEY`. |
+| `cancelBookingWithRefund` | 2392 | authed (owner) or `assertAgent` (staff) | Cancels an upcoming/active longTerm booking. Routes paid bookings to `refund-pending` and **pins `refundAmount`** (via `resolveChargedAmount` — the charged figure, not the gross `totalPrice`), releases spot + `activeCheckIns`, mirrors onto `pendingOrders`, audit-logs, and **emails the customer a cancellation confirmation** (`sendBookingCancelledEmail`, best-effort — includes a "refund on its way" note when one was queued). Auto-routes to **no-show** (forfeit) when drop-off is >12h past and never arrived — the no-show path sends no email but **reports ParkVia-imported bookings back to ParkVia** (`reportParkviaNoShowSafe`). Binds `BREVO_API_KEY` + ParkVia secrets. |
+| `adminMarkRefunded` | 2620 | `assertStaff` | `refund-pending` → `refunded`; stamps `refundedVia` + **`refundedAmount`** (the charged figure, never the gross `totalPrice`), mirrors onto pendingOrders, audit-logs, sends the customer refund email. **Writes a negative `cashEntries` reversal when `refundedVia === 'cash-returned'`** so the drawer reflects the money that left it (best-effort; a failure is recorded as `cashReversalFailed` on the audit row and never fails the refund). Idempotent. Secret: `BREVO_API_KEY`. |
 | `adminResendRefundEmail` | 2901 | `assertStaff` | Re-sends the refund email for an already-refunded booking. Secret: `BREVO_API_KEY`. |
 | `adminResendConfirmationEmail` | 2942 | `assertStaff` | Re-sends the longTerm confirmation email for an `upcoming` booking (reflects current paid state). Secret: `BREVO_API_KEY`. |
 | `adminCreateLongtermBooking` | 3045 | `assertStaff` | Desk-created longTerm booking (cash/card/broker/pay-later) bypassing Netopia. Creates a paid (or pay-later + pendingOrder) booking, reserves a spot, records cash (cash only), optionally auto-checks-in (walk-in), audit-logs. When the UI didn't match a customer, resolves the (lowercased) payer email against Firebase Auth and stamps `customerId` if an account exists — so the reservation appears in that customer's profile. |
 | `adminChargeOverstay` | 3788 | `assertAgent` | Adds a late-pickup charge to `latePrice`; writes a `lateFee` ledger row; records cash (cash only); audit-logs. |
 | `previewBookingReprice` | 3875 | `assertStaff` | Read-only re-price of a longTerm booking to new dates; returns `{ days, perDay, newTotal, oldTotal, difference, paid }`. No writes. |
 | `adminRepriceBooking` | 3923 | `assertAgent` | Moves a booking's dates and re-prices. Unpaid → re-quote (keeps pendingOrder in sync) **+ auto-emails the client the new total when it changed** (`sendBookingRequoteEmail`, best-effort, `emailed` in the response). Paid extension → collect the diff at the desk (`cash`/`card`) into `extensionPrice` + `extension` ledger row, **or `email` the client a payment request** (see below); shortening → `pendingRefundAmount`. Audit-logs. Binds `BREVO_API_KEY`. |
-| `adminResolvePendingRefund` | 4234 | `assertAgent` | Clears a reprice-shortening partial refund on a booking (money movement is manual). Audit-logs. |
+| `adminResolvePendingRefund` | 4234 | `assertAgent` | Clears a reprice-shortening partial refund on a booking (money movement is manual). Same cash reversal as `adminMarkRefunded` when paid out in cash. Audit-logs. |
 
 ### Credits & vouchers
 | Fn | Line | Auth | Does / side effects |
@@ -263,8 +263,17 @@ The finalized XML→booking mapping lives in `functions/src/parkvia.js`
 
 ## Notes
 
+- **Refund amounts.** `resolveChargedAmount(db, booking)` is the server-side
+  authority for what a booking is owed back: `pendingOrders.amount` (net of the
+  online discount and any voucher) + `extensionPrice` + `latePrice`, falling
+  back to `totalPrice` only for desk sales that never created an order.
+  `booking.totalPrice` is the **gross list price** and must never be refunded
+  directly — doing so returned more than was taken on every discounted booking
+  until 2026-08-01. The client mirror is `refundDueFrom` in
+  `src/utils/refundAmount.js` (pure, unit-tested).
 - **Refunds are manual.** No callable calls a Netopia refund API — `adminMarkRefunded`
-  only records that a refund was processed out-of-band (Netopia panel / cash / card terminal).
+  only records that a refund was processed out-of-band (Netopia panel / cash / card terminal),
+  and reverses the cash out of the drawer when it was returned in cash.
   The JSON-REST "v2" migration that would automate this is planned, not built
   (see [../roadmap/v.1.4_netopia_v2_migration.md](../roadmap/v.1.4_netopia_v2_migration.md)).
 - **SmartBill invoicing is live on the paid flows (Phases 2 + 4)** — proforma on

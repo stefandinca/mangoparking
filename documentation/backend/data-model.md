@@ -79,7 +79,15 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
     (the `pendingOrders` extension doc), `extensionRequestedAt/By`, `extensionOwedReason`,
     `extensionSettledAt` — set by `adminRepriceBooking` `paidBy:'email'`, cleared on
     settlement (`applyExtensionSettlement`). See [cloud-functions.md](./cloud-functions.md).
-  - Refund: `refundRequestedAt`, `refundedAt/By/Via`, `refundNotes`, `refundEmail` block
+  - Refund: `refundRequestedAt`, `refundedAt/By/Via`, `refundNotes`, `refundEmail` block,
+    plus the two **server-pinned money figures**: `refundAmount` (what is owed,
+    stamped by `cancelBookingWithRefund`) and `refundedAmount` (what was returned,
+    stamped by `adminMarkRefunded`). Both are the CHARGED amount — `pendingOrders.amount`
+    net of the online discount and any voucher, plus `extensionPrice` + `latePrice` —
+    **not** the gross `totalPrice`. Every refund surface must read these (or
+    `refundDueFrom` in `src/utils/refundAmount.js`, which applies the same
+    precedence for rows predating them). See
+    [../features/cashbook-refunds.md](../features/cashbook-refunds.md#the-refund-amount-read-this-before-touching-a-refund-surface).
   - No-show: `noShowAt`, `noShowDetectedBy` (`'scheduled' | 'admin-cancel'`)
   - `brokerName` string|null · `notes` string|null · `createdBy` uid
   - Idempotency: `confirmEmailSentAt`, `reminderCheckinSentAt`, `reminderCheckoutSentAt`,
@@ -179,10 +187,14 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
   only** — card payments never enter the cashbook.
 - **ID:** auto.
 - **Writer:** **server-only** (`recordCashEntry` helper; `closeCashbook` flips closed fields).
-- **Shape:** `agentUid`, `agentName`, `amount` RON, `paidBy: 'cash'`, `paidAt` ISO,
+- **Shape:** `agentUid`, `agentName`, `amount` RON (**negative on a `refund`
+  reversal** — cash handed back leaves the drawer), `paidBy: 'cash'`, `paidAt` ISO,
   `paidAtDay` (`YYYY-MM-DD`), `source` (`'credits-markpaid' | 'longterm-markpaid' |
-  'credits-direct' | 'longterm-direct' | 'longterm-extension' | 'overstay'`), `plate`,
+  'credits-direct' | 'longterm-direct' | 'longterm-extension' | 'overstay' | 'refund'`), `plate`,
   `payerName`, `bookingId`, `orderId`, `tokenBalanceDocId`, `closedAt`/`closedBy`/`closedReportId`.
+- ⚠️ `paidAtDay` is stamped from the **UTC** date, so a payment taken between local
+  midnight and 03:00 buckets into the previous day. Open — see
+  [BUGS #16](../admin-flows/BUGS.md).
 - **Access:** admin reads all; agent reads own (`agentUid == uid`). No client writes.
 - **Index:** composite `(agentUid ASC, closedAt ASC)`.
 

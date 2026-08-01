@@ -1,6 +1,6 @@
 # Cashbook & Refunds
 
-> Status: ✅ Shipped · Last verified: 2026-07-09
+> Status: ✅ Shipped · Last verified: 2026-08-01
 
 Two related back-office money surfaces: the **cashbook** (`/admin/cashbook`) — a
 per-agent physical-cash drawer with shift close-out, printed report and
@@ -22,19 +22,67 @@ the full callable inventory.
   When a paid booking is cancelled it goes to `paymentStatus: 'refund-pending'`;
   the queue lists those rows, the admin issues the money out-of-band (Netopia
   panel / cash at the lot / POS void), then clicks **Mark refunded**, which
-  flips the booking to `refunded` and emails the customer.
+  flips the booking to `refunded`, emails the customer, and — for cash — writes
+  the reversing cashbook entry.
+
+## The refund amount (read this before touching a refund surface)
+
+**Never refund `booking.totalPrice`.** It is the GROSS list price. What the
+customer actually paid is `pendingOrders.amount` — already net of the online
+discount and any voucher — plus anything collected afterwards through the
+`extensionPrice` / `latePrice` accumulators (`adminRepriceBooking` deliberately
+does *not* fold an extension back into `totalPrice`).
+
+Until 2026-08-01 the queue, its confirm dialog, the dashboard tile and the
+audit row each read `totalPrice`, so every discounted or voucher booking was
+refunded for **more than was ever taken** — while the cancellation email,
+which derived the charged amount correctly, quoted the customer a different
+(right) number.
+
+The rule now lives in exactly two places, and they agree:
+
+| Side | Where | Notes |
+|---|---|---|
+| Server | `resolveChargedAmount(db, booking)` (`index.js`) | Authority. `cancelBookingWithRefund` pins the result on the booking as **`refundAmount`**; `adminMarkRefunded` pins what was returned as **`refundedAmount`**. |
+| Client | `refundDueFrom(booking, order)` (`src/utils/refundAmount.js`) | Pure + unit-tested (`tests/refundAmount.test.mjs`). `attachRefundDue(bookings)` in `bookingService.js` wraps it with the order fetch and stamps `refundDue`. |
+
+Both apply the same precedence: **pinned server figure → charged order amount →
+the booking's own total** (desk sales never create an order). The derivation
+only runs for bookings cancelled before the pinned fields shipped; the order
+fetch is skipped entirely for rows that already carry one.
 
 ## How it works
 
 ### Cashbook
 
-- **Write path (server).** `recordCashEntry(...)` in `functions/src/index.js:1039`
+- **Write path (server).** `recordCashEntry(...)` in `functions/src/index.js`
   is the single helper that appends a `cashEntries` row. It's called from the
   cash branches of the booking/credit callables (mark-paid, direct long-term,
-  direct credit grant). It stamps `paidBy: 'cash'`, `paidAt`, `paidAtDay`
-  (YYYY-MM-DD), the resolved `agentName`, and a `source` tag
-  (`longterm-direct`, `longterm-markpaid`, `credits-direct`, `credits-markpaid`).
-  Card payments skip it entirely.
+  direct credit grant, extension, overstay) **and from both refund paths**. It
+  stamps `paidBy: 'cash'`, `paidAt`, `paidAtDay` (YYYY-MM-DD), the resolved
+  `agentName`, and a `source` tag (`longterm-direct`, `longterm-markpaid`,
+  `credits-direct`, `credits-markpaid`, `longterm-extension`, `overstay`,
+  `refund`). Card payments skip it entirely.
+- **Cash refunds reverse out of the drawer** (2026-08-01). Returning cash to a
+  customer physically empties the till, so `adminMarkRefunded` and
+  `adminResolvePendingRefund` write a **negative** `cashEntries` row
+  (`source: 'refund'`, `amount: -refundAmount`) whenever
+  `refundedVia === 'cash-returned'`. Before this the drawer and the printed
+  report kept counting money that was no longer there, and the agent appeared
+  to owe it.
+  - Keyed on the refund **channel**, not on how the booking was paid: a
+    card-paid booking refunded in cash still empties the till; a cash-paid
+    booking refunded to a card does not.
+  - A **reversing row, not a deletion** — deleting the original would erase the
+    fact that cash was ever collected, and is impossible once the entry has
+    been closed into a report. Every consumer sums with `+`, so negatives net
+    out in day totals, close-outs and reports; the UI renders them red.
+  - Negative amounts are **opt-in** (`allowNegative: true`). Other callers pass
+    a collected amount and not all validate it upstream, so for them a negative
+    is still dropped silently.
+  - Best-effort: the money is already back in the customer's hand, so a failed
+    ledger write never fails the refund. It is recorded on the audit row as
+    `cashReversalFailed` with a null `cashEntryId`.
 - **Read path (client).** `src/services/cashbookService.js` reads the ledger.
   `listOpenEntriesForAgent(uid)` (agent's own, `closedAt == null`),
   `listAllOpenEntries()` (admin), `listReports(...)`, `listHandovers(...)`, plus
@@ -100,10 +148,11 @@ the full callable inventory.
 
 ## Data (Firestore)
 
-- **`cashEntries/{auto}`** — one per cash payment. Fields: `agentUid`,
-  `agentName`, `amount`, `paidBy: 'cash'`, `paidAt` (ISO), `paidAtDay` (YYYY-MM-DD),
-  `source`, `plate`, `payerName`, `bookingId`, `orderId`, `tokenBalanceDocId`,
-  and close fields `closedAt` / `closedBy` / `closedReportId` (null while open).
+- **`cashEntries/{auto}`** — one per cash movement. Fields: `agentUid`,
+  `agentName`, `amount` (**negative on a `source: 'refund'` reversal**),
+  `paidBy: 'cash'`, `paidAt` (ISO), `paidAtDay` (YYYY-MM-DD), `source`, `plate`,
+  `payerName`, `bookingId`, `orderId`, `tokenBalanceDocId`, and close fields
+  `closedAt` / `closedBy` / `closedReportId` (null while open).
 - **`cashbookReports/{auto}`** — a closed shift. `agentUid`, `agentName`,
   `generatedAt`, `generatedBy`, `rangeFromIso`, `rangeToIso`, `totalAmount`,
   `entryCount`, embedded `entries[]` snapshot, embedded `handovers[]`. Immutable.
@@ -111,7 +160,9 @@ the full callable inventory.
   `notes`, `forAgentUid` (cash owner), `handedBy` (actor), `handedAt`.
 - **`bookings`** (refund-relevant fields): `paymentStatus`
   (`paid`→`refund-pending`→`refunded`), `paidBy` (`netopia`/`admin-cash`/`admin-card`),
-  `cancelledAt`, `refundedAt`, `refundedBy`, `refundedVia`, `refundNotes`,
+  `cancelledAt`, **`refundAmount`** (owed, pinned at cancel),
+  **`refundedAmount`** (returned, pinned at mark-refunded), `refundedAt`,
+  `refundedBy`, `refundedVia`, `refundNotes`,
   `refundEmail` `{ status, lastError }`; partial-refund fields
   `pendingRefundAmount`, `pendingRefundReason`, `pendingRefundCreatedAt` →
   cleared to `checkoutRefundedAt/By/Via/Amount` on resolve.

@@ -65,8 +65,18 @@ function sourceLabel(source) {
     case 'longterm-markpaid':  return t('cashbook.srcLongtermMarkpaid');
     case 'credits-direct':     return t('cashbook.srcCreditsDirect');
     case 'credits-markpaid':   return t('cashbook.srcCreditsMarkpaid');
+    case 'longterm-extension': return t('cashbook.srcLongtermExtension');
+    case 'overstay':           return t('cashbook.srcOverstay');
+    case 'refund':             return t('cashbook.srcRefund');
     default:                   return source || '—';
   }
+}
+
+// Cash refunds are recorded as NEGATIVE entries (money leaving the drawer),
+// so they must not read as another collection. Colour them like the outflow
+// they are; everything else keeps the default weight.
+function amountClass(amount) {
+  return Number(amount) < 0 ? 'text-red-600' : '';
 }
 
 // Build the day-card HTML block for a given set of open entries +
@@ -99,7 +109,7 @@ function renderDayCards(openEntries, handovers, locale, agentUid) {
           <td class="px-4 py-3 text-[14px] font-mono">${escapeHtml(e.plate || '—')}</td>
           <td class="px-4 py-3 text-[14px]">${escapeHtml(e.payerName || '—')}</td>
           <td class="px-4 py-3 text-[14px] text-dim">${sourceLabel(e.source)}</td>
-          <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right">${Number(e.amount || 0)} ${t('common.lei')}</td>
+          <td class="px-4 py-3 text-[14px] font-mono font-semibold text-right ${amountClass(e.amount)}">${Number(e.amount || 0)} ${t('common.lei')}</td>
         </tr>`).join('');
 
     const handoverRows = dayHandovers.length
@@ -469,7 +479,7 @@ function openReportModal(report, locale) {
           <td class="px-3 py-2 text-[13px] font-mono">${escapeHtml(e.plate || '—')}</td>
           <td class="px-3 py-2 text-[13px]">${escapeHtml(e.payerName || '—')}</td>
           <td class="px-3 py-2 text-[13px] text-dim">${sourceLabel(e.source)}</td>
-          <td class="px-3 py-2 text-[13px] font-mono text-right">${Number(e.amount || 0)} ${t('common.lei')}</td>
+          <td class="px-3 py-2 text-[13px] font-mono text-right ${amountClass(e.amount)}">${Number(e.amount || 0)} ${t('common.lei')}</td>
         </tr>`).join('');
     return `
       <div class="mb-4">
@@ -559,7 +569,7 @@ function buildPrintDoc(report, locale) {
           <td class="mono">${esc(e.plate || '—')}</td>
           <td>${esc(e.payerName || '—')}</td>
           <td class="dim">${esc(sourceLabel(e.source))}</td>
-          <td class="mono right">${Number(e.amount || 0)} ${esc(lei)}</td>
+          <td class="mono right${Number(e.amount) < 0 ? ' neg' : ''}">${Number(e.amount || 0)} ${esc(lei)}</td>
         </tr>`).join('');
     return `
       <section class="day">
@@ -611,6 +621,8 @@ function buildPrintDoc(report, locale) {
     .mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace; }
     .right { text-align: right; }
     .dim { color: #888; }
+    /* Cash refunds are negative entries — money that left the drawer. */
+    .neg { color: #b00020; }
     .bold { font-weight: 700; }
     .italic { font-style: italic; }
     .section-title { font-weight: 600; font-size: 14px; margin: 18px 0 6px; }

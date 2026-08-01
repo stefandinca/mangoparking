@@ -2,6 +2,36 @@ import { addDocument, getCollection, getDocument, updateDocument, removeDocument
 import { getCurrentUser } from '../firebase/auth.js';
 import { auditLog } from './auditService.js';
 import { getAllSpots, updateSpotStatus } from './capacityService.js';
+import { refundDueFrom, needsOrderLookup } from '../utils/refundAmount.js';
+
+/**
+ * Stamp `refundDue` — what is genuinely owed back — on each booking.
+ *
+ * Fetches linked `pendingOrders` docs only for rows that actually need one
+ * (see `needsOrderLookup`), so the read count is bounded by the size of the
+ * refund queue rather than the bookings collection. `pendingOrders` is
+ * publicly readable by id, so this works for every admin role.
+ *
+ * Callers must use `refundDue` rather than `totalPrice` for anything that
+ * moves or reports money — totalPrice is the gross list price and over-states
+ * every discounted or voucher booking. See utils/refundAmount.js.
+ *
+ * Mutates and returns the array it was given.
+ */
+export async function attachRefundDue(bookings) {
+  const list = bookings || [];
+  const orders = new Map();
+
+  await Promise.all(list.filter(needsOrderLookup).map(async (b) => {
+    const order = await getDocument('pendingOrders', b.paymentId).catch(() => null);
+    if (order) orders.set(b.paymentId, order);
+  }));
+
+  for (const b of list) {
+    b.refundDue = refundDueFrom(b, orders.get(b.paymentId) || null);
+  }
+  return list;
+}
 
 /**
  * Generate a booking code (MNG-XXXXX)

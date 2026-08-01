@@ -5,6 +5,7 @@ import { getCapacity } from '../../services/capacityService.js';
 import { getAllRecentTransactions } from '../../services/tokenService.js';
 import { getAuditLog } from '../../services/auditService.js';
 import { getCollection } from '../../firebase/db.js';
+import { attachRefundDue } from '../../services/bookingService.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 // Shared with /admin/audit so the same action reads identically in both places.
 import { actionStyle, actionLabel, describeAction, fmtAuditTime } from '../../components/admin/auditFormat.js';
@@ -125,7 +126,11 @@ export default async function AdminDashboard(container) {
   const refundPending = allBookings.filter(
     (b) => b.paymentStatus === 'refund-pending' && PAID_CHANNELS.has(b.paidBy),
   );
-  const refundPendingTotal = refundPending.reduce((acc, b) => acc + (Number(b.totalPrice) || 0), 0);
+  // Resolve what is genuinely owed back before summing. `totalPrice` is the
+  // gross list price, so summing it overstated the queue on every discounted
+  // or voucher booking — and disagreed with the queue's own total.
+  await attachRefundDue(refundPending);
+  const refundPendingTotal = refundPending.reduce((acc, b) => acc + (Number(b.refundDue) || 0), 0);
 
   // Bucket "today" in Europe/Bucharest (same as the activity chart's
   // localDay), not UTC — otherwise rows between local midnight and 02:00–03:00
