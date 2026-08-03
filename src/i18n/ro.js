@@ -1719,8 +1719,11 @@ export default {
     colCode: 'Cod',
     colTimes: 'Sosire / Plecare',
     colCustomer: 'Client',
+    colPhone: 'Telefon',
     colPlate: 'Plăcuță',
+    colReturnFlight: 'Zbor retur',
     colPayment: 'Plată',
+    callHint: 'Sună {phone}',
     colStatus: 'Status',
     colActions: 'Acțiuni',
     // Status cells

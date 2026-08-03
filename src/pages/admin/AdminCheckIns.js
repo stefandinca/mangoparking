@@ -189,6 +189,29 @@ function windowPill(key, activeKey, label) {
   return `<button type="button" data-window="${key}" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${cls}">${label}</button>`;
 }
 
+// Icon-only actions. Collapsing the five routine buttons to glyphs is what
+// buys back the width the phone + return-flight columns need — a row could
+// otherwise carry five text buttons.
+//
+// Deliberately NOT iconised: Collect (Încasează) and Charge overstay. Those
+// move money, and a mis-click costs a real transaction, so they keep their
+// words. Mixed text/icon in one row is the point, not an oversight.
+//
+// Every icon button carries title + aria-label — without them the board is
+// unusable with a screen reader and a guessing game for new staff.
+const ACTION_ICONS = {
+  // arrow-right-end-on-rectangle — entering the lot
+  checkin: '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0110.5 3h6a2.25 2.25 0 012.25 2.25v13.5A2.25 2.25 0 0116.5 21h-6a2.25 2.25 0 01-2.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H2.25"/></svg>',
+  // arrow-right-start-on-rectangle — leaving the lot
+  checkout: '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>',
+  // envelope
+  'resend-email': '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>',
+  // pencil-square
+  edit: '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM19.5 7.125L18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>',
+  // x-circle — cancelling the reservation, not deleting a record
+  cancel: '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+};
+
 function actionButton({ key, label, variant = 'neutral', dataAttrs = '' }) {
   const styles = {
     neutral: 'bg-frost hover:bg-frost-deep text-charcoal/80',
@@ -196,7 +219,36 @@ function actionButton({ key, label, variant = 'neutral', dataAttrs = '' }) {
     warning: 'bg-mango hover:bg-mango-hover text-charcoal',
     danger:  'bg-red-100 hover:bg-red-200 text-red-700',
   };
-  return `<button type="button" data-action="${key}" ${dataAttrs} class="${styles[variant] || styles.neutral} font-semibold text-[12px] px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">${label}</button>`;
+  const base = `${styles[variant] || styles.neutral} font-semibold text-[12px] rounded-lg transition-colors whitespace-nowrap`;
+  const icon = ACTION_ICONS[key];
+  if (icon) {
+    return `<button type="button" data-action="${key}" ${dataAttrs} title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" class="${base} p-2 inline-flex items-center justify-center">${icon}</button>`;
+  }
+  return `<button type="button" data-action="${key}" ${dataAttrs} class="${base} px-3 py-1.5">${label}</button>`;
+}
+
+// Phone as a tel: link so an agent can call straight from the board. The href
+// keeps only `+` and digits (spaces and dashes break some dialers) while the
+// visible text stays exactly as it was entered. The SPA router already leaves
+// tel: hrefs to the browser, so no navigation interception to worry about.
+function phoneCell(b) {
+  const raw = String(b.contact?.phone || '').trim();
+  if (!raw) return '<span class="text-[13px] text-dim">—</span>';
+  const dial = raw.replace(/[^\d+]/g, '');
+  if (!dial) return `<span class="text-[13px] font-mono">${escapeHtml(raw)}</span>`;
+  return `<a href="tel:${escapeHtml(dial)}" title="${escapeHtml(t('checkins.callHint', { phone: raw }))}" class="text-[13px] font-mono text-blueberry hover:text-blueberry-hover hover:underline inline-flex items-center gap-1 whitespace-nowrap">
+    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
+    <span>${escapeHtml(raw)}</span>
+  </a>`;
+}
+
+// The RETURN flight (`flightNumberPickup`) — the one that decides when the
+// customer is actually coming back for the car. Shown on every tab, not just
+// check-out, so staff can see it while the car is still being dropped off.
+function returnFlightCell(b) {
+  const flight = String(b.flightNumberPickup || '').trim();
+  if (!flight) return '<span class="text-[13px] text-dim">—</span>';
+  return `<span class="text-[13px] font-mono font-semibold text-charcoal">${escapeHtml(flight)}</span>`;
 }
 
 // Empty flight-warning slot for a row — the enhancer (flightStatusService)
@@ -271,7 +323,9 @@ function rowHtml(b, { tab, locale, canCancel }) {
         <div class="text-[11px] text-dim truncate" title="${escapeHtml(b.contact?.email || '')}">${escapeHtml(b.contact?.email || '')}</div>
         ${b.notes ? `<div class="text-[11px] text-blueberry mt-0.5 flex items-start gap-1 max-w-[16rem]" title="${escapeHtml(b.notes)}"><svg class="w-3 h-3 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg><span class="truncate">${escapeHtml(b.notes)}</span></div>` : ''}
       </td>
+      <td class="px-4 py-3 align-top">${phoneCell(b)}</td>
       <td class="px-4 py-3 align-top text-[13px] font-mono">${escapeHtml(plate)}</td>
+      <td class="px-4 py-3 align-top">${returnFlightCell(b)}</td>
       <td class="px-4 py-3 align-top">${paymentStatusBadge(b)}</td>
       <td class="px-4 py-3 align-top">${statusCell}${flightSlot(b, tab)}</td>
       <td class="px-4 py-3 align-top text-right">
@@ -651,7 +705,9 @@ export default async function AdminCheckIns(container) {
                 <th class="px-4 py-3 font-medium">${t('checkins.colCode')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colTimes')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colCustomer')}</th>
+                <th class="px-4 py-3 font-medium">${t('checkins.colPhone')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colPlate')}</th>
+                <th class="px-4 py-3 font-medium">${t('checkins.colReturnFlight')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colPayment')}</th>
                 <th class="px-4 py-3 font-medium">${t('checkins.colStatus')}</th>
                 <th class="px-4 py-3 font-medium text-right">${t('checkins.colActions')}</th>

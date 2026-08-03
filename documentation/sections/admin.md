@@ -57,7 +57,23 @@ every snapshot as lifetime volume grows. Every row leads with its **booking
 code** (also in the expanded overdue card), linked — like every code across
 the admin — to the reservation's full record on Istoric
 (`/admin/transactions?booking=<id>`, via `reservationCodeHtml`). Plate/name/code
-search and a today/week/month/custom window selector. Actions: check-in, check-out,
+search and a today/week/month/custom window selector.
+
+**Columns** (2026-08-03): code · times · customer · **phone** · plate ·
+**return flight** · payment · status · actions. Phone renders as a `tel:` link
+so an agent can call from the board (href keeps only `+` and digits — spaces
+break some dialers; the SPA router already passes `tel:` through to the
+browser). Return flight is `flightNumberPickup`, shown on every tab rather than
+only check-out, since staff want it while the car is still being dropped off.
+The separate delayed/cancelled flight badge stays in the status cell — it is
+tab-dependent (departure on check-in, arrival on check-out).
+
+**Icon actions** (2026-08-03): check-in, check-out, resend email, edit and
+cancel are icon-only buttons (`ACTION_ICONS` in `AdminCheckIns.js`), which is
+what buys back the width the two new columns need. Each carries `title` +
+`aria-label`. **Collect and Charge overstay deliberately keep their text** —
+they move money and a mis-click costs a real transaction, so the mixed
+text/icon row is intentional. Actions: check-in, check-out,
 charge overstay, collect payment, cancel+refund, edit booking details, resend
 confirmation email, reprice, and transfer complete/cancel/delete. **Walk-ins** are
 created via `CreateTransactionModal` (`openCreateTransactionModal`). Backed by
