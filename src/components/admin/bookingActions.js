@@ -23,6 +23,7 @@ import { geoFieldsHtml, wireGeoFields, readGeoFields } from '../widgets/BillingF
 import { isValidEmail, isValidPhone, isValidLicensePlate } from '../../utils/validators.js';
 import { bucharestLocalToIso, isoToBucharestLocal } from '../../utils/date.js';
 import { bookingDisplayCode } from '../../utils/bookingCode.js';
+import { isBrokerBooking } from '../../utils/brokerBooking.js';
 
 const adminMarkOrderPaidFn = httpsCallable(functions, 'adminMarkOrderPaid');
 const cancelBookingFn = httpsCallable(functions, 'cancelBookingWithRefund');
@@ -75,7 +76,7 @@ export function reservationStatusLabel(v) {
 // prepaid (ParkVia etc.) bookings apart at a glance. Broker bookings carry
 // `source: 'broker'` / `paidBy: 'broker'` and an optional brokerName.
 export function typeBadge(b) {
-  const isBroker = b.source === 'broker' || b.paidBy === 'broker';
+  const isBroker = isBrokerBooking(b);
   const base = 'inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded';
   const planeIcon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5L21 16z"/></svg>';
   const peopleIcon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M16 11a3 3 0 100-6 3 3 0 000 6zm-8 0a3 3 0 100-6 3 3 0 000 6zm0 2c-2.7 0-8 1.3-8 4v2h8v-2c0-1 .4-1.9 1-2.6-.3 0-.7-.4-1-.4zm8 0c-.3 0-.7 0-1 .4.6.7 1 1.6 1 2.6v2h8v-2c0-2.7-5.3-4-8-4z"/></svg>';
@@ -115,6 +116,14 @@ export function openEditBookingDialog({ booking }) {
     // pay-at-pickup one. See the submit handler below.
     const canReprice = booking.type === 'longTerm' && (booking.status === 'upcoming' || booking.status === 'active');
     const isPaid = booking.paymentStatus === 'paid';
+    // Broker/prepaid: the third party passes on whatever contact data it has,
+    // so email (and sometimes phone) can legitimately be blank. Marking them
+    // required made the whole dialog unsaveable on those bookings — see the
+    // submit handler. Label them optional so the form matches what it accepts.
+    const isBroker = isBrokerBooking(booking);
+    const contactMark = isBroker
+      ? `<span class="text-[12px] font-normal text-dim">(${t('wizard.optional')})</span>`
+      : '*';
     const inputCls = 'w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry';
     const labelCls = 'block text-[13px] font-medium text-charcoal/70 mb-1.5';
 
@@ -140,12 +149,12 @@ export function openEditBookingDialog({ booking }) {
           <input name="name" value="${escapeHtml(c.name || '')}" class="${inputCls}">
         </div>
         <div>
-          <label class="${labelCls}">${t('checkins.detailEmail')} *</label>
+          <label class="${labelCls}">${t('checkins.detailEmail')} ${contactMark}</label>
           <input name="email" type="email" value="${escapeHtml(c.email || '')}" class="${inputCls}">
         </div>
       </div>
       <div>
-        <label class="${labelCls}">${t('checkins.detailPhone')} *</label>
+        <label class="${labelCls}">${t('checkins.detailPhone')} ${contactMark}</label>
         ${phoneField({ name: 'phone', value: c.phone || '', inputClass: 'flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry', selectClass: 'shrink-0 w-[7rem] px-2 py-2.5 rounded-xl border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-blueberry' })}
       </div>
       ${showLogistics ? `
@@ -273,8 +282,21 @@ export function openEditBookingDialog({ booking }) {
       const email = qs('[name="email"]', form).value.trim();
       const phone = phoneValue(qs('[name="phone"]', form));
       if (!name) return showErr(t('checkins.editErrorName'));
-      if (!isValidEmail(email)) return showErr(t('checkins.editErrorEmail'));
-      if (!isValidPhone(phone)) return showErr(t('checkins.editErrorPhone'));
+      // Broker/prepaid reservations arrive with whatever contact data the
+      // broker chose to pass on — often no email, sometimes no phone. Demanding
+      // them here made the dialog unsaveable: staff couldn't correct a plate or
+      // a date on a ParkVia booking because a field they never had was blank.
+      // So on a broker booking an EMPTY contact field is accepted; anything
+      // actually typed is still validated. Mirrors the same relaxation in
+      // CreateTransactionModal's broker branch. Ordinary bookings are unchanged
+      // — email and phone stay mandatory there. (`isBroker` from the enclosing
+      // scope, where it also drives the optional/required label.)
+      if (email || !isBroker) {
+        if (!isValidEmail(email)) return showErr(t('checkins.editErrorEmail'));
+      }
+      if (phone || !isBroker) {
+        if (!isValidPhone(phone)) return showErr(t('checkins.editErrorPhone'));
+      }
 
       // Contact / plate / notes go through updateBookingDetails; date changes on
       // a long-term booking are re-priced + settled by the callable below (so
