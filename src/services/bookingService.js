@@ -3,6 +3,7 @@ import { getCurrentUser } from '../firebase/auth.js';
 import { auditLog } from './auditService.js';
 import { getAllSpots, updateSpotStatus } from './capacityService.js';
 import { refundDueFrom, needsOrderLookup } from '../utils/refundAmount.js';
+import { sanitizeFlightNumber, sanitizePassengerCount } from '../utils/validators.js';
 
 /**
  * Stamp `refundDue` — what is genuinely owed back — on each booking.
@@ -198,6 +199,20 @@ export async function updateBookingDetails(bookingId, patch = {}) {
     update.startDate = patch.dropoffAt.slice(0, 10);
     update.endDate = patch.pickupAt.slice(0, 10);
     update.days = Math.max(1, Math.ceil((Date.parse(patch.pickupAt) - Date.parse(patch.dropoffAt)) / 86_400_000));
+  }
+  // Trip info (long-term): who's travelling and on which flights. Sanitized
+  // with the same rules the create paths apply server-side, so an edit can
+  // never store a shape a fresh booking would have rejected. Passing null (or
+  // an empty string) clears the field — that's how staff remove a flight
+  // number the customer cancelled.
+  if (patch.passengers !== undefined) {
+    update.passengers = sanitizePassengerCount(patch.passengers);
+  }
+  if (patch.flightNumberDropoff !== undefined) {
+    update.flightNumberDropoff = sanitizeFlightNumber(patch.flightNumberDropoff);
+  }
+  if (patch.flightNumberPickup !== undefined) {
+    update.flightNumberPickup = sanitizeFlightNumber(patch.flightNumberPickup);
   }
   // Free-text staff comment about this booking.
   if (patch.notes !== undefined) update.notes = String(patch.notes || '').trim();

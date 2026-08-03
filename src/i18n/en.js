@@ -1739,6 +1739,7 @@ export default {
     actionChargeOverstay: 'Charge overstay',
     actionEdit: 'Edit',
     editTitle: 'Edit reservation',
+    tripInfoTitle: 'Trip details',
     editActiveNote: 'The car is already checked in — only contact details can be edited.',
     syncParkvia: 'Sync ParkVia',
     repriceTitle: 'Change reservation dates',

@@ -46,6 +46,31 @@ submit (`:1114`) they're cleaned identically and passed to the
 callable does the same. So every long-term booking carries these three fields
 (possibly empty/null).
 
+### Editing after the fact (2026-08-03) — `components/admin/bookingActions.js`
+
+All three are editable from the **Edit reservation** dialog (check-in board and
+reservation record), under a "Trip details" block. Plans change after booking —
+a flight gets rebooked, a passenger drops out — and previously the only way to
+correct any of it was in Firestore directly.
+
+- **Long-term only.** The block is hidden for credit/commuter check-ins, which
+  have no flight to miss.
+- **Clearing works.** An empty flight field stores `null`, which is how staff
+  remove a flight the customer cancelled. The passenger `<select>` carries a
+  blank "—" option as well as 1–10: most older bookings have `passengers` unset,
+  and without it merely opening the dialog would have stamped "1" on every one.
+- **Same sanitizers as the create path.** `sanitizeFlightNumber` /
+  `sanitizePassengerCount` (`src/utils/validators.js`) mirror the server's
+  `sanitizeFlight` / `sanitizePassengers` character for character, and are
+  unit-tested in `tests/validators.test.mjs`. This matters because
+  `updateBookingDetails` is a **client-side** staff write (rules-allowed, not a
+  callable), so the client copy is what actually lands in Firestore for an edit
+  — a drift would leave the same booking shaped differently depending on
+  whether it was last created or last edited.
+- Edits appear in the booking's history as `passengers` / `drop-off flight` /
+  `return flight` old → new lines (labels in `auditFormat.js` +
+  `AdminReservationDetail.js`).
+
 ### Reservation record — `src/pages/admin/AdminReservationDetail.js`
 
 The full record at `/admin/transactions?booking=<id>` shows **Passengers**,

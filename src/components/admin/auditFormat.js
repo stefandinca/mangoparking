@@ -237,7 +237,17 @@ export function describeAction(item, locale, entityCode = '') {
       // updateBookingDetails now records the before-values of the changed
       // keys, so name the fields rather than dumping the patch.
       const fields = Object.keys(nv || {}).filter((k) => k !== 'updatedAt');
-      const names = { contact: ro ? 'contact' : 'contact', licensePlate: ro ? 'număr' : 'plate', dropoffAt: ro ? 'dată sosire' : 'drop-off', pickupAt: ro ? 'dată plecare' : 'pick-up', days: ro ? 'zile' : 'days', notes: ro ? 'notițe' : 'notes' };
+      const names = {
+        contact: ro ? 'contact' : 'contact',
+        licensePlate: ro ? 'număr' : 'plate',
+        dropoffAt: ro ? 'dată sosire' : 'drop-off',
+        pickupAt: ro ? 'dată plecare' : 'pick-up',
+        days: ro ? 'zile' : 'days',
+        notes: ro ? 'notițe' : 'notes',
+        passengers: ro ? 'pasageri' : 'passengers',
+        flightNumberDropoff: ro ? 'zbor sosire' : 'drop-off flight',
+        flightNumberPickup: ro ? 'zbor retur' : 'return flight',
+      };
       const list = fields.map((f) => names[f] || f).join(', ');
       return ro
         ? `Rezervare modificată${list ? ` (${list})` : ''}`

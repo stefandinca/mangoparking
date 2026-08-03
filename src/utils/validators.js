@@ -74,3 +74,26 @@ export function isValidPassport(value) {
   if (!value) return false;
   return /^[A-Z0-9]{6,12}$/.test(String(value).trim().toUpperCase());
 }
+
+// ── Trip info (long-term bookings) ───────────────────────────────────────
+// Passenger count + flight numbers, captured on the public funnel and the
+// admin create modal, and editable afterwards on the reservation.
+//
+// These MIRROR `sanitizePassengers` / `sanitizeFlight` in functions/src/index.js
+// character for character. The server re-applies its own copy on every write it
+// owns, so keeping them identical means the client stores — and previews — the
+// exact value the server would have produced. Both return null for "unset",
+// which is what clears the field.
+
+/** Flight number → upper-case, single-spaced, max 12 chars. Empty → null. */
+export function sanitizeFlightNumber(value) {
+  const s = (value == null ? '' : String(value))
+    .trim().toUpperCase().replace(/\s+/g, ' ').slice(0, 12);
+  return s || null;
+}
+
+/** Passenger count → whole number 1–10. Anything else → null (unset). */
+export function sanitizePassengerCount(value) {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
+}

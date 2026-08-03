@@ -115,6 +115,9 @@ export function openEditBookingDialog({ booking }) {
     // queue a refund for a paid stay, or simply re-quote an unpaid
     // pay-at-pickup one. See the submit handler below.
     const canReprice = booking.type === 'longTerm' && (booking.status === 'upcoming' || booking.status === 'active');
+    // Trip info (flights, passenger count) only exists on long-term stays —
+    // a credit/commuter check-in has no flight to miss.
+    const isLongTerm = booking.type === 'longTerm';
     const isPaid = booking.paymentStatus === 'paid';
     // Broker/prepaid: the third party passes on whatever contact data it has,
     // so email (and sometimes phone) can legitimately be blank. Marking them
@@ -161,6 +164,35 @@ export function openEditBookingDialog({ booking }) {
       <div>
         <label class="${labelCls}">${t('checkins.colPlate')} *</label>
         <input name="plate" value="${escapeHtml(booking.licensePlate || '')}" class="${inputCls} uppercase font-mono">
+      </div>` : ''}
+      ${isLongTerm ? `
+      <div class="rounded-xl bg-frost border border-frost-deep p-3 space-y-3">
+        <p class="text-[13px] font-semibold text-charcoal">${t('checkins.tripInfoTitle')}</p>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label class="${labelCls}">${t('reservations.flightDropoff')} <span class="text-[12px] font-normal text-dim">(${t('wizard.optional')})</span></label>
+            <input name="flightNumberDropoff" value="${escapeHtml(booking.flightNumberDropoff || '')}" maxlength="12" autocomplete="off"
+              placeholder="RO 201" title="${escapeHtml(t('transactions.createFlightTooltip'))}" class="${inputCls} uppercase font-mono">
+          </div>
+          <div>
+            <label class="${labelCls}">${t('reservations.flightPickup')} <span class="text-[12px] font-normal text-dim">(${t('wizard.optional')})</span></label>
+            <input name="flightNumberPickup" value="${escapeHtml(booking.flightNumberPickup || '')}" maxlength="12" autocomplete="off"
+              placeholder="RO 201" title="${escapeHtml(t('transactions.createFlightTooltip'))}" class="${inputCls} uppercase font-mono">
+          </div>
+        </div>
+        <div>
+          <label class="${labelCls}">${t('reservations.passengers')}</label>
+          ${/* Blank option matters: passengers is nullable and most older
+               bookings have it unset — without it, merely opening the dialog
+               would silently stamp "1" on every one of them. */''}
+          <select name="passengers" class="${inputCls}">
+            <option value=""${booking.passengers ? '' : ' selected'}>—</option>
+            ${Array.from({ length: 10 }, (_, i) => {
+              const n = i + 1;
+              return `<option value="${n}"${Number(booking.passengers) === n ? ' selected' : ''}>${n}</option>`;
+            }).join('')}
+          </select>
+        </div>
       </div>` : ''}
       ${canReprice ? `
       <div class="rounded-xl bg-frost border border-frost-deep p-3 space-y-3">
@@ -302,6 +334,13 @@ export function openEditBookingDialog({ booking }) {
       // a long-term booking are re-priced + settled by the callable below (so
       // days / price stay authoritative), never written here.
       const patch = { contact: { name, email, phone }, notes: qs('[name="notes"]', form).value.trim() };
+      // Trip info — sent only for long-term, where the fields are rendered.
+      // Sending them on a credit booking would write nulls over nothing.
+      if (isLongTerm) {
+        patch.passengers = qs('[name="passengers"]', form).value || null;
+        patch.flightNumberDropoff = qs('[name="flightNumberDropoff"]', form).value;
+        patch.flightNumberPickup = qs('[name="flightNumberPickup"]', form).value;
+      }
       if (showLogistics) {
         const plate = qs('[name="plate"]', form).value.trim().toUpperCase();
         if (!isValidLicensePlate(plate)) return showErr(t('checkins.errorInvalidPlate'));

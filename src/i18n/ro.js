@@ -1747,6 +1747,7 @@ export default {
     actionChargeOverstay: 'Taxează depășire',
     actionEdit: 'Editează',
     editTitle: 'Editează rezervarea',
+    tripInfoTitle: 'Detalii călătorie',
     editActiveNote: 'Mașina este deja la check-in — poți modifica doar datele de contact.',
     syncParkvia: 'Sincronizare ParkVia',
     repriceTitle: 'Modifică datele rezervării',

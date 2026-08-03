@@ -85,6 +85,9 @@ function editFieldLabel(k) {
     pickupAt: t('reservations.pickup'),
     days: t('reservations.days'),
     notes: t('reservations.notes'),
+    passengers: t('reservations.passengers'),
+    flightNumberDropoff: t('reservations.flightDropoff'),
+    flightNumberPickup: t('reservations.flightPickup'),
   };
   return map[k] || k;
 }
