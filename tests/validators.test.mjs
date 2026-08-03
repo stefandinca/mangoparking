@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   isValidEmail, isValidPhone, isValidLicensePlate,
   isValidCui, isValidRegCom, isValidCnp,
-  sanitizeFlightNumber, sanitizePassengerCount,
+  sanitizeFlightNumber, sanitizePassengerCount, sanitizeBrokerName,
 } from '../src/utils/validators.js';
 
 test('isValidEmail', () => {
@@ -101,4 +101,16 @@ test('sanitizePassengerCount: floors a fractional value', () => {
   assert.equal(sanitizePassengerCount(3.7), 3);
   // Floor before the range check — 10.9 is still within range.
   assert.equal(sanitizePassengerCount(10.9), 10);
+});
+
+test('sanitizeBrokerName: trims, blank clears to null', () => {
+  assert.equal(sanitizeBrokerName('  ParkVia '), 'ParkVia');
+  assert.equal(sanitizeBrokerName('Parkos'), 'Parkos');
+  // Uncapped and case-preserving on purpose — brokers name themselves, and
+  // this mirrors createBrokerBookingCore exactly.
+  assert.equal(sanitizeBrokerName('holiday extras'), 'holiday extras');
+  assert.equal(sanitizeBrokerName(''), null);
+  assert.equal(sanitizeBrokerName('   '), null);
+  assert.equal(sanitizeBrokerName(null), null);
+  assert.equal(sanitizeBrokerName(undefined), null);
 });

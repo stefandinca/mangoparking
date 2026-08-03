@@ -97,3 +97,13 @@ export function sanitizePassengerCount(value) {
   const n = Math.floor(Number(value));
   return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
 }
+
+/**
+ * Broker name (ParkVia, Parkos, …) → trimmed, or null when blank.
+ * Mirrors `createBrokerBookingCore`'s `String(brokerName || '').trim() || null`.
+ * Deliberately uncapped, like the server — brokers name themselves.
+ */
+export function sanitizeBrokerName(value) {
+  const s = (value == null ? '' : String(value)).trim();
+  return s || null;
+}

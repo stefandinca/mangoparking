@@ -165,6 +165,16 @@ export function openEditBookingDialog({ booking }) {
         <label class="${labelCls}">${t('checkins.colPlate')} *</label>
         <input name="plate" value="${escapeHtml(booking.licensePlate || '')}" class="${inputCls} uppercase font-mono">
       </div>` : ''}
+      ${isBroker ? `
+      <div>
+        ${/* Only rendered for bookings that are ALREADY broker. `brokerName` is
+             itself one of the markers isBrokerBooking() reads, so offering it
+             on an ordinary booking would let a typo silently reclassify it —
+             stripping the payment block from its confirmation email. */''}
+        <label class="${labelCls}">${t('transactions.brokerNameLabel')}</label>
+        <input name="brokerName" value="${escapeHtml(booking.brokerName || '')}" maxlength="60" autocomplete="off"
+          placeholder="${escapeHtml(t('transactions.brokerNamePlaceholder'))}" class="${inputCls}">
+      </div>` : ''}
       ${isLongTerm ? `
       <div class="rounded-xl bg-frost border border-frost-deep p-3 space-y-3">
         <p class="text-[13px] font-semibold text-charcoal">${t('checkins.tripInfoTitle')}</p>
@@ -340,6 +350,11 @@ export function openEditBookingDialog({ booking }) {
         patch.passengers = qs('[name="passengers"]', form).value || null;
         patch.flightNumberDropoff = qs('[name="flightNumberDropoff"]', form).value;
         patch.flightNumberPickup = qs('[name="flightNumberPickup"]', form).value;
+      }
+      // Sent only when the field was rendered (broker bookings), so an
+      // ordinary booking can never acquire a brokerName through this dialog.
+      if (isBroker) {
+        patch.brokerName = qs('[name="brokerName"]', form).value;
       }
       if (showLogistics) {
         const plate = qs('[name="plate"]', form).value.trim().toUpperCase();

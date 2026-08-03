@@ -247,6 +247,7 @@ export function describeAction(item, locale, entityCode = '') {
         passengers: ro ? 'pasageri' : 'passengers',
         flightNumberDropoff: ro ? 'zbor sosire' : 'drop-off flight',
         flightNumberPickup: ro ? 'zbor retur' : 'return flight',
+        brokerName: ro ? 'broker' : 'broker',
       };
       const list = fields.map((f) => names[f] || f).join(', ');
       return ro

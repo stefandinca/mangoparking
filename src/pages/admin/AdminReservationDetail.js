@@ -88,6 +88,7 @@ function editFieldLabel(k) {
     passengers: t('reservations.passengers'),
     flightNumberDropoff: t('reservations.flightDropoff'),
     flightNumberPickup: t('reservations.flightPickup'),
+    brokerName: t('transactions.brokerNameLabel'),
   };
   return map[k] || k;
 }

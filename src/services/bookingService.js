@@ -3,7 +3,7 @@ import { getCurrentUser } from '../firebase/auth.js';
 import { auditLog } from './auditService.js';
 import { getAllSpots, updateSpotStatus } from './capacityService.js';
 import { refundDueFrom, needsOrderLookup } from '../utils/refundAmount.js';
-import { sanitizeFlightNumber, sanitizePassengerCount } from '../utils/validators.js';
+import { sanitizeFlightNumber, sanitizePassengerCount, sanitizeBrokerName } from '../utils/validators.js';
 
 /**
  * Stamp `refundDue` — what is genuinely owed back — on each booking.
@@ -213,6 +213,14 @@ export async function updateBookingDetails(bookingId, patch = {}) {
   }
   if (patch.flightNumberPickup !== undefined) {
     update.flightNumberPickup = sanitizeFlightNumber(patch.flightNumberPickup);
+  }
+  // Which broker a prepaid reservation came through. The dialog only offers
+  // this on bookings that are ALREADY broker (source/paidBy/paymentMethod),
+  // because `brokerName` is itself one of the markers isBrokerBooking() reads —
+  // letting it be set on an ordinary booking would silently reclassify it and
+  // strip the payment block from its confirmation email.
+  if (patch.brokerName !== undefined) {
+    update.brokerName = sanitizeBrokerName(patch.brokerName);
   }
   // Free-text staff comment about this booking.
   if (patch.notes !== undefined) update.notes = String(patch.notes || '').trim();
