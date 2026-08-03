@@ -41,7 +41,20 @@ warnings, and a **refund-pending counter** linking to `/admin/refunds`. Walkthro
 ### Activity — `/admin/activity` (`AdminActivity.js`)
 Scheduled-reservation feed. **Upcoming** tab groups check-in/check-out events and
 door-to-airport transfers over the next ~48h by day; **History** tab offers date
-presets or a custom flatpickr range with expandable detail rows. Live via
+presets or a custom flatpickr range with expandable detail rows.
+
+Every row (both tabs) carries the **phone** as a `tel:` link and the **return
+flight** — `flightNumberPickup` on a booking, `returnFlightNumber` on a transfer
+— rendered by the shared `components/admin/rowCells.js`, the same helpers the
+check-in board uses. Two layout constraints are load-bearing:
+- On **upcoming** rows the phone sits **outside** the row's `<button>`: an `<a>`
+  inside a `<button>` is invalid HTML and its click would be swallowed by the
+  row's navigate-to-check-ins handler. The button takes `flex-1`, the meta sits
+  beside it.
+- On **history** rows the phone is inside `<summary>`, which is fine —
+  verified in-browser that clicking it dials **without** toggling the row open
+  (the anchor is the nearest activatable element, so the summary's toggle
+  doesn't run). No click guard needed. Live via
 `subscribeCollection('bookings')` + `subscribeCollection('transfers')`, with
 flight-status warnings (delayed/cancelled) injected per event and deep links into
 the check-ins tab. No dedicated admin-flows walkthrough yet.

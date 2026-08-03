@@ -18,6 +18,7 @@ import { navigate } from '../../router/index.js';
 import { openUserDetail } from '../../components/admin/UserDetailModal.js';
 import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
 import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
+import { phoneLinkHtml, returnFlightHtml } from '../../components/admin/rowCells.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
 
@@ -118,34 +119,58 @@ function flightSlotEvent(e) {
   return `<span class="ml-auto shrink-0" data-flight-warn data-flight="${escapeHtml(flight)}" data-flight-date="${day}" data-flight-dir="${isArrival ? 'arrival' : 'departure'}"></span>`;
 }
 
+// Phone + return flight, shown on every row so staff can call and see the
+// inbound flight without opening anything.
+//
+// These live OUTSIDE the row's <button>: an <a> inside a <button> is invalid
+// HTML (interactive content nested in interactive content) and its click would
+// be swallowed by the row's navigate-to-check-ins handler. Keeping them as
+// siblings makes the phone independently dialable and the row still clickable.
+function rowMetaHtml({ phone, flight }) {
+  const cells = [
+    returnFlightHtml(flight, { className: 'hidden sm:inline-flex' }),
+    phoneLinkHtml(phone, { icon: true }),
+  ].filter(Boolean);
+  if (!cells.length) return '';
+  return `<span class="shrink-0 flex items-center gap-3 pr-3">${cells.join('')}</span>`;
+}
+
 // ── Upcoming event rows (click → check-ins deep-link; name → profile) ─
 function eventRow(e, locale) {
   const time = fmtTime(e.at, locale);
+  const rowCls = 'card-solid rounded-xl flex items-center hover:bg-frost transition-colors';
+  const btnCls = 'flex-1 min-w-0 p-3 flex items-center gap-3 text-left';
   if (e.kind === 'checkin' || e.kind === 'checkout') {
     const b = e.booking;
     const isCheckin = e.kind === 'checkin';
     const cls = isCheckin ? 'bg-leaf/10 text-leaf' : 'bg-blueberry/10 text-blueberry';
     const label = isCheckin ? t('activity.kindCheckin') : t('activity.kindCheckout');
     return `
-      <button type="button" data-go="${isCheckin ? 'checkin' : 'checkout'}" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(b.id)}" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
-        <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
-        <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls} shrink-0">${label}</span>
-        <span class="font-mono text-[13px] text-charcoal shrink-0">${escapeHtml(b.licensePlate || '—')}</span>
-        ${nameSpan(b.contact?.name || b.contact?.email, b.customerId, b.contact?.email, 'text-[13px] text-dim truncate')}
-        ${flightSlotEvent(e)}
-      </button>`;
+      <div class="${rowCls}">
+        <button type="button" data-go="${isCheckin ? 'checkin' : 'checkout'}" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(b.id)}" class="${btnCls}">
+          <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
+          <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${cls} shrink-0">${label}</span>
+          <span class="font-mono text-[13px] text-charcoal shrink-0">${escapeHtml(b.licensePlate || '—')}</span>
+          ${nameSpan(b.contact?.name || b.contact?.email, b.customerId, b.contact?.email, 'text-[13px] text-dim truncate')}
+          ${flightSlotEvent(e)}
+        </button>
+        ${rowMetaHtml({ phone: b.contact?.phone, flight: b.flightNumberPickup })}
+      </div>`;
   }
   const tr = e.transfer;
   const isReturn = e.kind === 'transfer-return';
   const label = isReturn ? t('activity.kindTransferReturn') : t('activity.kindTransferOut');
   const place = isReturn ? (tr.returnTo || tr.pickupAddress || '') : (tr.pickupAddress || '');
   return `
-    <button type="button" data-go="transfers" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(tr.id)}" class="w-full card-solid rounded-xl p-3 flex items-center gap-3 text-left hover:bg-frost transition-colors">
-      <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
-      <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-mango/15 text-charcoal shrink-0">${label}</span>
-      ${nameSpan(tr.contactName, null, tr.email, 'text-[13px] text-charcoal truncate')}
-      <span class="text-[12px] text-dim truncate hidden sm:inline">${escapeHtml(place)}</span>
-    </button>`;
+    <div class="${rowCls}">
+      <button type="button" data-go="transfers" data-at="${escapeHtml(e.at)}" data-focus="${escapeHtml(tr.id)}" class="${btnCls}">
+        <span class="font-mono text-[14px] font-semibold text-charcoal w-12 shrink-0">${time}</span>
+        <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-mango/15 text-charcoal shrink-0">${label}</span>
+        ${nameSpan(tr.contactName, null, tr.email, 'text-[13px] text-charcoal truncate')}
+        <span class="text-[12px] text-dim truncate hidden sm:inline">${escapeHtml(place)}</span>
+      </button>
+      ${rowMetaHtml({ phone: tr.phone, flight: tr.returnFlightNumber })}
+    </div>`;
 }
 
 // ── History rows (collapsed <details>, expand → full detail) ─────────────
@@ -156,9 +181,9 @@ function detailLine(label, valueHtml) {
     <span class="text-[13px] text-charcoal text-right break-words min-w-0">${valueHtml}</span>
   </div>`;
 }
-function telLink(phone) {
-  return phone ? `<a href="tel:${escapeHtml(phone)}" class="text-blueberry hover:underline">${escapeHtml(phone)}</a>` : '';
-}
+// Shared with the check-in board (rowCells.js). The old local version put the
+// raw value in the href; spaces and dashes break some dialers.
+const telLink = (phone) => phoneLinkHtml(phone);
 function bookingDetailHtml(b, locale) {
   const esc = escapeHtml;
   const start = b.dropoffAt || b.startDate;
@@ -201,7 +226,7 @@ function transferDetailHtml(tr, isReturn, locale) {
 function historyRow(e, locale) {
   const time = fmtTime(e.at, locale);
   const isBooking = e.kind === 'checkin' || e.kind === 'checkout';
-  let badgeCls, label, plate, nameHtml, status, detail;
+  let badgeCls, label, plate, nameHtml, status, detail, meta;
   const nameCls = 'text-[13px] text-dim truncate flex-1 min-w-0';
   if (isBooking) {
     const b = e.booking;
@@ -212,6 +237,7 @@ function historyRow(e, locale) {
     nameHtml = nameSpan(b.contact?.name || b.contact?.email, b.customerId, b.contact?.email, nameCls);
     status = b.status;
     detail = bookingDetailHtml(b, locale);
+    meta = rowMetaHtml({ phone: b.contact?.phone, flight: b.flightNumberPickup });
   } else {
     const tr = e.transfer;
     const isReturn = e.kind === 'transfer-return';
@@ -221,6 +247,7 @@ function historyRow(e, locale) {
     nameHtml = nameSpan(tr.contactName, null, tr.email, nameCls);
     status = isReturn ? (tr.returnStatus || 'scheduled') : (tr.status || 'scheduled');
     detail = transferDetailHtml(tr, isReturn, locale);
+    meta = rowMetaHtml({ phone: tr.phone, flight: tr.returnFlightNumber });
   }
   return `
     <details class="group card-solid rounded-xl overflow-hidden">
@@ -229,6 +256,7 @@ function historyRow(e, locale) {
         <span class="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full ${badgeCls} shrink-0">${label}</span>
         ${plate}
         ${nameHtml}
+        ${meta}
         ${statusBadge(status)}
         <svg class="w-4 h-4 text-dim shrink-0 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
       </summary>

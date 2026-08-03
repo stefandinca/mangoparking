@@ -39,6 +39,7 @@ import { parkviaSyncNow } from '../../services/parkviaService.js';
 import { setTransferStatus, deleteTransfer } from '../../services/transferService.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
+import { phoneLinkHtml, returnFlightHtml } from '../../components/admin/rowCells.js';
 import { flightDayKey, enhanceFlightWarnings } from '../../services/flightStatusService.js';
 import flatpickr from 'flatpickr';
 import { Romanian } from 'flatpickr/dist/l10n/ro.js';
@@ -227,29 +228,12 @@ function actionButton({ key, label, variant = 'neutral', dataAttrs = '' }) {
   return `<button type="button" data-action="${key}" ${dataAttrs} class="${base} px-3 py-1.5">${label}</button>`;
 }
 
-// Phone as a tel: link so an agent can call straight from the board. The href
-// keeps only `+` and digits (spaces and dashes break some dialers) while the
-// visible text stays exactly as it was entered. The SPA router already leaves
-// tel: hrefs to the browser, so no navigation interception to worry about.
-function phoneCell(b) {
-  const raw = String(b.contact?.phone || '').trim();
-  if (!raw) return '<span class="text-[13px] text-dim">—</span>';
-  const dial = raw.replace(/[^\d+]/g, '');
-  if (!dial) return `<span class="text-[13px] font-mono">${escapeHtml(raw)}</span>`;
-  return `<a href="tel:${escapeHtml(dial)}" title="${escapeHtml(t('checkins.callHint', { phone: raw }))}" class="text-[13px] font-mono text-blueberry hover:text-blueberry-hover hover:underline inline-flex items-center gap-1 whitespace-nowrap">
-    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
-    <span>${escapeHtml(raw)}</span>
-  </a>`;
-}
-
-// The RETURN flight (`flightNumberPickup`) — the one that decides when the
-// customer is actually coming back for the car. Shown on every tab, not just
-// check-out, so staff can see it while the car is still being dropped off.
-function returnFlightCell(b) {
-  const flight = String(b.flightNumberPickup || '').trim();
-  if (!flight) return '<span class="text-[13px] text-dim">—</span>';
-  return `<span class="text-[13px] font-mono font-semibold text-charcoal">${escapeHtml(flight)}</span>`;
-}
+// Phone + return flight share their rendering with the activity feed — see
+// components/admin/rowCells.js. The SPA router already leaves tel: hrefs to
+// the browser, so there is no navigation interception to worry about here.
+const EMPTY_CELL = '<span class="text-[13px] text-dim">—</span>';
+const phoneCell = (b) => phoneLinkHtml(b.contact?.phone, { icon: true, empty: EMPTY_CELL });
+const returnFlightCell = (b) => returnFlightHtml(b.flightNumberPickup, { empty: EMPTY_CELL });
 
 // Empty flight-warning slot for a row — the enhancer (flightStatusService)
 // fills it with a delayed/cancelled badge after render. Check-in / no-show
