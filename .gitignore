@@ -31,3 +31,6 @@ locale_params.json
 # Raw client image masters — optimized web copies live in public/images/
 src/images/
 .vercel
+
+# Bank statements + reports with customer data — never commit
+documentation/bugs/
