@@ -235,11 +235,13 @@ Check-in/out, cancel+refund, no-show and overstay are covered in the
 
 ## Invoicing (SmartBill, live)
 
-- Long-term orders are invoiced (v1.2 Phase 2): a **proforma** at order time and, for
-  online-paid bookings, a **fiscal invoice** on IPN confirm; pay-at-location fiscal
-  invoices stay manual; broker/prepaid capture no billing and issue nothing. Cancellation
-  deletes the proforma and **stornos** any auto-issued invoice; reprice/overstay
-  differences add proformas or partial stornos. Invoice line:
+- Long-term orders are invoiced (v1.2 Phase 2): a **proforma** at order time and a
+  **fiscal invoice** once the money is actually collected **by card** — online on IPN
+  confirm, or at the desk on the POS (client decision 2026-08-05). **Cash** at the
+  location gets a proforma only; its fiscal invoice is raised manually. Broker/prepaid
+  capture no billing and issue nothing. Cancellation deletes the proforma and
+  **stornos** any auto-issued invoice; reprice/overstay differences add a proforma or
+  an invoice per the same card/cash rule, or a partial storno. Invoice line:
   `Servicii parcare conform rezervării {code}`. See
   [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).
 

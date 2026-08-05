@@ -583,6 +583,33 @@ function creditsDocItems({ amount }) {
   }];
 }
 
+// Which fiscal document money collected AT THE DESK produces.
+//
+// Client decision 2026-08-05, superseding the earlier "all pay-at-location is
+// manual" rule (roadmap decision 1a):
+//   • cash at the location → proforma only; its fiscal invoice stays manual
+//   • card on the POS      → fiscal invoice, exactly like an online card payment
+//
+// It replaced, not supplemented: a card desk sale issues an invoice INSTEAD of
+// a proforma, so nothing has to be reconciled against a stray estimate.
+//
+// Money NOT yet collected is always a proforma regardless of how it will later
+// be paid — an unpaid pay-later reservation, the order-time document on a
+// pay-at-pickup order, an emailed extension request. A proforma is a request
+// for money; only collected money gets a fiscal document.
+//
+// Prompted by a client report: a month of POS card takings had no invoices in
+// SmartBill, because desk card was filed with cash under the old rule.
+function deskDocKind(paidBy) {
+  return paidBy === 'card' ? 'invoice' : 'proforma';
+}
+
+// The smartbill.* key an APPENDED desk document lands under (overstay charges,
+// extension top-ups — several can accumulate on one booking).
+function deskExtraField(paidBy) {
+  return paidBy === 'card' ? 'extraInvoices' : 'extraProformas';
+}
+
 // Issue one SmartBill document (kind: 'proforma' | 'invoice') and stamp the
 // outcome onto every given doc ref via dot-path updates (so an invoice stamp
 // never clobbers the earlier proforma block). NEVER throws.
@@ -1768,12 +1795,14 @@ async function applyExtensionSettlement(bookingRef, booking, order, { chargedAmo
     });
   }
 
-  // SmartBill: online money gets a fiscal invoice for the difference (appended
-  // as an extraInvoices entry, statusOnSuccess:null so it never masks the
-  // booking's own invoice/paid status). The extension proforma issued at reprice
-  // time stays as the (non-fiscal) estimate. Pay-at-arrival money issues no auto
-  // invoice — the fiscal invoice is created manually, same as every desk sale.
-  if (via === 'online') {
+  // SmartBill: card money gets a fiscal invoice for the difference — online
+  // (Netopia) or a POS card at arrival, which the 2026-08-05 decision put on
+  // the same footing. Appended as an extraInvoices entry with
+  // statusOnSuccess:null so it never masks the booking's own invoice/paid
+  // status. The extension proforma issued at reprice time stays as the
+  // (non-fiscal) estimate. Cash at arrival still issues nothing here — its
+  // fiscal invoice is raised manually.
+  if (via === 'online' || paidBy === 'card') {
     await smartbillIssueSafe({
       kind: 'invoice',
       field: 'extraInvoices',
@@ -1880,14 +1909,31 @@ export const adminMarkOrderPaid = onCall(
       ...(payer ? { payerDetails: payer } : {}),
     };
 
+    // Context for the desk fiscal invoice, filled in by whichever branch runs.
+    // A POS card payment collected here gets a fiscal invoice (2026-08-05
+    // decision); cash issues nothing — the order-time proforma from
+    // createPayment stands and its invoice is raised manually. Before that
+    // decision this callable issued no document at all, which is how a month
+    // of POS takings ended up with nothing in SmartBill.
+    // (No initializer: every path that reaches the issuance below assigns it,
+    // and the extension branch returns before then. The falsy guard stays as
+    // belt-and-braces for future branches.)
+    let deskInvoice;
+
     if (pending.orderType === 'credits') {
-      const { balanceDocId: docId } = await creditTokens({
+      const { balanceDocId: docId, txId } = await creditTokens({
         packId: pending.packId,
         quantity: pending.quantity,
         amount: pending.amount,
         customerData: pending.customerData,
       });
       await orderRef.update({ ...paymentMark, balanceDocId: docId });
+      deskInvoice = {
+        refs: [db.collection('tokenTransactions').doc(txId), orderRef],
+        items: creditsDocItems({ amount: Number(pending.amount) || 0 }),
+        billing: pending.customerData?.billing,
+        email: pending.customerData?.email,
+      };
     } else if (pending.orderType === 'longTerm') {
       // Extension top-up paid AT ARRIVAL: staff extended a paid booking and
       // emailed a request; the client pays cash/card at the desk instead of
@@ -1943,8 +1989,35 @@ export const adminMarkOrderPaid = onCall(
       }
       await bookingRef.update(patch);
       await orderRef.update({ ...paymentMark, bookingId });
+      deskInvoice = {
+        refs: [bookingRef, orderRef],
+        // pending.amount is what is actually collected (standard price minus
+        // any voucher) — the same figure the collect dialog and the cashbook
+        // use. booking.totalPrice is the gross and would over-invoice.
+        items: longTermDocItems({
+          bookingCode: pending.bookingCode || (bookingSnap.exists ? bookingSnap.data().code : null),
+          amount: Number(pending.amount) || 0,
+        }),
+        billing: patch.billing || (bookingSnap.exists ? bookingSnap.data().billing : null),
+        email: pending.customerData?.email,
+      };
     } else {
       throw new HttpsError('invalid-argument', `Unknown orderType: ${pending.orderType}`);
+    }
+
+    // POS card collected at the desk → fiscal invoice, on the same footing as
+    // an online card payment. The order-time proforma stays on the doc, exactly
+    // as it does on the online flow (proforma → invoice). Best-effort, like
+    // every other issuance: a SmartBill failure never breaks the collection.
+    if (paidBy === 'card' && deskInvoice) {
+      await smartbillIssueSafe({
+        kind: 'invoice',
+        billing: deskInvoice.billing,
+        email: deskInvoice.email,
+        items: deskInvoice.items,
+        refs: deskInvoice.refs,
+        label: `desk card ${orderId}`,
+      });
     }
 
     await db.collection('auditLog').add({
@@ -3299,8 +3372,11 @@ export const adminCreateLongtermBooking = onCall(
     // money never passes through us (ParkVia et al. bill the customer), so
     // broker reservations get no SmartBill documents.
     if (paidBy !== 'broker') {
+      // card → fiscal invoice; cash → proforma; pay-later → proforma (nothing
+      // collected yet, and its invoice follows from adminMarkOrderPaid if the
+      // client eventually pays by card). See deskDocKind.
       await smartbillIssueSafe({
-        kind: 'proforma',
+        kind: payLater ? 'proforma' : deskDocKind(paidBy),
         billing: billingClean,
         email: payerEmailNorm,
         items: longTermDocItems({ bookingCode, amount: total }),
@@ -3431,11 +3507,11 @@ export const grantCreditsForCash = onCall(
       grantedBy: uid,
     });
 
-    // v1.2: proforma for the over-the-counter credit sale. The fiscal invoice
-    // is issued manually after collection (pay-at-location decision).
+    // Over-the-counter credit sale: card → fiscal invoice, cash → proforma
+    // (the cash fiscal invoice is still raised manually). See deskDocKind.
     if ((Number(amount) || 0) > 0) {
       await smartbillIssueSafe({
-        kind: 'proforma',
+        kind: deskDocKind(paidBy),
         billing: billingClean,
         email: payerEmail || '',
         items: creditsDocItems({ amount: Number(amount) || 0 }),
@@ -3926,11 +4002,11 @@ export const adminChargeOverstay = onCall(
       });
     }
 
-    // v1.2 Phase 4b: overstay is desk-collected money → proforma for the
-    // charge (the fiscal invoice for pay-at-location money stays manual).
+    // Overstay is desk-collected money: card → fiscal invoice, cash →
+    // proforma (its invoice stays manual). See deskDocKind.
     await smartbillIssueSafe({
-      kind: 'proforma',
-      field: 'extraProformas',
+      kind: deskDocKind(paidBy),
+      field: deskExtraField(paidBy),
       append: true,
       statusOnSuccess: null,
       billing: b.billing,
@@ -4251,11 +4327,11 @@ export const adminRepriceBooking = onCall(
         });
       }
 
-      // v1.2 Phase 4b: the extension is desk-collected money → proforma for
-      // the difference (fiscal invoice for pay-at-location money is manual).
+      // The extension is desk-collected money: card → fiscal invoice, cash →
+      // proforma (its invoice stays manual). See deskDocKind.
       await smartbillIssueSafe({
-        kind: 'proforma',
-        field: 'extraProformas',
+        kind: deskDocKind(paidBy),
+        field: deskExtraField(paidBy),
         append: true,
         statusOnSuccess: null,
         billing: b.billing,
@@ -4270,10 +4346,11 @@ export const adminRepriceBooking = onCall(
       patch.pendingRefundCreatedAt = nowIso;
       await ref.update(patch);
 
-      // v1.2 Phase 4b: shortened paid stay. If WE issued the fiscal invoice
-      // (online-paid), adjust it with a partial storno — an invoice with a
-      // negative line (verified against the account 2026-07-17). Desk-paid
-      // bookings have no auto invoice; staff adjust theirs manually.
+      // Shortened paid stay. If WE issued the fiscal invoice, adjust it with a
+      // partial storno — an invoice with a negative line (verified against the
+      // account 2026-07-17). Since 2026-08-05 that includes POS card desk
+      // sales, which now carry a real invoice; cash desk sales still have only
+      // a proforma, so this correctly skips them and staff adjust manually.
       if (b.smartbill?.invoice?.number) {
         await smartbillIssueSafe({
           kind: 'invoice',

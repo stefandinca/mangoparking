@@ -154,17 +154,31 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 | `smartbillHealthcheck` | `index.js:4359` (helpers in `smartbill.js`) | `assertAdmin` | Lists invoice + proforma series and taxes; `ready` requires the pinned `Mango` (type f) / `MANGO` (type p) series plus 21% VAT. See [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md). |
 | `smartbillTestIssue` | `index.js:4413` | `assertAdmin` | Payload checkpoint: issues + deletes a PF proforma, a PJ proforma and a draft fiscal invoice. Number-less draft strays are flagged `STRAY` (delete manually: Facturi → Ciorne). |
 
-**SmartBill issuance on the paid flows (v1.2 Phase 2)** — via `smartbillIssueSafe`
-in `index.js` (never throws: a SmartBill failure stamps `smartbill.status='failed'`
-+ `lastError`; the money flow always completes). `createPayment` issues a
-**proforma** on every order (skipped when a voucher covers the full amount);
-`netopiaCallback` issues the **fiscal invoice** on IPN success (new bookings,
-repays, credit packs); `adminCreateLongtermBooking` (non-broker) and
-`grantCreditsForCash` issue proformas for desk sales. Pay-at-location fiscal
-invoices stay **manual** in the SmartBill UI (locked decision) —
-`adminMarkOrderPaid` issues nothing. Outcomes land under
-`smartbill.{proforma,invoice,status,lastError}` on `pendingOrders` / `bookings` /
-`tokenTransactions`; the field is server-written only (rules reject client writes).
+**SmartBill issuance on the paid flows** — via `smartbillIssueSafe` in
+`index.js` (never throws: a SmartBill failure stamps `smartbill.status='failed'`
++ `lastError`; the money flow always completes).
+
+**The document follows the payment METHOD** (client decision 2026-08-05,
+replacing the earlier "all pay-at-location is manual" rule):
+
+| Money | Document |
+|---|---|
+| Card **online** (Netopia) | proforma at order → **fiscal invoice** on IPN confirm |
+| Card **at the POS** | **fiscal invoice** |
+| **Cash** at the location | **proforma only** — fiscal invoice raised manually |
+| Broker / prepaid | nothing |
+| Not yet collected (pay-later, order-time, emailed extension request) | proforma |
+
+One helper — `deskDocKind(paidBy)` (+ `deskExtraField` for appended overstay /
+extension documents) — is applied at every desk issuance site so the rule can't
+drift between them. `adminMarkOrderPaid` **issues a fiscal invoice for a card
+collection** (it previously issued nothing, which is how a month of POS card
+takings ended up with no documents); a cash collection still issues nothing
+because the order-time proforma from `createPayment` already stands.
+
+Outcomes land under `smartbill.{proforma,invoice,status,lastError}` on
+`pendingOrders` / `bookings` / `tokenTransactions`; the field is server-written
+only (rules reject client writes).
 
 **SmartBill documents are NOT surfaced** (client decision 2026-07-17) — no UI
 links, no email links, no PDF proxy: customers don't need the documents and
@@ -277,12 +291,14 @@ The finalized XML→booking mapping lives in `functions/src/parkvia.js`
   The JSON-REST "v2" migration that would automate this is planned, not built
   (see [../roadmap/v.1.4_netopia_v2_migration.md](../roadmap/v.1.4_netopia_v2_migration.md)).
 - **SmartBill invoicing is live on the paid flows (Phases 2 + 4)** — proforma on
-  every order, fiscal invoice on online payment confirm, **storno on cancel**;
-  pay-at-location invoices stay manual in the SmartBill UI. Only the retry queue
-  and e-Factura (Phase 7/8) remain planned, and documents are deliberately not
-  surfaced in-app (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
+  every order, **storno on cancel**, and a fiscal invoice whenever the money is
+  collected **by card** (online or POS — decision 1b, 2026-08-05); cash at the
+  location keeps its proforma-only treatment. Only the retry queue and e-Factura
+  (Phase 7/8) remain planned, and documents are deliberately not surfaced in-app
+  (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
   *(This note previously listed storno as planned, contradicting the Phase 4
-  section above it — corrected 2026-07-31.)*
+  section above it — corrected 2026-07-31; the pay-at-location claim was
+  corrected 2026-08-05.)*
 - **IPN replay lease:** `netopiaCallback` claims the order transactionally
   (`pendingOrders.ipnProcessingAt`, 5-min expiry, cleared on success/failure)
   before fulfilment — concurrent or redelivered IPNs can't double-create the

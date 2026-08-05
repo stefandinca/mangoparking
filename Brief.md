@@ -53,7 +53,9 @@ Two products run side by side:
 - **Email**: Brevo transactional templates
 - **Invoicing**: SmartBill — **live** (v1.2 Phase 2/4): proforma on every order, fiscal
   invoice on online-payment confirm, storno on cancel. Best-effort (never breaks a money
-  flow); pay-at-location invoices stay manual. e-Factura + retry queue planned
+  flow). Since 2026-08-05 the document follows the payment **method**: card
+  (online or POS) → fiscal invoice; cash at the location → proforma only.
+  e-Factura + retry queue planned
 - **Fonts**: Nunito (headings), DM Sans (body), JetBrains Mono (mono)
 - **Colors**: mango `#FDBB30`, blueberry `#1E5BD6` / hover `#1947A8` / deep `#0F2D66`,
   leaf `#4FBD46`, charcoal `#1A1A1A`, frost `#FFF8E8` / deep `#EDE3CC`

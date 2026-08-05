@@ -10,9 +10,11 @@
 > `smartbillIssueSafe` (best-effort — a SmartBill failure stamps
 > `smartbill.status='failed'` + `lastError`, never breaks a money flow). The
 > `smartbill` field is rules-protected (server-written only). Phase 3 as
-> originally written is **superseded** by decision 1a — pay-at-location fiscal
-> invoices are issued manually in the SmartBill UI, so `adminMarkOrderPaid`
-> issues nothing.
+> originally written is **superseded** by decision 1a, itself **superseded
+> 2026-08-05 by decision 1b**: the document now follows the payment *method*,
+> so a POS **card** payment issues a fiscal invoice (including via
+> `adminMarkOrderPaid`, which previously issued nothing) while **cash** at the
+> location still gets a proforma only.
 >
 > **Phase 4 live (2026-07-17):** cancellation → **storno, always** (client
 > decision same day: no anulare even on the issue day — a reversing invoice is
@@ -64,7 +66,22 @@ Documentation: <https://api.smartbill.ro/>
 ## Locked decisions
 
 1. **Series strategy** — ~~one series for everything~~ **superseded 2026-07-16**: two series are required — a **proforma** series (type `p`) and a **fiscal invoice** series (type `f`) — because every order issues a proforma and only paid orders issue a fiscal invoice. Within each type, one series covers both product lines (parking + credits).
-1a. **Proforma vs fiscal split** — **online-paid**: proforma at order creation + fiscal invoice once Netopia/voucher confirms payment. **Pay-at-location**: proforma only; the fiscal invoice is created manually after cash is collected. Credit-pack purchases follow the same rule by payment method.
+1a. **Proforma vs fiscal split** — ~~**Pay-at-location**: proforma only; the fiscal invoice is created manually after cash is collected.~~ **SUPERSEDED 2026-08-05 by decision 1b.** The original split lumped desk *card* payments in with cash, so a month of POS card takings produced no fiscal invoice at all — the client discovered it from a bank statement, not the app.
+
+1b. **Payment method decides the document** (client decision 2026-08-05) — the rule is now the *method*, not the *location*:
+
+| Money | Document | Path |
+|---|---|---|
+| Card **online** (Netopia) | proforma at order + **fiscal invoice** on confirm | `createPayment` → `netopiaCallback` |
+| Card **at the POS** | **fiscal invoice** | `adminCreateLongtermBooking` / `grantCreditsForCash` / `adminMarkOrderPaid` / overstay / extension |
+| **Cash** at the location | **proforma only** — its fiscal invoice stays manual | same paths, `paidBy: 'cash'` |
+| Broker / prepaid | nothing | broker never routes money through us |
+
+Implemented as `deskDocKind(paidBy)` / `deskExtraField(paidBy)` in `functions/src/index.js` — one helper, applied at every desk issuance site, so the rule can't drift between them. A card desk sale issues an invoice **instead of** a proforma (not both), except on a pay-at-pickup order where the order-time proforma already exists and is kept — exactly as the online flow keeps its own.
+
+Money **not yet collected** is always a proforma regardless of how it will later be paid: an unpaid pay-later reservation, the order-time document on a pay-at-pickup order, an emailed extension payment request. A proforma is a request for money; only collected money gets a fiscal document.
+
+Knock-on effect: the reprice **partial storno** is gated on the booking having a real invoice, so shortened POS-card stays now self-adjust too. Cash-paid ones still have only a proforma and are correctly skipped.
 2. **Cash flows** — emit **factură + chitanță** automatically (SmartBill auto-pairs when `paymentBase` is set). No bon fiscal route.
 3. **PF without CNP** — factură for everyone, PF or PJ, CNP or no CNP. Romanian fiscal law accepts name + address as identifier for PF.
 4. **e-Factura** — auto-submit to ANAF SPV for any invoice where the client is a VAT payer (PJ with CUI returned `isTaxPayer: true` from ANAF). Skip for PF.
