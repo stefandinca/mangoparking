@@ -17,6 +17,10 @@ documentation/smartbill-creds.md
 documentation/parkcloud*.md
 documentation/firebase.md
 documentation/parkvia-response.txt
+# Parkos OAuth client id + secret. NOTE: the committed feature doc is
+# documentation/features/parkos.md — only the credential file is ignored.
+documentation/Parkos.md
+documentation/parkos-creds.md
 *.pem
 *.key
 *.cer

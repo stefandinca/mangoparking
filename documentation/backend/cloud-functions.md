@@ -8,8 +8,9 @@ in `functions/src/index.js:97`, `maxInstances: 10`). Secrets bind via
 `NETOPIA_SIGNATURE`, `NETOPIA_PUBLIC_KEY`, `NETOPIA_PRIVATE_KEY`, `NETOPIA_ENV`,
 `NETOPIA_API_KEY` [reserved], `BREVO_API_KEY`, the SmartBill trio
 (`SMARTBILL_USERNAME` / `SMARTBILL_TOKEN` / `SMARTBILL_CIF`, grouped as
-`SMARTBILL_SECRETS` in `smartbill.js:23`) and the ParkVia pair
-(`PARKVIA_SUBSCRIPTION_KEY` / `PARKVIA_OPERATOR_KEY`, `PARKVIA_SECRETS`).
+`SMARTBILL_SECRETS` in `smartbill.js:23`), the ParkVia pair
+(`PARKVIA_SUBSCRIPTION_KEY` / `PARKVIA_OPERATOR_KEY`, `PARKVIA_SECRETS`) and the Parkos
+OAuth secret (`PARKOS_CLIENT_SECRET`, `PARKOS_SECRETS` in `parkos.js`).
 Deploy with `cd functions && firebase deploy --only functions` (Blaze plan
 required).
 
@@ -265,6 +266,7 @@ re-run doesn't double-send. Secret `BREVO_API_KEY` where they email.
 | `markNoShows` | 296 | `every 60 minutes` | Flips upcoming longTerm bookings whose drop-off is >12h past with no `activeCheckIns` row → `no-show`; releases the spot; audit-logs; **reports ParkVia-imported bookings back to ParkVia** (`reportParkviaNoShowSafe`, best-effort, once per booking). In-memory drop-off filter (handles `dropoffAt: null` web bookings). Binds SmartBill + ParkVia secrets. |
 | `expireStaleHolds` | 389 | `0 2 * * *` | Flips `pendingOrders` still `unpaid` after 14 days → `expired` (housekeeping; doesn't touch the booking). |
 | `pollParkviaBookings` | 428 | `every 15 minutes` | **LIVE (2026-07-23)**. Drives `runParkviaSync` (`index.js:4770`+): pulls ParkCloud booking EVENTS over an **overlapping age window** (72h rolling, stretched over poller downtime, 720h max), imports new reservations as broker bookings via `createBrokerBookingCore`, reconciles cancellations/amendments. `lastEventId` is a high-water mark, **not** a cutoff — ParkCloud publishes events out of id order, so a strict `since/{id}` cursor silently lost reservations (fixed 2026-07-29). First run primed the cursor (no historical backfill). Binds `PARKVIA_SECRETS`. See [../features/parkvia.md](../features/parkvia.md). |
+| `pollParkosBookings` | 447 | `every 15 minutes` | Drives `runParkosSync` (`index.js`): polls the Parkos JSON feed on `period_type=updated_at` over a 3-day overlapping window, imports reservations as broker bookings, reconciles cancellations/amendments. Never retro-imports an ended stay; adopts desk-entered twins instead of duplicating. Read-only feed → no report-back. Binds `PARKOS_SECRETS`. See [../features/parkos.md](../features/parkos.md). |
 
 **ParkVia auto-import (live)** — `parkviaSyncNow` (`assertStaff` — the button lives on
 `/admin/checkins` next to the New-reservation CTA, and on `/admin/pricing`) runs the same
@@ -272,6 +274,20 @@ re-run doesn't double-send. Secret `BREVO_API_KEY` where they email.
 probes the confirmed `GET /operators` endpoint and verifies operator 15777 is visible.
 The finalized XML→booking mapping lives in `functions/src/parkvia.js`
 (`mapParkviaBookingToImport`, unit-tested against real captures).
+
+**Parkos auto-import (built 2026-08-06, inert until its secret is set)** — `pollParkosBookings`
+(`scheduled.js`, `every 15 minutes`) drives `runParkosSync` (`index.js`), a second, fully
+independent broker channel: OAuth2 client-credentials against `https://api.parkos.com`, polling
+`GET /v1/reservations` with `period_type=updated_at` over a **3-day overlapping date window**
+(stretched over downtime, capped at a year) and triaging per-ref from the `parkosImports` ledger.
+Imports route through the same `createBrokerBookingCore`. The feed is **read-only**, so there is
+no no-show report-back. Two guards keep it safe against an account staff already service by hand:
+a reservation whose stay already **ended** is recorded and never imported, and a desk-entered
+booking with the same plate + Bucharest arrival day is **adopted** (`parkos_linked` audit) rather
+than duplicated. `parkosSyncNow` (`assertStaff` — the `/admin/checkins` Sync button now runs both
+channels) and `parkosHealthcheck` (`assertAdmin`, `/admin/pricing`) mirror the ParkVia pair. All
+three bind `PARKOS_SECRETS`. Mapping is quarantined in `functions/src/parkos.js`
+(`mapParkosReservationToImport`, unit-tested). See [../features/parkos.md](../features/parkos.md).
 
 ---
 

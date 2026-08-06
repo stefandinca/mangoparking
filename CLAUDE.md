@@ -49,13 +49,16 @@ src/services/                         — booking, token, capacity, longTerm, pr
                                         discount, promoVoucher, voucher, cashbook, audit, review,
                                         promotions, legalPage, shuttle, contact, cui, netopia,
                                         transfer (door-to-airport), gallery (facility photos),
-                                        openingHours, userMerge, parkvia (broker auto-import
-                                        admin diagnostics) (+ hidden: subscription, loyalty)
+                                        openingHours, userMerge, parkvia + parkos (broker
+                                        auto-import admin diagnostics)
+                                        (+ hidden: subscription, loyalty)
 scripts/{prerender.mjs,seo-routes.mjs}    — build-time SEO prerender for public routes
 functions/src/                        — index.js (Netopia + admin/cash/booking callables),
                                         emails.js (customer Brevo emails), adminNotifications.js
                                         (ops alerts to rezervari@), brevo.js, scheduled.js, cui.js,
-                                        smartbill.js, parkvia.js (ParkVia auto-import, live)
+                                        smartbill.js, parkvia.js (ParkVia auto-import live),
+                                        parkos.js (Parkos auto-import), roTime.js (Bucharest
+                                        wall-time + billing-days, shared by both importers)
 firestore.rules / firestore.indexes.json / storage.rules
 firebase.json / vercel.json / vite.config.js / .firebaserc (project: mango-parking)
 ```
@@ -83,7 +86,7 @@ Single `PERM` map drives route guards, the admin sidebar, and Firestore-rule log
 - Never commit secrets; `.env.local` holds Firebase web config; Function secrets via `firebase functions:secrets:set` (NETOPIA_*, BREVO_API_KEY)
 
 ## Cloud Functions (functions/src/)
-HTTP: `createPayment`, `netopiaCallback` (IPN), `repayOrder`. Callables cover admin order/cash/booking ops (mark paid/unpaid, cancel + refund, close cashbook, handovers, grant credits for cash, check-in with credits, charge overstay, create/long-term booking, user create/delete/role/profile-update, invites, password reset, voucher validation, guest→user merge) and `lookupCui` (ANAF). Note: booking *contact/plate/date* edits are a client-side `bookingService.updateBookingDetails` (staff-allowed by rules), not a callable. Firestore triggers + scheduled jobs (`emails.js`, `scheduled.js`) send customer Brevo email and run housekeeping (no-shows, stale holds, reminders). `adminNotifications.js` sends inline-HTML ops alerts to rezervari@ on signup / reservation / cancellation / no-show / refund / credit purchase / password-reset — customer **and** staff-initiated (via `sendBrevoRaw`, no Brevo template). All in `europe-west1`.
+HTTP: `createPayment`, `netopiaCallback` (IPN), `repayOrder`. Callables cover admin order/cash/booking ops (mark paid/unpaid, cancel + refund, close cashbook, handovers, grant credits for cash, check-in with credits, charge overstay, create/long-term booking, user create/delete/role/profile-update, invites, password reset, voucher validation, guest→user merge) and `lookupCui` (ANAF). Note: booking *contact/plate/date* edits are a client-side `bookingService.updateBookingDetails` (staff-allowed by rules), not a callable. Firestore triggers + scheduled jobs (`emails.js`, `scheduled.js`) send customer Brevo email, run housekeeping (no-shows, stale holds, reminders) and poll the two **broker auto-imports** every 15 min — `pollParkviaBookings` (ParkVia/ParkCloud, REST/XML, live) and `pollParkosBookings` (Parkos, REST/JSON + OAuth2, built 2026-08-06, inert until `PARKOS_CLIENT_SECRET` is set). Both are config-gated and import through the shared `createBrokerBookingCore`. `adminNotifications.js` sends inline-HTML ops alerts to rezervari@ on signup / reservation / cancellation / no-show / refund / credit purchase / password-reset — customer **and** staff-initiated (via `sendBrevoRaw`, no Brevo template). All in `europe-west1`.
 
 ## Agent Orchestration
 For non-trivial tasks, read [.claude/orchestrator.md](.claude/orchestrator.md) first. **Stage 0 runs on every prompt:** adopt the `prompt-engineer` persona to rewrite the raw prompt into an Upgraded Prompt, then the orchestrator classifies *that* and routes to the specialist agents in [.claude/agents/](.claude/agents/) (`business-strategist`, `ui-ux-designer`, `firebase-developer`) without the user naming anyone. After each change: build, fix regressions, verify, create one clean commit, and update the relevant [documentation/](documentation/) topic doc(s) in that commit.

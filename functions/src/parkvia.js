@@ -28,6 +28,11 @@
 
 import { parseStringPromise, processors } from 'xml2js';
 import { defineSecret } from 'firebase-functions/params';
+// Bucharest wall-time + billing-days rules, shared with the Parkos importer so
+// the two broker adapters can't drift apart. Re-exported below because the
+// mapper tests (and index.js) have always imported deriveDays from here.
+import { bucharestOffsetMin, deriveDays } from './roTime.js';
+export { deriveDays };
 export const PARKVIA_SUBSCRIPTION_KEY = defineSecret('PARKVIA_SUBSCRIPTION_KEY');
 export const PARKVIA_OPERATOR_KEY = defineSecret('PARKVIA_OPERATOR_KEY');
 export const PARKVIA_SECRETS = [PARKVIA_SUBSCRIPTION_KEY, PARKVIA_OPERATOR_KEY];
@@ -303,26 +308,6 @@ export function parkcloudLocalToIso(v) {
   const wallAsUtc = Date.UTC(+y, +mo - 1, +d, +h, +mi, +(se || 0));
   if (!Number.isFinite(wallAsUtc)) return '';
   return new Date(wallAsUtc - bucharestOffsetMin(new Date(wallAsUtc)) * 60_000).toISOString();
-}
-
-function bucharestOffsetMin(date) {
-  try {
-    const s = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Bucharest', timeZoneName: 'longOffset' })
-      .formatToParts(date).find((p) => p.type === 'timeZoneName')?.value || '';
-    const m = s.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
-    if (m) return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0));
-  } catch { /* fall through to the fixed default */ }
-  return 180;   // +03:00 — the summer (EEST) offset, right for peak season
-}
-
-// Billing-days: ceil of the span, 2h grace applied once, min 1 — mirrors the
-// billing-days rule used across the app (see documentation long-term bookings).
-export function deriveDays(dropoffIso, pickupIso) {
-  const a = Date.parse(dropoffIso);
-  const b = Date.parse(pickupIso);
-  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 1;
-  const GRACE_MS = 2 * 60 * 60 * 1000;
-  return Math.max(1, Math.ceil((b - a - GRACE_MS) / (24 * 60 * 60 * 1000)));
 }
 
 function parsePrice(v) {

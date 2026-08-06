@@ -103,6 +103,12 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
     `noShowReportedAt` / `noShowReportError` once a no-show is reported back to ParkVia.
     Present only on broker bookings imported from ParkVia. Rules reject client writes
     touching `parkvia`.
+  - `parkos` **server-written only** (Parkos auto-import — see
+    [../features/parkos.md](../features/parkos.md)): `{ ref, importedAt, lastStatus }` with
+    the same `lastStatus` enum as `parkvia`, plus `linkedExisting: true` when the twin guard
+    **adopted** a booking staff had already entered by hand rather than creating one. There is
+    no no-show trail — the Parkos feed is read-only. Rules reject client writes touching
+    `parkos`.
 - **Access:** staff read all; customer reads own (`customerId`). Delete admin-only.
 
 ## tokenBalances
@@ -461,6 +467,36 @@ server-side.
 - **Access:** staff read; no client writes.
 - ⚠️ Never delete this doc to "force a resync" — a missing `primedAt` makes the next run
   re-prime and silently skip every event since. See [../features/parkvia.md](../features/parkvia.md).
+
+## parkosImports (Parkos auto-import)
+
+- **Purpose:** dedup ledger for the Parkos auto-import — one doc per Parkos reservation code.
+  Claimed transactionally before a booking is created, so the poller and a concurrent admin
+  "Sync now" can't double-import.
+- **ID:** the sanitized Parkos reservation code (`parkosRefDocId`).
+- **Writer:** **server-only** (`runParkosSync`).
+- **Shape:** `ref`, `bookingId`|null, `importedAt`, `claimAt` (stale after 10 min — a
+  died-mid-import claim gets retried), `lastStatus` (`'active' | 'cancelled' | 'amended' |
+  'cancelled-needs-review' | 'historical'` — the last marking a row the historical guard
+  declined to import), `lastSeenAt`, `lastUpdatedAt` (the feed's `updated_at` as last handled
+  *for this ref* — what the overlap-window triage compares against), `lastRaw` (the raw
+  reservation snapshot).
+- **Access:** staff read; no client writes.
+
+## parkosSync (Parkos poll state)
+
+- **Purpose:** the Parkos poll state (single doc `state`).
+- **ID:** `state`.
+- **Writer:** **server-only** (`runParkosSync`). A dedicated collection (not `settings/*`)
+  because the shared `settings/{doc}` rule allows admin client writes — server state must not.
+- **Shape:** `lastUpdatedAt` (high-water mark of the feed's `updated_at` — diagnostics only,
+  **not** a poll cutoff; the window is computed from `lastSyncAt`), `lastWindow`
+  (`{ from, till, days, rows }` of the last request), `lastSyncAt`, `lastRunAt`, `lastResult`
+  (`{ imported, linked, skipped, cancelled, amended, errors }`), `lastError`.
+- **Access:** staff read; no client writes.
+- Unlike `parkviaSync`, deleting this doc is **safe** — there is no prime to lose, it only
+  widens the next window. Duplicate protection is time-relative (a stay that already ended is
+  never imported) plus the desk-twin guard.
 
 ## flightStatusCache
 

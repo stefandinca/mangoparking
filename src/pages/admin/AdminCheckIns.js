@@ -36,6 +36,7 @@ import {
   typeBadge, runBookingAction,
 } from '../../components/admin/bookingActions.js';
 import { parkviaSyncNow } from '../../services/parkviaService.js';
+import { parkosSyncNow } from '../../services/parkosService.js';
 import { setTransferStatus, deleteTransfer } from '../../services/transferService.js';
 import { userNameButton, wireUserLinks } from '../../components/admin/UserDetailModal.js';
 import { reservationCodeHtml, wireReservationLinks } from '../../components/admin/reservationLink.js';
@@ -542,7 +543,7 @@ export default async function AdminCheckIns(container) {
         <p class="text-dim text-[15px] mt-1">${t('checkins.subtitle')}</p>
       </div>
       <div class="flex flex-wrap gap-3">
-        <button type="button" data-parkvia-sync class="bg-white hover:bg-frost text-blueberry border border-blueberry font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('checkins.syncParkvia')}</button>
+        <button type="button" data-broker-sync class="bg-white hover:bg-frost text-blueberry border border-blueberry font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('checkins.syncBrokers')}</button>
         <button type="button" data-walkin class="bg-mango hover:bg-mango-hover text-charcoal font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors shadow-sm">${t('checkins.walkInCta')}</button>
       </div>
     </div>
@@ -924,24 +925,36 @@ export default async function AdminCheckIns(container) {
     }
   });
 
-  // ── ParkVia on-demand sync — the same pass the 15-min scheduler runs.
+  // ── Broker on-demand sync — the same passes the 15-min schedulers run, for
+  // BOTH channels (ParkVia + Parkos). Staff at the desk don't care which
+  // aggregator a reservation came through, so one button drives both; each
+  // runs independently, and an unconfigured or failing channel is folded into
+  // the summary instead of hiding the other one's results.
   // The board subscribes to `bookings` live, so freshly imported reservations
   // appear on the tabs without a reload; the toast just summarises the pass.
-  delegate(page, 'click', '[data-parkvia-sync]', async (_e, btn) => {
+  delegate(page, 'click', '[data-broker-sync]', async (_e, btn) => {
     btn.disabled = true;
     const orig = btn.textContent;
     btn.textContent = t('common.loading');
     try {
-      const r = await parkviaSyncNow();
-      if (!r || r.configured === false) { showToast(t('parkvia.notConfigured'), 'error'); return; }
-      const detail = t('parkvia.syncResult', {
-        imported: r.imported ?? 0,
-        cancelled: r.cancelled ?? 0,
-        errors: r.errors ?? 0,
-      });
-      showToast(`${t('parkvia.syncDone')} — ${detail}`, (r.errors ?? 0) > 0 ? 'error' : 'success');
+      const [parkvia, parkos] = await Promise.allSettled([parkviaSyncNow(), parkosSyncNow()]);
+      const totals = { imported: 0, linked: 0, cancelled: 0, errors: 0 };
+      let anyConfigured = false;
+      for (const outcome of [parkvia, parkos]) {
+        if (outcome.status === 'rejected') { totals.errors++; continue; }
+        const r = outcome.value;
+        if (!r || r.configured === false) continue;
+        anyConfigured = true;
+        totals.imported += r.imported ?? 0;
+        totals.linked += r.linked ?? 0;
+        totals.cancelled += r.cancelled ?? 0;
+        totals.errors += r.errors ?? 0;
+      }
+      if (!anyConfigured && !totals.errors) { showToast(t('parkvia.notConfigured'), 'error'); return; }
+      const detail = t('brokerSync.result', totals);
+      showToast(`${t('brokerSync.done')} — ${detail}`, totals.errors > 0 ? 'error' : 'success');
     } catch (err) {
-      console.error('parkviaSyncNow', err);
+      console.error('brokerSyncNow', err);
       showToast(err?.message || t('common.error'), 'error');
     } finally {
       btn.disabled = false;

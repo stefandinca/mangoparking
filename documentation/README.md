@@ -59,6 +59,7 @@ or feedback round.** The goal is that a fresh session can read this folder and
 - [features/reviews.md](features/reviews.md) — customer reviews CMS.
 - [features/trip-info.md](features/trip-info.md) — passengers, flight numbers, flight delay/cancel warnings.
 - [features/parkvia.md](features/parkvia.md) — ParkVia (ParkCloud) reservation auto-import (live). Onboarding record: [parkvia-setup-steps.md](parkvia-setup-steps.md).
+- [features/parkos.md](features/parkos.md) — Parkos reservation auto-import (built 2026-08-06; needs its secret set to go live).
 
 ## Sections
 
@@ -93,5 +94,6 @@ current reference:
 - **Payments (Netopia)** — live, on the legacy crypto-envelope flow. **Refunds are manual** (admin refund queue). v2 REST automation is [planned](roadmap/v.1.4_netopia_v2_migration.md).
 - **Invoicing (SmartBill)** — **live** (v1.2 Phase 2/4): proforma on every order, fiscal invoice on online-payment confirm, storno on cancel. Best-effort — a failure stamps `smartbill.status='failed'` and never breaks a money flow. Pay-at-location invoices are issued manually; documents aren't surfaced in-app. e-Factura + retry queue (Phase 7/8) [planned](roadmap/v.1.2_smartbill.md).
 - **ParkVia (ParkCloud)** — **live** since 2026-07-23: polls every 15 min, imports ParkVia reservations as broker bookings, reconciles cancellations/amendments, reports no-shows back. [Doc](features/parkvia.md).
+- **Parkos** — the second broker channel, **built 2026-08-06**, inert until `PARKOS_CLIENT_SECRET` is set. OAuth2/JSON, polls every 15 min on `updated_at`; read-only feed (no no-show report-back). Safe to switch on against an account staff already service by hand — it never retro-imports an ended stay and adopts desk-entered twins instead of duplicating them. [Doc](features/parkos.md).
 - **ANPR cameras** — **not built.** (The overstay/no-show pieces that plan referenced did ship independently.) [Plan](roadmap/v.1.3_anpr.md).
 - **Flight status** — code shipped but **dormant** until a flight-API key is configured. See [backend/integrations.md](backend/integrations.md).

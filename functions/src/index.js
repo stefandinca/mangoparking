@@ -69,6 +69,18 @@ import {
   parkviaWindowHours,
   registerParkviaNoShow,
 } from './parkvia.js';
+import {
+  PARKOS_SECRETS,
+  PARKOS_BROKER_NAME,
+  parkosConfig,
+  listParkosMerchants,
+  fetchParkosReservationsUpdatedBetween,
+  mapParkosReservationToImport,
+  parkosRefDocId,
+  parkosWindowDays,
+  parkosWindowRange,
+} from './parkos.js';
+import { bucharestDayKey } from './roTime.js';
 
 // Email triggers (Phase E) — re-exported so firebase deploy picks them up.
 export { onUserCreated, onBookingCreated, onTokenTransactionCreated, onContactMessageCreated, onPromoVoucherAssigned } from './emails.js';
@@ -89,9 +101,13 @@ export { lookupCui } from './cui.js';
 // Dormant until a flight API key is configured (see flightStatus.js).
 export { lookupFlightStatuses } from './flightStatus.js';
 
-// Scheduled jobs (Phase F). `pollParkviaBookings` is live (config-gated — a
-// no-op without ParkCloud credentials; see parkvia.js).
-export { daily24hReminders, commuter7PMCheck, expireStaleHolds, markNoShows, pollParkviaBookings } from './scheduled.js';
+// Scheduled jobs (Phase F). `pollParkviaBookings` / `pollParkosBookings` are
+// live (each config-gated — a no-op without that broker's credentials; see
+// parkvia.js / parkos.js).
+export {
+  daily24hReminders, commuter7PMCheck, expireStaleHolds, markNoShows,
+  pollParkviaBookings, pollParkosBookings,
+} from './scheduled.js';
 
 initializeApp();
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
@@ -316,9 +332,10 @@ export async function createBrokerBookingCore({
   days,
   totalPrice,
   contact = {},              // { name, email, phone }
-  brokerName,                // e.g. 'ParkVia'
+  brokerName,                // e.g. 'ParkVia' / 'Parkos'
   customerId = null,         // pre-known account uid (optional)
   parkvia = null,            // { ref, importedAt, lastStatus } | null (import trail)
+  parkos = null,             // { ref, importedAt, lastStatus } | null (import trail)
   notes = null,
   passengers = null,
   flightNumberDropoff = null,
@@ -377,6 +394,7 @@ export async function createBrokerBookingCore({
     completedAt: null,
     source: 'broker',
     ...(parkvia ? { parkvia } : {}),      // ParkVia import trail (server-written)
+    ...(parkos ? { parkos } : {}),        // Parkos import trail (server-written)
     createdBy: actorUid,
   });
 
@@ -399,6 +417,7 @@ export async function createBrokerBookingCore({
       paidBy: 'broker', spotId, source: 'broker',
       brokerName: brokerName || null,
       parkviaRef: parkvia?.ref || null,
+      parkosRef: parkos?.ref || null,
     },
     timestamp: nowIso,
   });
@@ -5135,6 +5154,408 @@ export const parkviaHealthcheck = onCall(
       error,
       operatorFound,
       parkingId: cfg.parkingId,
+      lastSyncAt: lastSync?.lastSyncAt || null,
+      lastResult: lastSync?.lastResult || null,
+    };
+  }
+);
+
+// ── Parkos auto-import ──────────────────────────────────────────────────
+// Pulls reservations from the Parkos partner API and turns them into broker
+// bookings (via createBrokerBookingCore) so staff don't re-type them,
+// reconciling cancellations on each run. See functions/src/parkos.js and
+// documentation/features/parkos.md.
+//
+// Config-gated: without Parkos credentials (parkosConfig().configured === false)
+// this is a no-op returning { configured: false }. Shared by the scheduled
+// poller (scheduled.js → pollParkosBookings) and the admin "Sync now" button
+// (parkosSyncNow). Best-effort per reservation: one bad row is counted as an
+// error and skipped, never aborting the batch.
+//
+// Sync state lives in parkosSync/state (server-only). Dedup is the
+// authoritative parkosImports/{code} ledger, claimed transactionally before a
+// booking is made. The poll uses an OVERLAPPING date window on
+// period_type=updated_at — the filter is date-granular, and the ParkVia
+// PC90417080 incident taught us that a tight cursor over a feed we don't
+// control silently loses rows. Re-seen rows are cheap: the ledger decides.
+//
+// TWO GUARDS make this safe to switch on against an account that staff have
+// been servicing BY HAND (which is exactly our situation — the same
+// reservations already exist as manually-typed 'Parkos' broker bookings):
+//   1. HISTORICAL GUARD — a reservation whose stay already ended is recorded in
+//      the ledger and never imported. No retro-backfill, so no duplicates of
+//      the manual-desk era. This replaces ParkVia's one-shot prime, and unlike
+//      a prime it does NOT blind us to a still-upcoming reservation nobody
+//      typed in yet.
+//   2. TWIN GUARD — before creating anything, look for a booking staff already
+//      entered for the same plate on the same arrival day and adopt it
+//      (stamping the parkos trail) instead of creating a second one. This also
+//      covers the transition period, while staff still type some by hand.
+const PARKOS_SYNC_DOC = 'parkosSync/state';
+// A parkosImports claim with no bookingId older than this is a dead import
+// attempt (create threw after the claim) — safe to re-claim and retry.
+const PARKOS_CLAIM_STALE_MS = 10 * 60_000;
+
+export async function runParkosSync(actorUid = 'scheduled') {
+  const cfg = parkosConfig();
+  if (!cfg.configured) return { configured: false };
+
+  const db = getFirestore();
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const summary = {
+    configured: true, imported: 0, linked: 0, skipped: 0,
+    cancelled: 0, amended: 0, errors: 0,
+  };
+
+  const [syncColl, syncId] = PARKOS_SYNC_DOC.split('/');
+  const syncRef = db.collection(syncColl).doc(syncId);
+  const syncSnap = await syncRef.get();
+  const state = syncSnap.exists ? syncSnap.data() : {};
+
+  const windowDays = parkosWindowDays(state.lastSyncAt, now);
+  const { from, till } = parkosWindowRange(windowDays, now);
+
+  let rows;
+  try {
+    rows = await fetchParkosReservationsUpdatedBetween(from, till);
+  } catch (err) {
+    console.warn('runParkosSync: reservations fetch failed', err?.message);
+    await syncRef.set({ lastRunAt: nowIso, lastError: String(err?.message || err) }, { merge: true });
+    return { ...summary, errors: 1, error: String(err?.message || err) };
+  }
+
+  let maxUpdatedAt = String(state.lastUpdatedAt || '');
+
+  for (const row of rows) {
+    let imp;
+    try {
+      imp = mapParkosReservationToImport(row);
+    } catch (err) {
+      summary.errors++;
+      console.warn('runParkosSync: unmappable reservation', row?.code, err?.message);
+      continue;
+    }
+    if (imp.updatedAt > maxUpdatedAt) maxUpdatedAt = imp.updatedAt;
+
+    const ledgerRef = db.collection('parkosImports').doc(parkosRefDocId(imp.ref));
+    try {
+      // Triage from the ledger first: a ref that is already handled AND has not
+      // been touched since we last saw it skips cheaply, without a write and
+      // without touching the counters.
+      const prior = (await ledgerRef.get()).data();
+      if (prior
+        && (prior.bookingId || prior.lastStatus !== 'active')
+        && imp.updatedAt && prior.lastUpdatedAt
+        && imp.updatedAt <= prior.lastUpdatedAt) continue;
+
+      // GUARD 1 — never retro-import a stay that has already ended. Recorded so
+      // the row stops costing anything on later passes.
+      if (!prior?.bookingId && Date.parse(imp.pickupAt) < now) {
+        await ledgerRef.set({
+          ref: imp.ref,
+          bookingId: null,
+          lastStatus: 'historical',
+          lastSeenAt: nowIso,
+          lastUpdatedAt: imp.updatedAt,
+          lastRaw: row,
+        }, { merge: true });
+        summary.skipped++;
+        continue;
+      }
+
+      // Atomic triage on the ledger doc — decides who acts, and claims when the
+      // action is an import, so the poller and a concurrent "Sync now" can't
+      // double-create. A claim whose import died (bookingId still null) goes
+      // stale after PARKOS_CLAIM_STALE_MS and is re-claimed: a failed import is
+      // retried on a later pass, never poisoned forever.
+      const verdict = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ledgerRef);
+        const data = snap.exists ? snap.data() : null;
+        if (data?.bookingId) return 'reconcile';
+        if (imp.rawStatus === 'cancelled') {
+          // No booking exists and Parkos says cancelled — record only.
+          tx.set(ledgerRef, {
+            ref: imp.ref,
+            bookingId: null,
+            importedAt: data?.importedAt || nowIso,
+            lastStatus: 'cancelled',
+            lastSeenAt: nowIso,
+            lastUpdatedAt: imp.updatedAt,
+            lastRaw: row,
+          }, { merge: true });
+          return 'record';
+        }
+        if (data?.claimAt && now - Date.parse(data.claimAt) < PARKOS_CLAIM_STALE_MS) {
+          return 'busy';                             // another runner's import is in flight
+        }
+        tx.set(ledgerRef, {
+          ref: imp.ref,
+          bookingId: null,
+          importedAt: data?.importedAt || nowIso,
+          claimAt: nowIso,
+          lastStatus: imp.rawStatus,
+          lastSeenAt: nowIso,
+          lastUpdatedAt: imp.updatedAt,
+          lastRaw: row,
+        }, { merge: true });
+        return 'import';
+      });
+
+      if (verdict === 'record' || verdict === 'busy') {
+        summary.skipped++;
+        continue;
+      }
+
+      if (verdict === 'import') {
+        // Self-heal: a previous run created the booking but died before linking
+        // the ledger — adopt it rather than creating a duplicate.
+        const dupe = await db.collection('bookings')
+          .where('parkos.ref', '==', imp.ref).limit(1).get();
+        if (!dupe.empty) {
+          await ledgerRef.update({ bookingId: dupe.docs[0].id, lastSeenAt: nowIso, lastUpdatedAt: imp.updatedAt });
+          summary.skipped++;
+          continue;
+        }
+
+        // GUARD 2 — the desk twin. Adopt a booking staff typed by hand for the
+        // same car on the same arrival day instead of creating a second one.
+        const twin = await findParkosTwinBooking(imp);
+        if (twin) {
+          await twin.ref.update({
+            parkos: { ref: imp.ref, importedAt: nowIso, lastStatus: 'active', linkedExisting: true },
+          });
+          await ledgerRef.update({ bookingId: twin.id, lastSeenAt: nowIso, lastUpdatedAt: imp.updatedAt });
+          await db.collection('auditLog').add({
+            action: 'parkos_linked',
+            entityType: 'booking', entityId: twin.id, actorUid,
+            payload: { code: twin.data().code || null, ref: imp.ref, plate: imp.plate, arrivalDay: imp.arrivalDay },
+            timestamp: nowIso,
+          });
+          summary.linked++;
+          continue;
+        }
+
+        const res = await createBrokerBookingCore({
+          plate: imp.plate,
+          dropoffAt: imp.dropoffAt,
+          pickupAt: imp.pickupAt,
+          days: imp.days,
+          totalPrice: imp.totalPrice,
+          contact: imp.contact,
+          brokerName: imp.brokerName || PARKOS_BROKER_NAME,
+          passengers: imp.passengers,
+          flightNumberDropoff: imp.flightNumberDropoff,
+          flightNumberPickup: imp.flightNumberPickup,
+          notes: imp.notes,
+          parkos: { ref: imp.ref, importedAt: nowIso, lastStatus: 'active' },
+          actorUid,
+        });
+        await ledgerRef.update({ bookingId: res.bookingId, lastSeenAt: nowIso });
+        summary.imported++;
+        continue;
+      }
+
+      // 'reconcile' — already imported → reconcile against current Parkos state.
+      const ledger = (await ledgerRef.get()).data() || {};
+      await ledgerRef.update({ lastSeenAt: nowIso, lastUpdatedAt: imp.updatedAt, lastRaw: row });
+      const changed = await reconcileParkosBooking(imp, ledger, actorUid);
+      if (changed === 'cancelled') summary.cancelled++;
+      else if (changed === 'amended') summary.amended++;
+      else summary.skipped++;
+    } catch (err) {
+      // Best-effort per reservation — a poisoned row must not wedge the batch.
+      // The overlap window re-serves the ref on later runs, so this IS retried.
+      summary.errors++;
+      console.warn('runParkosSync: sync failed for', imp.ref, err?.message);
+    }
+  }
+
+  await syncRef.set({
+    lastUpdatedAt: maxUpdatedAt || null,
+    lastWindow: { from, till, days: windowDays, rows: rows.length },
+    lastSyncAt: nowIso,
+    lastRunAt: nowIso,
+    lastError: null,
+    lastResult: summary,
+  }, { merge: true });
+
+  return summary;
+}
+
+// The desk twin: a booking staff already typed for this car, arriving the same
+// Bucharest day, that isn't cancelled and isn't already claimed by a DIFFERENT
+// Parkos reservation. Plate + arrival day is a strong enough key here (the same
+// car arriving twice on one day is not a real scenario) and it's the only key
+// available — the desk never records the Parkos code.
+async function findParkosTwinBooking(imp) {
+  const db = getFirestore();
+  const snap = await db.collection('bookings')
+    .where('licensePlate', '==', normalizePlate(imp.plate)).get();
+  return snap.docs.find((doc) => {
+    const b = doc.data();
+    if (b.status === 'cancelled') return false;
+    if (b.parkos?.ref && b.parkos.ref !== imp.ref) return false;
+    return bucharestDayKey(b.dropoffAt || b.startDate) === imp.arrivalDay;
+  }) || null;
+}
+
+// Reconcile an already-imported Parkos reservation against its current state.
+// Returns 'cancelled' | 'amended' | 'unchanged'. SAFE-BY-DEFAULT, exactly like
+// the ParkVia twin: only 'upcoming' bookings are auto-cancelled; a car already
+// on the lot (active/completed) is flagged for manual review, never silently
+// released.
+async function reconcileParkosBooking(imp, ledger, actorUid) {
+  const db = getFirestore();
+  const nowIso = new Date().toISOString();
+  if (!ledger.bookingId) return 'unchanged';
+
+  const bookingRef = db.collection('bookings').doc(ledger.bookingId);
+  const snap = await bookingRef.get();
+  if (!snap.exists) return 'unchanged';
+  const booking = snap.data();
+
+  // ── Cancellation ──────────────────────────────────────────────────────────
+  if (imp.rawStatus === 'cancelled' && booking.status !== 'cancelled') {
+    if (booking.status !== 'upcoming') {
+      // Car already checked in / trip done — do NOT auto-release. Flag it.
+      await bookingRef.update({ 'parkos.lastStatus': 'cancelled-needs-review' });
+      await parkosLedgerStatus(ledger, 'cancelled-needs-review');
+      await db.collection('auditLog').add({
+        action: 'parkos_cancel_needs_review',
+        entityType: 'booking', entityId: ledger.bookingId, actorUid,
+        payload: { code: booking.code || null, ref: imp.ref, bookingStatus: booking.status },
+        timestamp: nowIso,
+      });
+      return 'unchanged';
+    }
+    await bookingRef.update({
+      status: 'cancelled',
+      cancelledAt: nowIso,
+      cancelledBy: actorUid,
+      spotId: null,
+      'parkos.lastStatus': 'cancelled',
+    });
+    // Release the reserved/occupied spot back to available.
+    if (booking.spotId) {
+      try {
+        const spotRef = db.collection('spots').doc(booking.spotId);
+        const spotSnap = await spotRef.get();
+        if (spotSnap.exists && ['reserved', 'occupied'].includes(spotSnap.data().status)) {
+          await spotRef.update({ status: 'available', currentBookingId: null });
+        }
+      } catch (err) {
+        console.warn('reconcileParkosBooking: spot release failed', err?.message);
+      }
+    }
+    await parkosLedgerStatus(ledger, 'cancelled');
+    await db.collection('auditLog').add({
+      action: 'booking_cancelled',
+      entityType: 'booking', entityId: ledger.bookingId, actorUid,
+      payload: { code: booking.code || null, ref: imp.ref, via: 'parkos' },
+      timestamp: nowIso,
+    });
+    return 'cancelled';
+  }
+
+  // ── Amendment ─────────────────────────────────────────────────────────────
+  // Only SAFE fields auto-apply (drop-off / pick-up and the recomputed days),
+  // and only while the booking is still upcoming; price and plate changes are
+  // left for a human, same policy as the ParkVia importer.
+  if (booking.status === 'upcoming') {
+    const patch = {};
+    if (imp.dropoffAt && imp.dropoffAt !== booking.dropoffAt) {
+      patch.dropoffAt = imp.dropoffAt; patch.startDate = imp.dropoffAt;
+    }
+    if (imp.pickupAt && imp.pickupAt !== booking.pickupAt) {
+      patch.pickupAt = imp.pickupAt; patch.endDate = imp.pickupAt;
+    }
+    if ((patch.dropoffAt || patch.pickupAt) && Number(imp.days) && imp.days !== booking.days) {
+      patch.days = Number(imp.days);
+    }
+    if (Object.keys(patch).length) {
+      patch['parkos.lastStatus'] = 'amended';
+      await bookingRef.update(patch);
+      await parkosLedgerStatus(ledger, 'amended');
+      await db.collection('auditLog').add({
+        action: 'booking_amended',
+        entityType: 'booking', entityId: ledger.bookingId, actorUid,
+        payload: { code: booking.code || null, ref: imp.ref, via: 'parkos', fields: Object.keys(patch) },
+        timestamp: nowIso,
+      });
+      return 'amended';
+    }
+  }
+  return 'unchanged';
+}
+
+// Stamp the ledger's lastStatus (the ledger ref is derived from the record).
+async function parkosLedgerStatus(ledger, lastStatus) {
+  try {
+    await getFirestore().collection('parkosImports').doc(parkosRefDocId(ledger.ref))
+      .update({ lastStatus, lastSeenAt: new Date().toISOString() });
+  } catch (err) {
+    console.warn('parkos ledger update failed', err?.message);
+  }
+}
+
+// Admin "Sync now" — runs one import pass on demand. Returns the summary, or
+// { configured: false } when Parkos isn't wired up yet. Staff-level like its
+// ParkVia twin: the button lives on /admin/checkins, the sync takes no client
+// input, and staff can already create the same broker bookings by hand.
+export const parkosSyncNow = onCall(
+  { region: 'europe-west1', cors: true, secrets: PARKOS_SECRETS },
+  async (request) => {
+    await assertStaff(request);
+    return runParkosSync(request.auth.uid);
+  }
+);
+
+// Admin connection check — confirms config + a cheap reachability probe
+// (/v1/merchants), and echoes the last sync result. { configured:false } when
+// dormant.
+export const parkosHealthcheck = onCall(
+  { region: 'europe-west1', cors: true, secrets: PARKOS_SECRETS },
+  async (request) => {
+    await assertAdmin(request);
+    const cfg = parkosConfig();
+    if (!cfg.configured) return { configured: false };
+
+    const db = getFirestore();
+    const [syncColl, syncId] = PARKOS_SYNC_DOC.split('/');
+    const syncSnap = await db.collection(syncColl).doc(syncId).get();
+    const lastSync = syncSnap.exists ? syncSnap.data() : null;
+
+    let reachable = false;
+    let sampleCount = null;
+    let error = null;
+    let merchantFound = null;
+    let merchantName = null;
+    try {
+      const merchants = await listParkosMerchants();
+      reachable = true;
+      sampleCount = merchants.length;
+      // With no merchant id configured, any visible merchant counts — the
+      // token is already scoped to this account.
+      const match = cfg.merchantId
+        ? merchants.find((m) => m.id === String(cfg.merchantId))
+        : merchants[0];
+      merchantFound = !!match;
+      merchantName = match?.name || null;
+      if (!merchantFound) {
+        error = `Merchant id ${cfg.merchantId} not in the account's merchant list`;
+      }
+    } catch (err) {
+      error = String(err?.message || err);
+    }
+    return {
+      configured: true,
+      reachable,
+      sampleCount,
+      error,
+      merchantFound,
+      merchantName,
+      merchantId: cfg.merchantId || null,
       lastSyncAt: lastSync?.lastSyncAt || null,
       lastResult: lastSync?.lastResult || null,
     };

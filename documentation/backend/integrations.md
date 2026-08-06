@@ -17,6 +17,7 @@ This doc covers the rest:
 | **Flight-status lookup** | ✅ Shipped, **dormant** (needs API key) | `functions/src/flightStatus.js`, `src/services/flightStatusService.js` |
 | **SmartBill invoicing** | ✅ Shipped (v1.2 Phase 2/4 live; e-Factura + retry queue planned) | `functions/src/smartbill.js`, `src/services/invoiceService.js` |
 | **ParkVia auto-import** | ✅ Shipped, **live since 2026-07-23** | `functions/src/parkvia.js`, `src/services/parkviaService.js` |
+| **Parkos auto-import** | ✅ Shipped **2026-08-06**, inert until its secret is set | `functions/src/parkos.js`, `src/services/parkosService.js` |
 | **ANPR cameras** | 📋 Planned — not built | [../roadmap/v.1.3_anpr.md](../roadmap/v.1.3_anpr.md) |
 
 ---
@@ -208,6 +209,46 @@ Remaining provisional area: ParkCloud's **amendment** signalling — only safe d
 auto-apply. Full detail: [../features/parkvia.md](../features/parkvia.md); onboarding
 record: [../parkvia-setup-steps.md](../parkvia-setup-steps.md).
 
+---
+
+## Parkos auto-import — ✅ Shipped (2026-08-06), awaiting its secret
+
+The **second** broker channel: auto-imports reservations booked through **Parkos**
+(parkos.com / parkos.ro) as broker bookings. Deliberately independent of ParkVia —
+separate credentials, ledger, scheduler and admin card — so one aggregator's outage can't
+stop the other. Both converge on `createBrokerBookingCore`, so their bookings are identical.
+
+- **Transport** — REST/**JSON** at `https://api.parkos.com`, OAuth2 **client credentials**
+  (Laravel Passport): `POST /oauth/token` → a Bearer JWT nominally valid a year, cached in
+  module memory only and re-minted every 6 h; a 401 re-mints once and retries.
+- **Poller** `pollParkosBookings` (`scheduled.js`, every 15 min) and the **`parkosSyncNow`**
+  (`assertStaff`) / **`parkosHealthcheck`** (`assertAdmin`) callables all drive
+  `runParkosSync` (`index.js`). The feed is `GET /v1/reservations` filtered by an
+  all-or-nothing `(from, till, period_type)` trio; we poll `period_type=updated_at` over a
+  **3-day overlapping window** (stretched over downtime, capped at a year) and triage per-ref
+  from the `parkosImports` ledger. `/v1/reservations` is **read-only** — unlike ParkVia there
+  is **no no-show report-back**.
+- **Two guards** make it safe against an account staff already service by hand: a
+  reservation whose stay already **ended** is recorded and never imported (no
+  retro-backfill), and before creating anything the sync **adopts** a desk-entered booking
+  with the same plate + Bucharest arrival day (`parkos_linked` audit) instead of duplicating
+  it. This replaces ParkVia's one-shot prime and, unlike a prime, doesn't go blind to an
+  upcoming reservation nobody typed in.
+- Cancellations reconcile safely (only `upcoming` bookings auto-release; active/completed are
+  flagged for manual review); amendments auto-apply safe date fields only.
+- The JSON→booking mapping is quarantined in `mapParkosReservationToImport` (`parkos.js`) and
+  unit-tested against a real captured record (`functions/test/parkos.mapper.test.js`).
+  Europe/Bucharest wall-time + billing-days rules are shared with the ParkVia adapter in
+  `functions/src/roTime.js`.
+
+**Not live yet:** `PARKOS_CLIENT_ID` / `PARKOS_MERCHANT_ID` / `PARKOS_BASE_URL` are in
+`functions/.env.mango-parking`, but the config gate stays closed until
+`firebase functions:secrets:set PARKOS_CLIENT_SECRET` + a functions redeploy.
+
+The same credentials also reach **writable** `/v1/prices` and `/v1/availability` resources
+(pushing our tariffs and capacity out to Parkos) — discovered, documented, deliberately **not
+built**. Full detail + go-live steps: [../features/parkos.md](../features/parkos.md).
+
 ## ANPR cameras — 📋 Planned (not built)
 
 Two Hikvision ANPR cameras that auto check-in/out by plate. **Not built** — no
@@ -235,5 +276,8 @@ retention, admin live page, reconciliation, GDPR signage):
   e-Factura + retry queue (Phase 7/8) still planned.
 - **ParkVia** — live since 2026-07-23; polls every 15 min and imports ParkVia reservations as
   broker bookings, reconciles cancellations/amendments, reports no-shows back.
+- **Parkos** — built 2026-08-06, inert until its secret is set; the second broker channel,
+  OAuth2/JSON, polls `updated_at` every 15 min, read-only feed (no report-back), guarded
+  against duplicating the reservations staff already entered by hand.
 - **ANPR** — design docs only; overstay detection + `markNoShows` (ANPR-adjacent) are the
   sole shipped fragments, the camera layer is not built.

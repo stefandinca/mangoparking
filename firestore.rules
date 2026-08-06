@@ -168,12 +168,12 @@ service cloud.firestore {
     // check in.
     match /bookings/{id} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.customerId == request.auth.uid);
-      // `smartbill` (fiscal document trail) and `parkvia` (broker-import trail)
-      // are server-written only — staff client flows (check-in/out, edit
-      // details) must not touch them.
-      allow create: if isStaff() && !request.resource.data.keys().hasAny(['smartbill', 'parkvia']);
+      // `smartbill` (fiscal document trail) and `parkvia` / `parkos`
+      // (broker-import trails) are server-written only — staff client flows
+      // (check-in/out, edit details) must not touch them.
+      allow create: if isStaff() && !request.resource.data.keys().hasAny(['smartbill', 'parkvia', 'parkos']);
       allow update: if isStaff()
-                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['smartbill', 'parkvia']);
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['smartbill', 'parkvia', 'parkos']);
       allow delete: if isAdmin();
     }
 
@@ -273,6 +273,21 @@ service cloud.firestore {
     // ParkVia sync cursor/state (last watermark + last result). Staff read for
     // the admin card; server-written only.
     match /parkviaSync/{doc} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // Parkos auto-import dedup ledger — one doc per Parkos reservation code.
+    // Staff read (so an admin tool can show import history); all writes go
+    // through the runParkosSync server code (admin SDK).
+    match /parkosImports/{ref} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // Parkos sync state (last updated-at watermark + last result). Staff read
+    // for the admin card; server-written only.
+    match /parkosSync/{doc} {
       allow read: if isStaff();
       allow write: if false;
     }

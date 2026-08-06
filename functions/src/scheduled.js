@@ -20,7 +20,8 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { BREVO_API_KEY, sendBrevoEmail } from './brevo.js';
 import { SMARTBILL_SECRETS, deleteEstimate } from './smartbill.js';
 import { PARKVIA_SECRETS } from './parkvia.js';
-import { runParkviaSync, reportParkviaNoShowSafe } from './index.js';
+import { PARKOS_SECRETS } from './parkos.js';
+import { runParkviaSync, runParkosSync, reportParkviaNoShowSafe } from './index.js';
 
 const REGION = 'europe-west1';
 const TZ = 'Europe/Bucharest';
@@ -435,5 +436,28 @@ export const pollParkviaBookings = onSchedule(
   async () => {
     const r = await runParkviaSync('scheduled');
     console.log(`pollParkviaBookings: ${JSON.stringify(r)}`);
+  }
+);
+
+// ── Parkos auto-import poll ─────────────────────────────────────────────
+// Same shape as the ParkVia poll, against the other broker channel: pull
+// new/changed Parkos reservations and import them as broker bookings,
+// reconciling cancellations. Config-gated — without Parkos credentials
+// runParkosSync (index.js) returns { configured:false } and this is a logged
+// no-op. The real work + idempotency live in runParkosSync; this is just its
+// schedule. The admin "Sync now" button calls the same function.
+//
+// A separate job on purpose: one broker's outage, rate limit or schema change
+// must not stop the other channel from importing.
+export const pollParkosBookings = onSchedule(
+  {
+    schedule: 'every 15 minutes',
+    timeZone: TZ,
+    region: REGION,
+    secrets: PARKOS_SECRETS,
+  },
+  async () => {
+    const r = await runParkosSync('scheduled');
+    console.log(`pollParkosBookings: ${JSON.stringify(r)}`);
   }
 );

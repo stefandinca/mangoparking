@@ -6,6 +6,7 @@ import { getLongTermRates, saveLongTermRates, getCommuterPolicy, saveCommuterPol
 import { getOnlineDiscountPercent, saveOnlineDiscountPercent } from '../../services/discountService.js';
 import { smartbillHealthcheck, smartbillTestIssue } from '../../services/invoiceService.js';
 import { parkviaHealthcheck, parkviaSyncNow } from '../../services/parkviaService.js';
+import { parkosHealthcheck, parkosSyncNow } from '../../services/parkosService.js';
 import {
   listSeasonalPeriods,
   createSeasonalPeriod,
@@ -179,6 +180,17 @@ export default async function AdminPricing(container) {
           <p class="text-dim text-[12px] mt-2">${t('parkvia.syncHint')}</p>
           <div data-parkvia-result class="mt-4 text-[14px]"></div>
         </section>
+
+        <section class="glass rounded-2xl p-6 mt-8">
+          <h2 class="font-heading text-xl font-bold text-blueberry-deep mb-1">${t('parkos.title')}</h2>
+          <p class="text-dim text-[14px] mb-5">${t('parkos.hint')}</p>
+          <div class="flex flex-wrap gap-3">
+            <button type="button" data-parkos-check class="bg-blueberry hover:bg-blueberry-hover text-white font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('parkos.checkBtn')}</button>
+            <button type="button" data-parkos-sync class="bg-white hover:bg-frost text-blueberry border border-blueberry font-semibold text-[14px] px-5 py-2.5 rounded-xl transition-colors">${t('parkos.syncBtn')}</button>
+          </div>
+          <p class="text-dim text-[12px] mt-2">${t('parkos.syncHint')}</p>
+          <div data-parkos-result class="mt-4 text-[14px]"></div>
+        </section>
   `);
 
   // ParkVia (ParkCloud) auto-import diagnostics. The import is live, but stays
@@ -227,6 +239,64 @@ export default async function AdminPricing(container) {
           <div class="text-leaf font-semibold mb-1">${t('parkvia.syncDone')}</div>
           <div class="text-charcoal/80">${t('parkvia.syncResult', {
             imported: r.imported ?? 0,
+            cancelled: r.cancelled ?? 0,
+            errors: r.errors ?? 0,
+          })}</div>
+        </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">${escapeHtml(err?.message || t('common.error'))}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  // Parkos auto-import diagnostics — same two-button shape as the ParkVia card
+  // above, against the other broker channel.
+  const parkosNotConfigured = () =>
+    `<div class="rounded-xl border border-frost-deep bg-frost p-4 text-charcoal/70">${t('parkos.notConfigured')}</div>`;
+
+  delegate(page, 'click', '[data-parkos-check]', async (e, btn) => {
+    const out = page.querySelector('[data-parkos-result]');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = t('common.loading');
+    out.innerHTML = '';
+    try {
+      const r = await parkosHealthcheck();
+      if (!r || r.configured === false) { out.innerHTML = parkosNotConfigured(); return; }
+      const reachBadge = r.reachable
+        ? `<span class="text-leaf font-semibold">${t('parkos.reachable')}</span>`
+        : `<span class="text-mango font-semibold">${escapeHtml(r.error || t('parkos.unreachable'))}</span>`;
+      out.innerHTML = `
+        <div class="rounded-xl border border-frost-deep bg-white p-4 space-y-1.5">
+          <div>${t('parkos.connection')}: ${reachBadge}</div>
+          <div class="text-charcoal/80">${t('parkos.merchant')}: <span class="font-mono">${escapeHtml(r.merchantName || String(r.merchantId || '—'))}</span></div>
+          <div class="text-charcoal/80">${t('parkos.lastSync')}: <span class="font-mono">${escapeHtml(r.lastSyncAt || '—')}</span></div>
+        </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">${escapeHtml(err?.message || t('common.error'))}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  delegate(page, 'click', '[data-parkos-sync]', async (e, btn) => {
+    const out = page.querySelector('[data-parkos-result]');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = t('common.loading');
+    out.innerHTML = '';
+    try {
+      const r = await parkosSyncNow();
+      if (!r || r.configured === false) { out.innerHTML = parkosNotConfigured(); return; }
+      out.innerHTML = `
+        <div class="rounded-xl border border-frost-deep bg-white p-4">
+          <div class="text-leaf font-semibold mb-1">${t('parkos.syncDone')}</div>
+          <div class="text-charcoal/80">${t('parkos.syncResult', {
+            imported: r.imported ?? 0,
+            linked: r.linked ?? 0,
             cancelled: r.cancelled ?? 0,
             errors: r.errors ?? 0,
           })}</div>

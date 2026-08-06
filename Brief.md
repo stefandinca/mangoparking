@@ -185,6 +185,7 @@ the last admin); admins can also create/delete users and send magic-link invites
 | `settings/global` | global | Global config (online-discount %, per-day `openingHours`) |
 | `pendingInvites`, `lookupCache` | email / `cui_*` | Invite staging + ANAF CUI cache |
 | `parkviaImports`, `parkviaSync` | ParkVia ref / `state` | ParkVia auto-import dedup ledger + poll cursor (server-written) |
+| `parkosImports`, `parkosSync` | Parkos code / `state` | Parkos auto-import dedup ledger + poll state (server-written) |
 
 **Security model (firestore.rules):** public read / admin write for config + content
 collections; owner-or-staff for users / balances / transactions / bookings; cash,
@@ -248,6 +249,15 @@ no-shows are explicit flows.
   bookings carry no billing and get no invoice or cashbook entry. Secrets:
   `PARKVIA_SUBSCRIPTION_KEY`, `PARKVIA_OPERATOR_KEY`
   (`documentation/features/parkvia.md`).
+- **Parkos auto-import (built 2026-08-06; inert until its secret is set):** the second
+  broker channel, fully independent of ParkVia so one aggregator's outage can't stop the
+  other. `pollParkosBookings` polls the Parkos partner API (REST/JSON, OAuth2 client
+  credentials) every 15 minutes on `updated_at` and imports through the same
+  `createBrokerBookingCore`. The feed is **read-only** — no no-show report-back. Safe to
+  switch on against an account staff already service by hand: it never retro-imports a stay
+  that has ended, and it adopts a desk-entered booking with the same plate + arrival day
+  instead of duplicating it. Secret: `PARKOS_CLIENT_SECRET`
+  (`documentation/features/parkos.md`).
 
 ---
 

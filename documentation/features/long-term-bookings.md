@@ -87,9 +87,11 @@ paid**, so an unpaid no-show never orphans a spot.
   documents** (2026-07-21): the broker bills the customer, so the admin modal
   hides the billing block, the booking stores `billing: null`, and
   `adminCreateLongtermBooking` skips proforma issuance for `paidBy: 'broker'`.
-  Both the manual desk flow and the **ParkVia auto-import** route through the
-  shared `createBrokerBookingCore` primitive so they produce identical docs —
-  see [parkvia.md](./parkvia.md) (live since 2026-07-23).
+  Both the manual desk flow and the two broker auto-imports (**ParkVia**,
+  [**Parkos**](./parkos.md)) route through the
+  shared `createBrokerBookingCore` primitive so all three produce identical
+  docs — see [parkvia.md](./parkvia.md) (live since 2026-07-23) and
+  [parkos.md](./parkos.md) (built 2026-08-06).
 - `later` → unpaid reservation; creates a `pendingOrders` doc so it rides the
   same pay-at-pickup rails (online repay or collect at lot).
 `autoCheckIn` flips the fresh booking to `active`, marks the spot `occupied`, and
