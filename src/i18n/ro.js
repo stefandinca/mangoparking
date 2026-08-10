@@ -1658,6 +1658,10 @@ export default {
     createPaidBy: 'Plătit prin',
     paidByBroker: 'Broker / preplătit',
     paidByLater: 'Plată ulterioară (rezervare)',
+    // Only for the New-transaction selector — the plain 'Numerar'
+    // (checkins.payCash) stays as-is on the check-in collection dialogs, where
+    // the money IS being taken right then and the warning would be noise.
+    paidByCashNow: 'Numerar (încasează acum!)',
     brokerNameLabel: 'Broker (preplătit)',
     brokerNamePlaceholder: 'ex. ParkVia',
     createSubmit: 'Salvează',

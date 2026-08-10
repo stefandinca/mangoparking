@@ -411,11 +411,18 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       <!-- Paid by (hidden when using existing credits — no money moves) -->
       <div data-paidby-wrap>
         <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('transactions.createPaidBy')}</label>
+        <!-- Pay-later FIRST, and therefore the default on the long-term funnel
+             (the type toggle opens on 'longterm'). Most desk reservations are
+             taken over the phone, where nothing is collected yet; agents were
+             reflexively picking the first option, filing phone reservations as
+             cash-paid and putting money in the drawer that was never taken.
+             Cash/card stay available but are labelled as collect-now actions.
+             The typeToggle handler re-applies the per-type default on switch. -->
         <select name="paidBy" class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
-          <option value="cash">${t('checkins.payCash')}</option>
+          <option value="later" data-later-opt>${t('transactions.paidByLater')}</option>
+          <option value="cash">${t('transactions.paidByCashNow')}</option>
           <option value="card">${t('checkins.payCard')}</option>
           <option value="broker" data-broker-opt>${t('transactions.paidByBroker')}</option>
-          <option value="later" data-later-opt>${t('transactions.paidByLater')}</option>
         </select>
       </div>
 
@@ -634,6 +641,10 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
     if (brokerOpt) brokerOpt.hidden = !isLT;
     if (laterOpt) laterOpt.hidden = !isLT;
     if (!isLT && (paidBySelect?.value === 'broker' || paidBySelect?.value === 'later')) paidBySelect.value = 'cash';
+    // NOTE: the mirror of that snap (LT → 'later') deliberately does NOT live
+    // here. applyVisibility also runs from the paidBy change handler, so it
+    // would immediately undo any deliberate cash/card pick. The long-term
+    // default is applied once per type switch, in the typeToggle handler.
     if (brokerWrap) brokerWrap.classList.toggle('hidden', !(isLT && paidBySelect?.value === 'broker'));
     // Pay-later is an unpaid reservation — you can't auto-check-in an unpaid
     // car (payment-first), so hide the walk-in checkbox and clear it.
@@ -659,6 +670,12 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
       lbl.classList.toggle('bg-mango/5', inp.checked);
       lbl.classList.toggle('border-frost-deep', !inp.checked);
     });
+    // Switching type restarts the money section on that type's default:
+    // 'later' for a reservation, 'cash' for a credit sale (where 'later' isn't
+    // even offered). Without this, coming back from the credit tab would leave
+    // a long-term reservation sitting on cash — the exact mis-filing this
+    // change exists to stop.
+    if (paidBySelect) paidBySelect.value = getType() === 'longterm' ? 'later' : 'cash';
     applyVisibility();
     if (isCreditUse()) refreshBalance();
     refreshWalkInPrice();

@@ -94,6 +94,21 @@ paid**, so an unpaid no-show never orphans a spot.
   [parkos.md](./parkos.md) (built 2026-08-06).
 - `later` → unpaid reservation; creates a `pendingOrders` doc so it rides the
   same pay-at-pickup rails (online repay or collect at lot).
+
+**`later` is the selector's default** (2026-08-10) and sits first in the list,
+because most desk reservations are taken over the phone with nothing collected
+yet. Agents were reflexively picking the first option and filing phone
+reservations as cash-paid, which books money into the cashbook that was never
+taken. `cash` is therefore labelled **"Numerar (încasează acum!)" /
+"Cash (collect now!)"** (`transactions.paidByCashNow` — a modal-only key; the
+plain `checkins.payCash` stays on the check-in collection dialogs, where the
+money genuinely is being taken). Switching the type toggle resets the selector
+to that type's default — `later` for a reservation, `cash` for a credit sale,
+where `later` isn't offered at all.
+
+> Consequence for walk-ins: the walk-in / auto-check-in checkbox is hidden while
+> `later` is selected (you can't check in an unpaid car), so a genuine walk-in
+> now starts by switching to `cash`, at which point the checkbox appears.
 `autoCheckIn` flips the fresh booking to `active`, marks the spot `occupied`, and
 writes `activeCheckIns/{plate}` in the same call.
 
