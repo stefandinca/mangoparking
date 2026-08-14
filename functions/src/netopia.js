@@ -97,3 +97,30 @@ export function crcSuccess() {
 export function crcError(code, msg) {
   return `<?xml version="1.0" encoding="utf-8"?><crc error_type="1" error_code="${code}">${msg}</crc>`;
 }
+
+// ── IPN state decisions ──────────────────────────────────────────────────
+// Netopia's `action` vocabulary overlaps our own order `status` vocabulary:
+// a DECLINED card still reports the attempted action, which is literally
+// 'paid' (the error code carries the refusal). Recording that raw action as
+// the order status makes a failed order indistinguishable from a fulfilled
+// one — see the incident note above `netopiaCallback` in index.js.
+
+// An order is fulfilled only if the success branch actually ran. `status`
+// alone is not proof (a failed IPN used to be able to write 'paid' into it);
+// the success branch is the only writer of bookingId / balanceDocId / paidBy,
+// so require one of those as evidence. Orders paid at the desk carry paidBy,
+// and the nine May-2026 orders that predate paymentStatus still carry a
+// bookingId or balanceDocId — so every genuinely fulfilled order matches.
+export function isFulfilledOrder(order) {
+  if (!order || order.status !== 'paid') return false;
+  return Boolean(order.bookingId || order.balanceDocId || order.paidBy);
+}
+
+// Status to record for a non-success IPN. Keeps the informative actions
+// ('canceled', 'credit', …) but never lets one impersonate the fulfilled
+// sentinel, which would make later IPNs for the same order look like replays.
+export function failureStatusFor(action) {
+  const a = String(action || '').toLowerCase();
+  if (!a || a === 'paid' || a === 'confirmed') return 'failed';
+  return a;
+}

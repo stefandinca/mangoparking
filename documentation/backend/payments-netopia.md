@@ -150,8 +150,11 @@ is **the only place online orders become `paid`.**
 2. Parse the decoded XML: `action = order.mobilpay.action` (lowercased),
    `orderId = order.$.id`, `errorCode = mobilpay.error.$.code` (`index.js:733`).
 3. Load `pendingOrders/{orderId}`; unknown order → `crcError('0x05')`.
-   **Idempotency:** if `status === 'paid'` already, return `crcSuccess()` immediately
-   (`index.js:748`) — IPN retries are safe.
+   **Idempotency:** if `isFulfilledOrder(pending)` (`netopia.js`), return `crcSuccess()`
+   immediately — IPN retries are safe. The guard requires *evidence the success branch
+   ran* (`status === 'paid'` **and** one of `bookingId` / `balanceDocId` / `paidBy`),
+   not the `status` label alone — see the incident note below. The same predicate
+   guards the lease transaction in step 4.
 4. **Success** (`action` is `confirmed`/`paid` **and** `errorCode === '0'`,
    `index.js:751`):
    - **longTerm** — if the order already has a `bookingId` (pay-at-pickup pre-created,
@@ -163,8 +166,55 @@ is **the only place online orders become `paid`.**
      `tokenTransactions` purchase row (`index.js:826`).
    - Mark the order `paid` (`paidBy:'netopia'`) and consume any legacy voucher in a
      guarded transaction (`index.js:845`). Return `crcSuccess()`.
-5. **Non-success** — record `status = action || 'failed'` + the error code, but still
-   return `crcSuccess()` so Netopia stops retrying (`index.js:870`).
+5. **Non-success** — record `status = failureStatusFor(action)` + `netopiaFailedAction`
+   + the error code, but still return `crcSuccess()` so Netopia stops retrying.
+   `failureStatusFor` keeps the informative actions (`canceled`, `credit`) and
+   collapses `paid` / `confirmed` to `'failed'` so a failure can never write a status
+   that impersonates fulfilment.
+
+Every IPN logs one `Netopia IPN: {orderId, action, errorCode, orderStatus, bookingId}`
+line — the 2026-08-12 incident took hours to reconstruct because this handler logged
+nothing.
+
+### Incident 2026-08-12 — a retried payment was swallowed
+
+**Symptom:** a customer paid online, was charged, and no reservation existed on any
+admin screen. They arrived at the lot two days later and had to be entered by hand
+(booking `LT-783EF`, keyed `paidBy: 'broker'` because there was nothing to attach to).
+
+**Root cause — a vocabulary collision.** Netopia's `action` field reports the
+*attempted* action, so a **declined** card still reports `action = 'paid'` with the
+refusal in `error.code`. The old non-success branch wrote `status: action || 'failed'`,
+stamping `status: 'paid'` on a *failed* order. That is the exact sentinel the
+idempotency guard read as "already fulfilled". Sequence for order
+`ord_1786576684010_uuvq16` (plate PH28BFI, 124 RON):
+
+| Time (UTC) | Event | Handler latency | Result |
+|---|---|---|---|
+| 23:18:04 | order created, SmartBill proforma `MANGO-0111` issued | — | `status: 'pending'` |
+| 23:18:40 | IPN #1 — `action='paid'`, `error.code='39'` (declined) | 2.0 s | failure branch writes **`status: 'paid'`** |
+| 23:29:19 | IPN #2 — the retry that succeeded | **0.115 s** | guard says "already paid" → `crcSuccess()`, **nothing created** |
+
+The 0.115 s latency is the tell: a real fulfilment takes ~2 s (booking + invoice +
+email). IPN #1 was acked with `crcSuccess()`, so Netopia had no reason to *retry* —
+IPN #2 was a genuinely new transaction event (its payload was a different size), i.e.
+the customer's second card attempt going through. The order's `_updateTime` never moved
+past 23:18:42, and `netopiaAction` — which only the success branch writes — was never
+set, proving the success branch never ran.
+
+**Blast radius:** 6 orders since May 2026 carry the signature (`status: 'paid'` with no
+`bookingId`/`balanceDocId`): 4× error 35 and 1× error 20 (mostly test plates), plus this
+one. Query them with `status == 'paid' && bookingId == null && balanceDocId == null`.
+
+**Fixed 2026-08-14** — `failureStatusFor()` + `isFulfilledOrder()` in `netopia.js`,
+applied at the entry guard, the lease transaction and the failure branch; regression
+suite `functions/test/netopia.ipn.test.js`.
+
+> **Consequence to watch for:** when this fires, the customer also gets no confirmation
+> email (it hangs off the `bookings` create trigger), the SmartBill proforma is never
+> converted to a fiscal invoice, and any promo voucher stays consumed with
+> `voucherRedemptions.bookingId = null`. Reconciling a swallowed order means fixing all
+> four, not just the booking.
 
 `createBookingFromOrder` (`index.js:227`) writes the canonical `bookings` doc
 (reservation code `LT-XXXXX`, `paymentStatus`, `paidBy`, contact/billing, spot

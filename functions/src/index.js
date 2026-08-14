@@ -35,6 +35,8 @@ import {
   buildRequestXml,
   crcSuccess,
   crcError,
+  isFulfilledOrder,
+  failureStatusFor,
 } from './netopia.js';
 import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
 import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendBookingRequoteEmail, sendBookingCancelledEmail, sendExtensionPaidEmail } from './emails.js';
@@ -1229,7 +1231,15 @@ export const netopiaCallback = onRequest(
     if (!orderSnap.exists) return res.status(404).send(crcError('0x05', 'unknown order'));
 
     const pending = orderSnap.data();
-    if (pending.status === 'paid') return res.status(200).send(crcSuccess()); // idempotent
+    // One line per IPN — the 2026-08-12 incident took hours to reconstruct
+    // because nothing here logged what Netopia actually sent.
+    console.log('Netopia IPN:', JSON.stringify({
+      orderId, action, errorCode, orderStatus: pending.status || null,
+      bookingId: pending.bookingId || null,
+    }));
+    // Idempotent: only a REAL fulfilment short-circuits. Checking `status`
+    // alone used to swallow the follow-up IPN of a retried payment.
+    if (isFulfilledOrder(pending)) return res.status(200).send(crcSuccess());
 
     // action = 'confirmed' or 'confirmed_pending' on success, 'canceled' / 'credit' on others.
     if ((action === 'confirmed' || action === 'paid') && errorCode === '0') {
@@ -1247,7 +1257,7 @@ export const netopiaCallback = onRequest(
           const claimSnap = await tx.get(orderRef);
           if (!claimSnap.exists) return 'missing';
           const d = claimSnap.data();
-          if (d.status === 'paid') return 'paid';
+          if (isFulfilledOrder(d)) return 'paid';
           const leaseAt = Date.parse(d.ipnProcessingAt || '') || 0;
           if (Date.now() - leaseAt < IPN_LEASE_MS) return 'busy';
           tx.update(orderRef, { ipnProcessingAt: new Date().toISOString() });
@@ -1470,8 +1480,19 @@ export const netopiaCallback = onRequest(
     }
 
     // Non-success outcomes — record but still ack to stop retries.
+    //
+    // `status` must NEVER become 'paid' here. A declined card reports the
+    // ATTEMPTED action, which is literally 'paid', with the refusal in the
+    // error code; writing that raw action into `status` marked the order
+    // fulfilled, so when the customer retried on Netopia's page and the real
+    // `confirmed` IPN arrived, the guard above discarded it as a replay and
+    // no booking was ever created (incident 2026-08-12, order
+    // ord_1786576684010_uuvq16 — customer charged, reservation invisible to
+    // staff). `failureStatusFor` keeps the informative actions and collapses
+    // the impersonating ones to 'failed'.
     await orderRef.update({
-      status: action || 'failed',
+      status: failureStatusFor(action),
+      netopiaFailedAction: action || null,
       netopiaErrorCode: errorCode,
       processedAt: new Date().toISOString(),
     });
