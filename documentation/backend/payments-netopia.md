@@ -208,7 +208,20 @@ one. Query them with `status == 'paid' && bookingId == null && balanceDocId == n
 
 **Fixed 2026-08-14** — `failureStatusFor()` + `isFulfilledOrder()` in `netopia.js`,
 applied at the entry guard, the lease transaction and the failure branch; regression
-suite `functions/test/netopia.ipn.test.js`.
+suite `functions/test/netopia.ipn.test.js`. Deployed 2026-08-14.
+
+**Reconciled 2026-08-14** — capture confirmed in the Netopia panel, then:
+`scripts/reconcile-swallowed-ipn-order.mjs` moved booking `LT-783EF` off the desk's
+broker shape onto the online-card shape (`paidBy: 'netopia'`, `paymentMethod: 'online'`,
+`source: 'web'`, `paymentId` → the order), copied the order's billing onto the booking,
+back-linked the order (`bookingId`, `paidAt` = the successful IPN's timestamp), stamped
+the `MANGO1ZI` redemption, and wrote an `auditLog` row. Fiscal invoice **Mango 0157**
+(124 lei) then issued via `scripts/backfill-smartbill-invoices.mjs` and mirrored onto
+the order. Clearing all three of `source`/`paidBy`/`paymentMethod` matters —
+`isBrokerBooking()` treats any one of them as proof of a broker sale.
+
+The five older orders with this signature were left alone: four are May-2026 test
+plates, and the July one (CL05AWN) self-resolved — that customer paid cash at the lot.
 
 > **Consequence to watch for:** when this fires, the customer also gets no confirmation
 > email (it hangs off the `bookings` create trigger), the SmartBill proforma is never
