@@ -234,7 +234,7 @@ export function billingFieldsHtml(initial = {}) {
         </div>
         <div>
           <label class="block text-[14px] font-medium text-charcoal/70 mb-1.5">${t('billing.regCom')} *</label>
-          <input type="text" name="billingRegCom" value="${esc(initial.regCom)}" placeholder="J40/123/2020" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
+          <input type="text" name="billingRegCom" value="${esc(initial.regCom)}" placeholder="J2023001234567" class="w-full px-4 py-3 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-blueberry">
         </div>
         ${geoFieldsHtml(PJ_GEO, { county: initial.county, locality: initial.locality, abroad: initial.abroad === true })}
         <div>
@@ -389,7 +389,7 @@ export function readBilling(scope) {
     [get('billingCompanyName'), required(companyName), 'billing.errors.companyName'],
     [get('billingCui'), isValidCui(cui), 'billing.errors.cui'],
     // regCom is now mandatory for PJ (SmartBill requires it) — must be present
-    // AND well-formed (J40/123/2020).
+    // AND well-formed (J2023001234567 or the legacy J40/123/2020).
     [get('billingRegCom'), required(regCom) && isValidRegCom(regCom), 'billing.errors.regCom'],
   );
   if (!geo.abroad) {

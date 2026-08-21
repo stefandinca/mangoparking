@@ -39,11 +39,30 @@ test('isValidCui: optional RO prefix, 2-10 digits', () => {
   assert.ok(!isValidCui(''));
 });
 
-test('isValidRegCom: J01/123/2020 shape, optional field', () => {
+test('isValidRegCom: legacy slashed shape, optional field', () => {
   assert.ok(isValidRegCom('J01/123/2020'));
   assert.ok(isValidRegCom('F40/12/2024'));
   assert.ok(isValidRegCom(''));        // optional
   assert.ok(!isValidRegCom('J1-123-2020'));
+});
+
+test('isValidRegCom: new separator-less ONRC format (Law 265/2022)', () => {
+  // Registrations issued since the ONRC switch carry a single run of digits
+  // with no slashes — our own registration, J2014000079041, is this shape.
+  // Rejecting it made the mandatory PJ Reg. Com. field impossible to fill.
+  assert.ok(isValidRegCom('J2014000079041'));
+  assert.ok(isValidRegCom('J2023001234567'));
+  assert.ok(isValidRegCom('F2024000012345'));
+  assert.ok(isValidRegCom('j2014000079041'));            // case-insensitive
+  assert.ok(isValidRegCom('  J2014000079041  '));        // pasted with padding
+  assert.ok(isValidRegCom('J 2014 000079041'));          // pasted with spacing
+});
+
+test('isValidRegCom: still refuses what is not a registration number', () => {
+  assert.ok(!isValidRegCom('2014000079041'));   // no register letter
+  assert.ok(!isValidRegCom('J12345'));          // too short for either format
+  assert.ok(!isValidRegCom('J2014/000079041')); // neither shape
+  assert.ok(!isValidRegCom('JABCDEFGHIJKLM'));  // letters, not digits
 });
 
 test('isValidCnp: weighted mod-11 check digit', () => {

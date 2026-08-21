@@ -1081,7 +1081,7 @@ export default {
       personalAddress: 'Enter the address.',
       companyName: 'Enter the company name.',
       cui: 'Invalid CUI (e.g. RO12345678).',
-      regCom: 'Invalid trade registry number (e.g. J40/123/2020).',
+      regCom: 'Invalid trade registry number (e.g. J2023001234567 or J40/123/2020).',
       companyAddress: 'Enter the company address.',
     },
   },

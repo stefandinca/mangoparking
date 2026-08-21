@@ -400,7 +400,7 @@ export function openCreateTransactionModal(users, onDone, { allowWalkIn = true, 
               class="w-full px-4 py-2.5 pr-10 rounded-xl border border-frost-deep bg-white text-[14px] font-mono focus:outline-none focus:border-mango/40" data-ct-cui>
             <span class="hidden absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-blueberry/30 border-t-blueberry animate-spin" data-ct-cui-spinner></span>
           </div>
-          <input type="text" name="ctBillRegCom" placeholder="${escapeHtml(t('billing.regCom'))} * (J40/123/2020)"
+          <input type="text" name="ctBillRegCom" placeholder="${escapeHtml(t('billing.regCom'))} * (J2023001234567)"
             class="w-full px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-mango/40">
           ${geoFieldsHtml(CT_PJ_GEO, { compact: true })}
           <input type="text" name="ctBillCompanyAddress" placeholder="${escapeHtml(t('transactions.billCompanyAddress'))}"

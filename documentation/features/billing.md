@@ -10,6 +10,15 @@ identity** so an invoice can be issued later:
 
 - **PF (Persoană fizică)** — full name (one field), **county (Județ) +
   locality** (linked dropdowns), personal address, and an **optional** CNP.
+> **Reg. Com. accepts both formats (fixed 2026-08-21).** `isValidRegCom` took
+> only the legacy `J40/123/2020` shape, so a company registered under the
+> separator-less ONRC number introduced by Law 265/2022 (`J2014000079041` — the
+> shape our own registration carries) could not fill a field that is mandatory
+> for PJ both client-side and in the server's `checkBillingComplete`. PJ
+> checkout dead-ended for them. Both shapes now validate, internal whitespace is
+> tolerated on paste, and the placeholders/error copy lead with the new format.
+> Covered by `tests/validators.test.mjs`.
+
 - **PJ (Persoană juridică)** — company name, **CUI**, **Reg.Com (mandatory)**,
   **county + locality** (dropdowns), company address. A CUI lookup autofills
   company name / address / Reg.Com / county / locality from ANAF.

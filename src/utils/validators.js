@@ -38,11 +38,25 @@ export function isValidCui(cui) {
   return /^(RO\s?)?\d{2,10}$/i.test(String(cui).trim());
 }
 
-// Trade Registry number (Reg.Com) — "J01/123/2020" or "F40/12/2024" etc.
-// Format: <letter><judet>/<sequential>/<year>. Optional but format-checked when present.
+// Trade Registry number (Reg.Com). TWO shapes are legal and both must pass:
+//   • legacy    "J01/123/2020"    <letter><judet>/<sequential>/<year>
+//   • current   "J2014000079041"  <letter> + one unbroken run of digits, the
+//                                 separator-less number ONRC issues under Law
+//                                 265/2022 (our own registration is this shape)
+// Accepting only the legacy form made the field — which is MANDATORY for a PJ
+// booking, client-side and in the server's checkBillingComplete — impossible to
+// fill for any company registered since the switch, so PJ checkout dead-ended.
+// The digit run is length-checked but not decomposed: nothing downstream parses
+// this value, it only prints on the SmartBill invoice, so a shape check is the
+// right amount of strictness and a narrow guess at the internal layout is not.
+// Optional (empty passes) but format-checked when present.
 export function isValidRegCom(regCom) {
   if (!regCom) return true; // optional
-  return /^[A-Z]\d{1,2}\/\d{1,6}\/\d{4}$/i.test(String(regCom).trim());
+  // Internal whitespace is dropped so a value pasted as "J 2014 000079041"
+  // — how ONRC and several accounting exports render it — still validates.
+  const value = String(regCom).replace(/\s+/g, '');
+  return /^[A-Z]\d{1,2}\/\d{1,6}\/\d{4}$/i.test(value)
+    || /^[A-Z]\d{10,14}$/i.test(value);
 }
 
 // Romanian CNP — 13 digits with a weighted-modulo-11 check digit.

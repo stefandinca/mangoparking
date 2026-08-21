@@ -1082,7 +1082,7 @@ export default {
       personalAddress: 'Introdu adresa.',
       companyName: 'Introdu denumirea firmei.',
       cui: 'CUI invalid (ex: RO12345678).',
-      regCom: 'Nr. Reg. Com. invalid (ex: J40/123/2020).',
+      regCom: 'Nr. Reg. Com. invalid (ex: J2023001234567 sau J40/123/2020).',
       companyAddress: 'Introdu adresa firmei.',
     },
   },
