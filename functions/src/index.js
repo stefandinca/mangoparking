@@ -1907,7 +1907,12 @@ async function assertAgent(request) {
 // (the pay-at-pickup flow may persist the booking immediately or defer
 // to this step — we handle both shapes).
 export const adminMarkOrderPaid = onCall(
-  { region: 'europe-west1', cors: true },
+  // SmartBill secrets are REQUIRED here: a POS card collection issues a fiscal
+  // invoice (decision 1b, 2026-08-05). Shipping that issuance without binding
+  // them meant every desk card payment since logged "SMARTBILL_CIF secret is
+  // empty" and silently stamped smartbill.status='failed' — the exact gap the
+  // 2026-08-05 rule change was meant to close.
+  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
     const { uid } = await assertStaff(request);
     const { orderId, paidBy, payerDetails } = request.data || {};
