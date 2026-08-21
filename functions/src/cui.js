@@ -1,8 +1,20 @@
 // ANAF CUI lookup — Romanian fiscal-code → company-record bridge.
 //
-// Public ANAF endpoint: POST https://webservicesp.anaf.ro/PlatitorTvaRest/api/v9/ws/tva
+// Public ANAF endpoint: POST https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva
 // Body: [{ cui: '14186770', data: '2026-05-12' }]
 // Returns: { found: [{ date_generale: {...} }], notFound: [...] }
+//
+// ⚠️ ANAF MOVED THIS PATH (found 2026-08-21, every lookup was returning 404).
+// It used to be /PlatitorTvaRest/api/v9/ws/tva — the service now sits behind an
+// /api gateway and the `/ws` segment is gone. How to re-derive it if it moves
+// again: anything under /api/PlatitorTvaRest/* reaches the application and
+// answers with JSON problem-details naming the path it tried
+// ({"detail":"No endpoint POST /PlatitorTvaRest/..."}), while a wrong prefix
+// gets a plain nginx HTML 404. That difference is the probe.
+//
+// The failure was invisible because the callable degrades to manual entry by
+// design: the PJ form just stopped autofilling and nobody reported it as an
+// outage. The response BODY shape did not change — only the path.
 //
 // Called from BillingFields.js via services/cuiService.lookupCui(). We wrap
 // it in a callable to dodge browser CORS and to add a Firestore-backed 24h
@@ -14,7 +26,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import https from 'node:https';
 
 const ANAF_HOST = 'webservicesp.anaf.ro';
-const ANAF_PATH = '/PlatitorTvaRest/api/v9/ws/tva';
+const ANAF_PATH = '/api/PlatitorTvaRest/v9/tva';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function normalizeCui(input) {
@@ -89,15 +101,26 @@ export const lookupCui = onCall(
       return { error: 'network' };
     }
 
-    if (res.status < 200 || res.status >= 300) {
-      console.warn('ANAF HTTP', res.status, res.body?.slice(0, 200));
-      return { error: `anaf-${res.status}` };
-    }
-
-    let body;
+    // ANAF answers an unknown CUI with HTTP 404 *and* a perfectly good body
+    // ({"found":[],"notFound":[<cui>]}), so the status alone cannot be read as
+    // failure — parse first, and only fall back to an HTTP/JSON error when the
+    // body isn't a usable payload. Reading 404 as an outage would log every
+    // ordinary not-found lookup as `ANAF HTTP 404`, which is precisely the
+    // signature the 2026-08 endpoint move produced — the noise would bury the
+    // next real breakage.
+    let body = null;
     try {
       body = JSON.parse(res.body);
-    } catch {
+    } catch { /* fall through to the error branch below */ }
+
+    const usableBody = body
+      && (Array.isArray(body.found) || Array.isArray(body.notFound));
+
+    if (!usableBody) {
+      if (res.status < 200 || res.status >= 300) {
+        console.warn('ANAF HTTP', res.status, res.body?.slice(0, 200));
+        return { error: `anaf-${res.status}` };
+      }
       console.warn('ANAF bad JSON:', res.body?.slice(0, 200));
       return { error: 'bad-json' };
     }

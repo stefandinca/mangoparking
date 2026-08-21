@@ -37,17 +37,35 @@ auto-fills company name, address, reg-com, and VAT-payer status.
 2. **Cache check** — `lookupCache/cui_{cui}` with a **24h** TTL (`CACHE_TTL_MS`,
    `cui.js:18`). A fresh cache hit returns immediately (`cui.js:67`) so form keystrokes
    don't hammer ANAF.
-3. **Call ANAF** — `POST https://webservicesp.anaf.ro/PlatitorTvaRest/api/v9/ws/tva`
+3. **Call ANAF** — `POST https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva`
    with body `[{ cui, data: <yesterday> }]` (ANAF publishes the day's snapshot the
-   next morning, so it queries yesterday, `cui.js:78`). Uses the classic `node:https`
-   module forced to **HTTP/1.1** + `minVersion: 'TLSv1'` (`cui.js:27`) because ANAF
+   next morning, so it queries yesterday). Uses the classic `node:https`
+   module forced to **HTTP/1.1** + `minVersion: 'TLSv1'` because ANAF
    resets Node's undici `fetch` (ECONNRESET) from GCP egress.
+
+   > **The path moved (fixed 2026-08-21).** It was
+   > `/PlatitorTvaRest/api/v9/ws/tva`; ANAF put the service behind an `/api`
+   > gateway and dropped the `/ws` segment, so **every lookup had been returning
+   > 404** and the PJ form had silently stopped autofilling — the callable
+   > degrades to manual entry by design, so it never surfaced as an outage.
+   > To re-derive the path if it moves again: anything under
+   > `/api/PlatitorTvaRest/*` reaches the application and replies with JSON
+   > problem-details naming the path it tried
+   > (`{"detail":"No endpoint POST /PlatitorTvaRest/..."}`), whereas a wrong
+   > prefix gets a plain nginx HTML 404. The response body shape did not change.
 4. **Parse** the v9 nested shape — `date_generale`, `inregistrare_scop_Tva`,
    `adresa_sediu_social` — into
    `{ companyName, address, regCom, vatPayer, cui }` (`cui.js:133`), cache it, return.
 
 Failure modes return a soft `{ error: 'network' | 'anaf-<status>' | 'bad-json' |
 'not_found' }` rather than throwing, so the form degrades to manual entry.
+
+**Status alone does not mean failure.** ANAF answers an unknown CUI with HTTP
+**404 plus a valid body** (`{"found":[],"notFound":[<cui>]}`), so the handler
+parses first and only reports `anaf-<status>` when the body isn't a usable
+payload — otherwise every ordinary not-found lookup would log as `ANAF HTTP
+404`, the same signature the endpoint move produced, and bury the next real
+breakage in noise.
 
 ### Client — `src/services/cuiService.js`
 
