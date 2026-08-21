@@ -159,6 +159,26 @@ async function stampInvoice(accessToken, bookingId, smartbill) {
   if (!res.ok) throw new Error(`Firestore stamp failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
 }
 
+// Same, for the order the booking was paid through — read-modify-write so the
+// existing proforma block survives.
+async function stampOrderInvoice(accessToken, orderId, stamp) {
+  const cur = await fetch(`${FS_BASE}/pendingOrders/${orderId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!cur.ok) throw new Error(`read failed: HTTP ${cur.status}`);
+  const doc = await cur.json();
+  const existing = doc.fields?.smartbill ? decode(doc.fields.smartbill) : {};
+  const res = await fetch(
+    `${FS_BASE}/pendingOrders/${orderId}?updateMask.fieldPaths=smartbill`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { smartbill: encode({ ...existing, ...stamp }) } }),
+    },
+  );
+  if (!res.ok) throw new Error(`PATCH failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+}
+
 // ── mirrors of the server logic (functions/src/smartbill.js + index.js) ──
 function checkBillingComplete(billing = {}) {
   const missing = [];
@@ -287,12 +307,22 @@ for (const p of planned) {
   }
   console.log(`OK  ${data.series} ${data.number}`);
 
-  await stampInvoice(accessToken, p.id, {
-    ...(p.data.smartbill || {}),
+  const stamp = {
     invoice: { series: data.series ?? INVOICE_SERIES, number: data.number ?? null, issuedAt: new Date().toISOString() },
     status: 'invoiced',
     backfilledAt: new Date().toISOString(),
-  });
+  };
+  await stampInvoice(accessToken, p.id, { ...(p.data.smartbill || {}), ...stamp });
   console.log('  stamped on the booking');
+
+  // Mirror onto the linked order. The live code stamps both refs, and the
+  // "which card payments are missing an invoice?" audit query runs over
+  // pendingOrders (paidBy == 'admin-card' && smartbill.status == 'failed') —
+  // leaving the order at 'failed' would re-flag a payment that is now invoiced.
+  if (p.data.paymentId) {
+    await stampOrderInvoice(accessToken, p.data.paymentId, stamp)
+      .then(() => console.log('  mirrored onto the order'))
+      .catch((err) => console.warn(`  ! order mirror failed (booking is stamped): ${err.message}`));
+  }
 }
 console.log('\nDone.\n');
