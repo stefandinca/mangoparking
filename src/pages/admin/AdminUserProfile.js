@@ -18,21 +18,22 @@
 // UserDetailModal rather than duplicated.
 //
 // Actor matching: audit rows identify the actor two ways — `actorUid` (server
-// writes) or `userId`/`userEmail` (client writes) — so a single Firestore
-// query can't cover both. Rather than add two composite indexes, this pulls
-// the period once (the same capped range query the audit page uses) and
-// filters by actor in memory. Same trade-off, and the cap is surfaced.
+// writes) or `userId` (client writes) — so a single Firestore query can't
+// cover both. `listActorAuditRange` runs one indexed query per shape and
+// merges. This used to pull the whole period and filter in memory, which
+// under-reported once a window exceeded AUDIT_RANGE_MAX; the 30-day window
+// crossed that line in 2026-08, so the counts are now queried exactly.
 
 import { delegate, escapeHtml, qs } from '../../utils/dom.js';
 import { t, getLocale, localePath } from '../../i18n/index.js';
 import { updateMeta } from '../../utils/seo.js';
 import { getDocument } from '../../firebase/db.js';
-import { listAuditRange, AUDIT_RANGE_MAX } from '../../services/auditService.js';
+import { listActorAuditRange, AUDIT_RANGE_MAX } from '../../services/auditService.js';
 import { AdminLayout, initAdminNav } from '../../components/admin/AdminLayout.js';
 import {
   actionStyle, actionLabel, describeAction, fmtAuditTime,
   RANGE_PRESETS as PRESETS, windowToIso,
-  isActorRow, ACTOR_STAT_TILES, countActions,
+  ACTOR_STAT_TILES, countActions,
 } from '../../components/admin/auditFormat.js';
 import { rangeBarHtml, mountRangePicker, pagerHtml } from '../../components/admin/ListControls.js';
 import { renderUserSections } from '../../components/admin/UserDetailModal.js';
@@ -244,10 +245,13 @@ export default async function AdminUserProfile(container, { uid } = {}) {
     renderActivity();
     setUrl();
     const { fromIso, toIso } = windowToIso(activeWindow, bucharestLocalToIso);
-    const res = await listAuditRange({ fromIso, toIso });
-    rows = res.rows.filter((r) => isActorRow(r, { uid: userId, email: user.email }));
-    // `capped` means the RANGE was truncated, so this person's count may be
-    // short too — surfaced rather than quietly under-reported.
+    // Queried BY actor (two indexed queries, one per writer shape) instead of
+    // pulling the whole range and filtering: the range hits AUDIT_RANGE_MAX at
+    // 30 days of current activity, which silently made every count a floor.
+    const res = await listActorAuditRange({ uid: userId, fromIso, toIso });
+    rows = res.rows;
+    // Now only true if this ONE person authored more than the cap in the
+    // window — a real outlier, not an artefact of how busy the lot was.
     capped = res.capped;
     loading = false;
     renderStats();

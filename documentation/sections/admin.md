@@ -379,12 +379,13 @@ restriction would be cosmetic.
   Filters apply to the whole range, then the result is **paginated
   client-side** (25/page) — a cursor page would filter only its own slice.
 - The range query is capped at `AUDIT_RANGE_MAX` (1000). Hitting the cap shows
-  a notice rather than truncating silently. ⚠️ **The 30-day window now exceeds
-  that cap** — 1,222 rows in the 30 days to 2026-09-01 — so the default view on
-  this page *and* on the users staff tabs under-reports until the cap is raised
-  or the actor queries get their own composite indexes
-  (`actorUid`+`timestamp`, `userId`+`timestamp`). The notice fires, so it is
-  visible rather than silent, but the counts are a floor.
+  a notice rather than truncating silently. **Per-actor counts no longer depend
+  on that cap** (fixed 2026-09-01): the profile page and the users staff tabs
+  query `auditLog` *by actor* via `listActorAuditRange`, one indexed query per
+  writer shape, merged. `capped` there now means one PERSON authored more than
+  the cap in the window — a real outlier — rather than the lot simply having
+  been busy. The window-wide `listAuditRange` (used by `/admin/audit`, which
+  genuinely wants every actor) keeps the old behaviour and the old notice.
 - Range, page and search are mirrored into the URL, so a refresh or a shared
   link reopens the same view.
 - Rows render through the shared `auditFormat.js` helpers (`actionStyle`,

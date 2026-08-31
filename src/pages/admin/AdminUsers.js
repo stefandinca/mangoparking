@@ -24,9 +24,9 @@ import { getCurrentUser } from '../../firebase/auth.js';
 import { isValidEmail } from '../../utils/validators.js';
 import { buildUsersExport, buildUserStats } from '../../services/userExportService.js';
 import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
-import { listAuditRange } from '../../services/auditService.js';
+import { listActorAuditRange } from '../../services/auditService.js';
 import { listEntriesBetween, listAllOpenEntries } from '../../services/cashbookService.js';
-import { isActorRow, countActions, windowToIso } from '../../components/admin/auditFormat.js';
+import { countActions, windowToIso } from '../../components/admin/auditFormat.js';
 import { rangeBarHtml, mountRangePicker } from '../../components/admin/ListControls.js';
 import { bucharestLocalToIso } from '../../utils/date.js';
 
@@ -134,8 +134,8 @@ export default async function AdminUsers(container) {
   const chips = new Set();
   // Staff tabs carry their own sort (different columns) and their own window —
   // "checked in 385 cars" is meaningless without a period, unlike a customer's
-  // lifetime value. 30 days by default: ~485 audit rows/month at current
-  // volume, comfortably inside listAuditRange's 1000-row cap.
+  // lifetime value. 30 days by default; the counts are queried per actor
+  // (listActorAuditRange), so the window's total size no longer caps them.
   let staffSortKey = 'checkins';
   let staffSortDir = 'desc';
   let staffWindow = '30d';
@@ -293,31 +293,36 @@ export default async function AdminUsers(container) {
     });
   }
 
-  // Per-staff activity for the selected window. One audit range query plus the
-  // cash reads, then everything is tallied in memory — the actor lives on the
-  // row under two different field names (server `actorUid` vs client
-  // `userEmail`), which one Firestore query can't express, exactly as the
-  // profile page and the audit page already handle it.
+  // Per-staff activity for the selected window.
+  //
+  // Queried BY actor, one pair of indexed queries per staff member, rather than
+  // pulling the window once and filtering in memory. That earlier approach was
+  // bounded by AUDIT_RANGE_MAX (1000) and the 30-day window now holds ~1200
+  // rows, so every count silently became a floor. Cost is now bounded by the
+  // number of STAFF (a handful) times what each of them did, not by how busy
+  // the lot was — and it stays correct as volume grows.
   let staffPromise = null;
   function ensureStaffStats() {
     if (activeTab === 'customer' || staffStats || staffPromise || !users.length) return;
     const { fromIso, toIso } = windowToIso(staffWindow, bucharestLocalToIso);
+    const staffUsers = users.filter((u) => normalizeRole(u.role) !== 'customer');
     staffPromise = Promise.all([
-      listAuditRange({ fromIso, toIso }),
+      Promise.all(staffUsers.map((u) =>
+        listActorAuditRange({ uid: u.id, fromIso, toIso }).then((res) => [u.id, res]))),
       listEntriesBetween({ fromIso, toIso }),
       // Open cash is a point-in-time fact — money still in someone's drawer
       // right now — so it is deliberately NOT windowed.
       listAllOpenEntries(),
-    ]).then(([audit, cashInWindow, openCash]) => {
-      staffCapped = !!audit.capped;
+    ]).then(([perActor, cashInWindow, openCash]) => {
+      // Only true if ONE person authored more than the cap in the window.
+      staffCapped = perActor.some(([, res]) => res.capped);
       const map = new Map();
-      for (const u of users) {
-        if (normalizeRole(u.role) === 'customer') continue;
-        const mine = audit.rows.filter((r) => isActorRow(r, { uid: u.id, email: u.email }));
-        const cash = cashInWindow.filter((c) => c.agentUid === u.id);
-        const open = openCash.filter((c) => c.agentUid === u.id);
+      for (const [uid, res] of perActor) {
+        const mine = res.rows;
+        const cash = cashInWindow.filter((c) => c.agentUid === uid);
+        const open = openCash.filter((c) => c.agentUid === uid);
         const sum = (arr) => arr.reduce((n, c) => n + (Number(c.amount) || 0), 0);
-        map.set(u.id, {
+        map.set(uid, {
           checkins: countActions(mine, STAFF_ACTIONS.checkins),
           checkouts: countActions(mine, STAFF_ACTIONS.checkouts),
           reservations: countActions(mine, STAFF_ACTIONS.reservations),

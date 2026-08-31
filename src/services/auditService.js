@@ -147,6 +147,51 @@ export const AUDIT_RANGE_MAX = 1000;
  * Returns `{ rows, capped }`; a failure degrades to an empty, uncapped result
  * so the page renders its empty state instead of breaking.
  */
+/**
+ * Every audit row in a window authored by ONE person — exact, not a filtered
+ * slice of a capped range.
+ *
+ * `auditLog` records the actor under two mutually exclusive field names
+ * (verified over the whole collection: 727 rows carry `actorUid`, 2187 carry
+ * `userId`, none carry both and none carry neither), so this runs one query
+ * per shape and merges. Each needs its own composite index with `timestamp`
+ * — both are declared in firestore.indexes.json.
+ *
+ * This replaces "pull the range, filter in memory", which under-reported the
+ * moment a window exceeded AUDIT_RANGE_MAX — as the 30-day window does today
+ * (1,222 rows against a 1,000 cap). Cost here scales with what the PERSON did,
+ * not with how busy the lot was.
+ *
+ * `max` is a safety valve per query, not an expected ceiling.
+ */
+export async function listActorAuditRange({ uid, fromIso, toIso, max = AUDIT_RANGE_MAX } = {}) {
+  if (!uid) return { rows: [], capped: false };
+  const range = [];
+  if (fromIso) range.push(where('timestamp', '>=', fromIso));
+  if (toIso) range.push(where('timestamp', '<=', toIso));
+  const tail = [...range, orderBy('timestamp', 'desc'), limit(max)];
+
+  const [server, client] = await Promise.all([
+    getCollection('auditLog', where('actorUid', '==', uid), ...tail),
+    getCollection('auditLog', where('userId', '==', uid), ...tail),
+  ]);
+
+  // The two shapes are disjoint in practice; dedupe anyway so a row that ever
+  // carries both can't be counted twice.
+  const seen = new Set();
+  const merged = [];
+  for (const e of [...server, ...client]) {
+    if (!e || seen.has(e.id)) continue;
+    seen.add(e.id);
+    merged.push(e);
+  }
+  merged.sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+  return {
+    rows: await resolveActors(merged.map(toRow)),
+    capped: server.length >= max || client.length >= max,
+  };
+}
+
 export async function listAuditRange({ fromIso, toIso, max = AUDIT_RANGE_MAX } = {}) {
   try {
     const constraints = [];

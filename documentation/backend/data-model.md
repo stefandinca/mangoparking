@@ -385,7 +385,14 @@ server-side.
   Note the actor of a customer self-cancel is the **customer**, so the resolved
   label is user-supplied text — escape it when rendering.
 - **Access:** staff read; append-only.
-- **Index:** composite `(entityType ASC, timestamp DESC)`.
+- **Index:** composite `(entityType ASC, timestamp DESC)`, plus
+  `(actorUid ASC, timestamp DESC)` and `(userId ASC, timestamp DESC)` — the two
+  actor shapes, added 2026-09-01 so a person's own rows can be queried directly
+  instead of filtering a capped window. Verified over the whole collection that
+  the shapes partition it exactly: 727 rows carry `actorUid`, 2,187 carry
+  `userId`, **none carry both and none carry neither**, so the two queries
+  together are complete. (`userEmail` always accompanies `userId`, so it needs
+  no index of its own.)
 
 ## contactMessages
 
