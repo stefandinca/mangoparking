@@ -45,24 +45,67 @@ export function exportHeaders() {
   ];
 }
 
-// Lifetime spend for one user from their (already-linked) bookings + credit
+// Lifetime figures for one user from their (already-linked) bookings + credit
 // transactions. "Total paid" = actually-collected money: paid bookings'
 // gross + the amount recorded on each credit purchase (cash or online). A
 // booking that was refunded flips to paymentStatus 'refunded' and so drops
 // out of the total — exactly what an invoicing total wants.
-export function userTotals(bookings, txns) {
+//
+// `bookings` / `credits` / `totalPaid` are the CSV's three columns and must
+// keep their meaning; the rest drive the sortable Clients table on
+// /admin/users and are additive.
+export function userTotals(bookings, txns, balance = null) {
   let totalPaid = 0;
+  let longestStay = 0;
+  let totalDays = 0;
+  let cancellations = 0;
+  let noShows = 0;
+  // Most recent time this customer DID something. Deliberately keyed on when a
+  // booking was made / a credit moved, never on `dropoffAt` — a reservation for
+  // next month would otherwise stamp a customer's "last activity" in the
+  // future, which reads as nonsense in a "who has gone quiet" list.
+  let lastActivityAt = '';
+  const seen = (when) => {
+    const s = String(when || '');
+    if (s && s > lastActivityAt) lastActivityAt = s;
+  };
+
   for (const b of bookings) {
     if (b.paymentStatus === 'paid') totalPaid += Number(b.totalPrice) || 0;
+    const days = Number(b.days) || 0;
+    totalDays += days;
+    // Longest STAY is a long-term notion; a credit check-in is same-day by
+    // construction (its pick-up is that day's 20:00 cutoff).
+    if (b.type === 'longTerm' && days > longestStay) longestStay = days;
+    if (b.status === 'cancelled') cancellations += 1;
+    if (b.status === 'no-show') noShows += 1;
+    seen(b.createdAt);
   }
+
   let credits = 0;
+  let creditsUsed = 0;
   for (const tx of txns) {
     if (tx.type === 'purchase') {
       credits += Number(tx.quantity) || 0;
       totalPaid += Number(tx.amount) || 0;
     }
+    // `use` rows carry a negative quantity (one per parking day spent).
+    if (tx.type === 'use') creditsUsed += Math.abs(Number(tx.quantity) || 0);
+    seen(tx.timestamp || tx.createdAt);
   }
-  return { bookings: bookings.length, credits, totalPaid: Math.round(totalPaid) };
+
+  return {
+    bookings: bookings.length,
+    credits,
+    totalPaid: Math.round(totalPaid),
+    creditsUsed,
+    longestStay,
+    totalDays,
+    cancellations,
+    noShows,
+    lastActivityAt: lastActivityAt || null,
+    creditBalance: Number(balance?.balance) || 0,
+  };
 }
 
 // One CSV row (array of cells) for a user + their aggregated data.
@@ -105,11 +148,17 @@ function mergeBookings(a, b) {
   return out;
 }
 
-// Bulk: fetch all bookings + credit txns once, index, build a row per user.
-export async function buildUsersExport(users) {
-  const [bookings, txns] = await Promise.all([
+// Fetch the three collections once and index them by user. Shared by the CSV
+// export and the Clients table so a figure can never mean one thing in the
+// table and another in the export. ~640 docs at current volume; admins may
+// read all three (firestore.rules: `allow read: if isStaff()`).
+async function loadUserAggregates() {
+  const [bookings, txns, balances] = await Promise.all([
     getCollection('bookings'),
     getCollection('tokenTransactions'),
+    // Credit balances are uid- or plate-keyed; only the uid ones can attach to
+    // an account. Non-fatal — the balance column just shows 0.
+    getCollection('tokenBalances').catch(() => []),
   ]);
   const byCid = new Map();
   const byEmail = new Map();
@@ -122,13 +171,40 @@ export async function buildUsersExport(users) {
   for (const tx of txns) {
     if (tx.customerId) push(txByCid, tx.customerId, tx);
   }
-  const rows = users.map((u) => {
-    const merged = mergeBookings(
-      byCid.get(u.id) || [],
-      byEmail.get(String(u.email || '').toLowerCase()) || [],
-    );
-    return userRow(u, merged, txByCid.get(u.id) || []);
-  });
+  const balByUid = new Map();
+  for (const bal of balances) {
+    if (bal.id && !String(bal.id).startsWith('plate_')) balByUid.set(bal.id, bal);
+  }
+  return { byCid, byEmail, txByCid, balByUid };
+}
+
+// A user's bookings: those linked by uid PLUS those matched on contact email,
+// deduped — a guest who booked before registering is still their customer.
+function bookingsForUser(idx, user) {
+  return mergeBookings(
+    idx.byCid.get(user.id) || [],
+    idx.byEmail.get(String(user.email || '').toLowerCase()) || [],
+  );
+}
+
+/**
+ * Lifetime stats per user, keyed by uid — what the Clients tab sorts and
+ * filters on. One pass over the same data the CSV export uses.
+ * @returns {Promise<Map<string, ReturnType<typeof userTotals>>>}
+ */
+export async function buildUserStats(users) {
+  const idx = await loadUserAggregates();
+  const out = new Map();
+  for (const u of users) {
+    out.set(u.id, userTotals(bookingsForUser(idx, u), idx.txByCid.get(u.id) || [], idx.balByUid.get(u.id)));
+  }
+  return out;
+}
+
+// Bulk: fetch all bookings + credit txns once, index, build a row per user.
+export async function buildUsersExport(users) {
+  const idx = await loadUserAggregates();
+  const rows = users.map((u) => userRow(u, bookingsForUser(idx, u), idx.txByCid.get(u.id) || []));
   return { headers: exportHeaders(), rows };
 }
 

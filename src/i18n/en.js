@@ -645,6 +645,16 @@ export default {
       email: 'Email',
       role: 'Role',
       createdAt: 'Created',
+      // Sortable columns on the Clients tab
+      reservations: 'Reservations',
+      totalPaid: 'Total paid',
+      longestStay: 'Longest stay',
+      totalDays: 'Total days',
+      creditsUsed: 'Credits used',
+      cancellations: 'Cancellations',
+      noShows: 'No-shows',
+      lastActivity: 'Last activity',
+      daysShort: 'days',
     },
     usersRole: {
       customer: 'Customer',
@@ -677,9 +687,19 @@ export default {
       admin: 'Admins',
       agent: 'Agents',
       driver: 'Drivers',
-      customer: 'Customers',
+      // "Clients" over "Customers": the tab wording the team uses, and the
+      // literal counterpart of the RO "Clienți".
+      customer: 'Clients',
     },
     usersYou: '(you)',
+    usersChip: {
+      booked: 'With reservations',
+      neverBook: 'Never booked',
+      credits: 'With credits left',
+      problems: 'With cancellations / no-shows',
+    },
+    usersStatsLoading: 'Computing client statistics…',
+    usersStatsError: 'Client statistics could not be loaded.',
     usersDetail: {
       close: 'Close',
       loading: 'Loading…',

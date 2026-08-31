@@ -646,6 +646,16 @@ export default {
       email: 'Email',
       role: 'Rol',
       createdAt: 'Creat',
+      // Coloane sortabile pe tab-ul Clienți
+      reservations: 'Rezervări',
+      totalPaid: 'Total plătit',
+      longestStay: 'Cea mai lungă',
+      totalDays: 'Zile total',
+      creditsUsed: 'Credite folosite',
+      cancellations: 'Anulări',
+      noShows: 'No-show',
+      lastActivity: 'Ultima activitate',
+      daysShort: 'zile',
     },
     usersRole: {
       customer: 'Client',
@@ -681,6 +691,14 @@ export default {
       customer: 'Clienți',
     },
     usersYou: '(tu)',
+    usersChip: {
+      booked: 'Cu rezervări',
+      neverBook: 'Fără rezervări',
+      credits: 'Cu credite disponibile',
+      problems: 'Cu anulări / no-show',
+    },
+    usersStatsLoading: 'Se calculează statisticile clienților…',
+    usersStatsError: 'Statisticile clienților nu au putut fi încărcate.',
     usersDetail: {
       close: 'Închide',
       loading: 'Se încarcă…',

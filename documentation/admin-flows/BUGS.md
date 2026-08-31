@@ -20,6 +20,10 @@ invoice shipped on 2026-08-05 has failed on every desk card payment since) and
 #36 (**open**: a wrongly-flagged no-show has no recovery path in the UI).
 Running total: **15 fixed**, 4 partial, 16 open.
 
+**Updated 2026-08-31** — #21 (Users tables clip on mobile) is **fixed**, closed by
+the role-tabbed `/admin/users` rebuild. Running total: **16 fixed**, 4 partial,
+15 open.
+
 ---
 
 ## OPEN — money correctness (fix first)
@@ -52,7 +56,6 @@ Running total: **15 fixed**, 4 partial, 16 open.
 | 31 | Legal | **Saves only the currently-selected locale.** The page buffers both locales in `working[slug][locale]`, but the save handler persists `editLocale` only — edits made in the other tab are silently dropped. | `AdminLegal.js:234` — `saveLegalPage(activeSlug, editLocale, payload)`. |
 | 30 | Reviews | Per-row auto-save gives no success feedback (only an error toast), and the visible Save button is `hidden`, so there is no confirmation that anything was written. | `AdminReviews.js:37` (`hidden`), `:94` (error toast only). |
 | 23 | Vouchers | No admin visibility into who redeemed what. The "Usage" column shows only `redeemedCount / cap`, which conflates distinct holders with days consumed for splittable vouchers. | `AdminVouchers.js:56-58,76`. |
-| 21 | Users | Wide tables clip on mobile — `AdminUsers.js` is the one admin page with no `overflow-x-auto` wrapper (ten others have it). | `AdminUsers.js`. |
 | 33 | Check-ins | Mobile uses a horizontally-scrolling table rather than the card layout the v1.7 spec describes. Some responsive trimming exists (`hidden sm:inline` on phone/time), but the table still scrolls. | `AdminCheckIns.js:647`. |
 | 9 | Refunds/docs | A fully-voucher-covered cancellation routes to plain `cancelled`, while the v1.9 doc says "refund queue"; the refunds page also has no `paidBy: 'voucher'` label or channel. Money-safe — nothing was charged — but the doc and the code disagree. | `cancelBookingWithRefund` routes only `netopia` / `admin-cash` / `admin-card` to `refund-pending`. |
 
@@ -98,6 +101,7 @@ create. Carried over from the original audit; not re-checked.
 | 15 | No no-show surface; `markNoShows` missed `dropoffAt: null` | A No-show tab exists on the check-in board; `markNoShows` filters in memory and falls back to `startDate` (`scheduled.js:311-313`). |
 | 18a | Status badges raw/unlocalized; no `no-show` filter | `reservationStatusLabel` localizes with a `—`/raw-value fallback; `no-show` is in the filter options (`AdminTransactions.js:280`). |
 | 20 | Stored XSS in the users delete confirm | `AdminUsers.js:234` escapes into `safeName` before the `dataset` round-trip. |
+| 21 | Users tables clip on mobile (no `overflow-x-auto`) | **2026-08-31.** Both tables on the role-tabbed `/admin/users` sit in an `overflow-x-auto` wrapper with a `min-w` floor, which the Clients tab's eight metric columns made unavoidable; the four least-critical of those are `hidden lg:table-cell` so a laptop sees a table rather than a scrollbar. |
 | — | Everything in the 2026-06 and 2026-07 waves | See *Fix history* below. |
 
 ---

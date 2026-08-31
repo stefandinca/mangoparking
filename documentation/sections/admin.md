@@ -271,11 +271,37 @@ of departures (time, route, driver, capacity, status). Per-departure actions
 [06-dashboard-shuttle-reviews-legal](../admin-flows/06-dashboard-shuttle-reviews-legal.md).
 
 ### Users — `/admin/users` (`AdminUsers.js`) · admin-only
-Staff & customer management. Lists users grouped by role with search, **role change** (`adminChangeUserRole`, confirms on admin/demotion),
+Staff & customer management, split into four **role tabs** — Clients / Admins /
+Agents / Drivers — with a count per tab and the active tab mirrored into
+`?tab=` (so a refresh or a shared link reopens the same view; `?uid=` still
+routes to the [profile page](#user-profile--adminusersuid-adminuserprofilejs)).
+**Clients is the default tab**: it holds the largest population and the
+analysis, and the staff tabs are one click away.
+
+The **Clients tab** carries lifetime metrics per customer, each a sortable
+column (click to sort, click again to flip; counts open biggest-first, names
+and dates A→Z / oldest-first): reservations, total paid, longest stay, total
+days, credits used, cancellations, no-shows, last activity. Four quick-filter
+chips AND together with the search box — *with reservations*, *never booked*,
+*with credits left*, *with cancellations / no-shows*.
+
+Metrics come from `buildUserStats()` (`services/userExportService.js`), which
+fetches `bookings` + `tokenTransactions` + `tokenBalances` once and indexes
+them — the **same** function backing the CSV export, so a number can't mean one
+thing in the table and another in the file. Bookings are matched by
+`customerId` **and** by contact email, so a guest who booked before registering
+still counts. Loaded lazily the first time the Clients tab opens and cached for
+the page session; the three staff tabs cost nothing beyond the `users` read.
+A failure shows an error, not an innocent-looking empty table.
+
+Other actions: search, **role change** (`adminChangeUserRole`, confirms on admin/demotion),
 **delete** (`adminDeleteUser`), and two add paths: direct create (email +
 password, `adminCreateUser`) or **email invite** (magic link, `adminSendInvite` —
 completed at [/auth/finish-signup](./account.md#authfinish-signup-srcpagesauthfinishsignupjs)).
-CSV export of customers (with lifetime spend). Clicking a name opens that
+CSV export of customers (with lifetime spend) — it lives on the Clients tab
+only, since invoicing totals are customers-only, and exports that tab's current
+view (search + chips) so the file matches what is on screen. Its columns are
+unchanged. Clicking a name opens that
 user's [profile page](#user-profile--adminusersuid-adminuserprofilejs).
 Walkthrough: [04-users-accounts-roles](../admin-flows/04-users-accounts-roles.md).
 

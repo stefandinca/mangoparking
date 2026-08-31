@@ -22,7 +22,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase/config.js';
 import { getCurrentUser } from '../../firebase/auth.js';
 import { isValidEmail } from '../../utils/validators.js';
-import { buildUsersExport } from '../../services/userExportService.js';
+import { buildUsersExport, buildUserStats } from '../../services/userExportService.js';
 import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
 
 const adminCreateUserFn = httpsCallable(functions, 'adminCreateUser');
@@ -37,6 +37,38 @@ function normalizeRole(role) {
   if (role === 'staff') return 'agent';
   return ROLE_ORDER.includes(role) ? role : 'customer';
 }
+
+// ── Clients tab: sortable lifetime metrics ───────────────────────────────
+// Each column pulls one field off the stats map built by buildUserStats().
+// `num: false` marks the text/date columns, which sort ascending by default
+// (A→Z, oldest→newest) while every count sorts biggest-first — that is what
+// "most reservations" means when you click it.
+const SORTS = {
+  name:          { num: false, get: (u) => (u.displayName || u.email || '').toLowerCase() },
+  registered:    { num: false, get: (u) => String(u.createdAt || '') },
+  reservations:  { num: true,  get: (u, s) => s.bookings },
+  totalPaid:     { num: true,  get: (u, s) => s.totalPaid },
+  longestStay:   { num: true,  get: (u, s) => s.longestStay },
+  totalDays:     { num: true,  get: (u, s) => s.totalDays },
+  creditsUsed:   { num: true,  get: (u, s) => s.creditsUsed },
+  cancellations: { num: true,  get: (u, s) => s.cancellations },
+  noShows:       { num: true,  get: (u, s) => s.noShows },
+  lastActivity:  { num: false, get: (u, s) => String(s.lastActivityAt || '') },
+};
+
+// Quick filters. Each is an independent toggle AND-ed with the others, so
+// picking two contradictory ones legitimately yields an empty list.
+const CHIPS = {
+  booked:    (s) => s.bookings > 0,
+  neverBook: (s) => s.bookings === 0,
+  credits:   (s) => s.creditBalance > 0,
+  problems:  (s) => (s.cancellations + s.noShows) > 0,
+};
+
+const EMPTY_STATS = {
+  bookings: 0, credits: 0, totalPaid: 0, creditsUsed: 0, longestStay: 0,
+  totalDays: 0, cancellations: 0, noShows: 0, lastActivityAt: null, creditBalance: 0,
+};
 
 export default async function AdminUsers(container) {
   // /admin/users?uid=… is the single-user profile. The router strips the query
@@ -53,6 +85,21 @@ export default async function AdminUsers(container) {
 
   let users = [];
   let filter = '';
+  // Which role tab is open. Mirrored into ?tab= so a refresh or a shared link
+  // reopens the same view (same trick /admin/website and /admin/transactions
+  // use). Defaults to the clients tab — it is the list with the analysis on it
+  // and by far the largest population; the three staff tabs are one click away.
+  const TABS = ['customer', 'admin', 'agent', 'driver'];
+  const tabParam = new URLSearchParams(window.location.search).get('tab');
+  let activeTab = TABS.includes(tabParam) ? tabParam : 'customer';
+  // Lifetime metrics, keyed by uid. Loaded lazily the first time the clients
+  // tab is shown — the staff tabs need none of it, so opening the page to
+  // change someone's role costs the users read alone.
+  let stats = null;
+  let statsError = false;
+  let sortKey = 'reservations';
+  let sortDir = 'desc';
+  const chips = new Set();
 
   const page = AdminLayout('/admin/users', `
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -73,8 +120,12 @@ export default async function AdminUsers(container) {
       </div>
     </div>
 
+    <div data-tabs class="flex flex-wrap gap-1.5 mb-4 border-b border-frost-deep"></div>
+
     <input data-filter type="search" placeholder="${t('admin.usersSearch')}"
-      class="w-full max-w-md mb-6 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
+      class="w-full max-w-md mb-3 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
+
+    <div data-chips class="flex flex-wrap gap-2 mb-5"></div>
 
     <div data-rows>
       <div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">…</div>
@@ -86,33 +137,109 @@ export default async function AdminUsers(container) {
 
   const rows = qs('[data-rows]', page);
   const filterInput = qs('[data-filter]', page);
+  const tabsEl = qs('[data-tabs]', page);
+  const chipsEl = qs('[data-chips]', page);
 
   filterInput.addEventListener('input', (e) => {
     filter = String(e.target.value || '').toLowerCase();
+    render();
+  });
+
+  tabsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tab]');
+    if (!btn || btn.dataset.tab === activeTab) return;
+    activeTab = btn.dataset.tab;
+    // replaceState, not a router navigate: the route is unchanged and a
+    // pushState per tab click would bury the previous page under history.
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', activeTab);
+    window.history.replaceState(null, '', url.pathname + url.search);
+    ensureStats();
+    render();
+  });
+
+  chipsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-chip]');
+    if (!btn) return;
+    const key = btn.dataset.chip;
+    if (chips.has(key)) chips.delete(key); else chips.add(key);
+    render();
+  });
+
+  // Sorting: click a header to sort by it, click again to flip direction.
+  // Counts open biggest-first (that is what "most reservations" means);
+  // names and dates open A→Z / oldest-first.
+  rows.addEventListener('click', (e) => {
+    const th = e.target.closest('[data-sort]');
+    if (!th) return;
+    const key = th.dataset.sort;
+    if (!SORTS[key]) return;
+    if (sortKey === key) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+    else { sortKey = key; sortDir = SORTS[key].num ? 'desc' : 'asc'; }
     render();
   });
   qs('[data-create]', page).addEventListener('click', () => openCreateModal(reload));
   qs('[data-invite]', page).addEventListener('click', () => openInviteModal(reload));
   qs('[data-export]', page).addEventListener('click', exportCsv);
 
-  // Users currently shown (respects the search box) — shared by render + export
-  // so the CSV matches exactly what the admin is looking at.
-  function currentFiltered() {
-    return users.filter((u) => {
-      if (!filter) return true;
-      const hay = `${u.email || ''} ${u.displayName || ''}`.toLowerCase();
-      return hay.includes(filter);
+  const statsFor = (u) => (stats && stats.get(u.id)) || EMPTY_STATS;
+
+  function searchMatch(u) {
+    if (!filter) return true;
+    return `${u.email || ''} ${u.displayName || ''}`.toLowerCase().includes(filter);
+  }
+
+  function usersInTab(tab) {
+    return users.filter((u) => normalizeRole(u.role) === tab && searchMatch(u));
+  }
+
+  // The clients list exactly as displayed: search + active chips + sort.
+  // Shared by render and the CSV export so what you export is what you see.
+  function clientList() {
+    let list = usersInTab('customer');
+    for (const key of chips) {
+      const fn = CHIPS[key];
+      if (fn) list = list.filter((u) => fn(statsFor(u)));
+    }
+    const spec = SORTS[sortKey] || SORTS.name;
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return list.slice().sort((a, b) => {
+      const va = spec.get(a, statsFor(a));
+      const vb = spec.get(b, statsFor(b));
+      if (spec.num) return (Number(va) - Number(vb)) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
     });
+  }
+
+  // Lifetime metrics are only needed by the clients tab, so they are fetched
+  // the first time it is shown and cached for the page session. A failure is
+  // surfaced, not swallowed into an innocent-looking empty table (BUGS #17).
+  let statsPromise = null;
+  function ensureStats() {
+    if (activeTab !== 'customer' || stats || statsPromise) return;
+    // No users to aggregate for — settle to an empty map rather than fetching
+    // three collections, and so the table shows its empty state instead of
+    // sitting on "computing…" forever.
+    if (!users.length) { stats = new Map(); return; }
+    statsPromise = buildUserStats(users)
+      .then((m) => { stats = m; statsError = false; })
+      .catch((err) => {
+        console.error('AdminUsers: stats load failed', err);
+        statsError = true;
+      })
+      .finally(() => { statsPromise = null; render(); });
+    render();
   }
 
   // Bulk invoice export: identity + lifetime spend totals, one row per user.
   // Aggregates all bookings + credit purchases once inside buildUsersExport.
   async function exportCsv(e) {
     const btn = e.currentTarget;
-    // Invoicing is for customers only — exclude staff (admin/agent/driver, incl.
-    // the legacy 'staff' alias). The per-user modal export can still export any
-    // account you explicitly open.
-    const list = currentFiltered().filter((u) => normalizeRole(u.role) === 'customer');
+    // Invoicing is for customers only — which is why the button lives on the
+    // clients tab alone. Exports that tab's current view (search + chips), so
+    // the CSV matches what the admin is looking at. The per-user modal export
+    // can still export any account you explicitly open.
+    const list = clientList();
     if (!list.length) { showToast(t('admin.usersExport.empty'), 'info'); return; }
     const original = btn.textContent;
     btn.disabled = true;
@@ -195,78 +322,179 @@ export default async function AdminUsers(container) {
     }
   });
 
-  function render() {
-    const currentUid = getCurrentUser()?.uid;
-    const filtered = currentFiltered();
-    if (filtered.length === 0) {
+  const nfmt = (n) => Number(n || 0).toLocaleString(locale === 'en' ? 'en-GB' : 'ro-RO');
+  // A zero is information here ("never booked"), so it is shown rather than
+  // dashed out — just dimmed, so the numbers that matter carry the eye.
+  const cell = (n, suffix = '') => (Number(n) > 0
+    ? `${nfmt(n)}${suffix}`
+    : `<span class="text-dim">0${suffix}</span>`);
+
+  function roleCellHtml(u, isSelf) {
+    const currentRole = normalizeRole(u.role);
+    if (isSelf) return `<span class="text-[13px] text-dim">${t('admin.usersRole.' + currentRole)}</span>`;
+    return `<select data-action="role-change" data-uid="${escapeHtml(u.id)}" data-current="${currentRole}" class="px-2 py-1 rounded-lg border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40">
+      ${ROLE_ORDER.map((r) => `<option value="${r}" ${r === currentRole ? 'selected' : ''}>${t('admin.usersRole.' + r)}</option>`).join('')}
+    </select>`;
+  }
+
+  function nameCellHtml(u, isSelf) {
+    return `<button data-action="view" data-uid="${escapeHtml(u.id)}" class="text-left font-medium text-blueberry hover:text-blueberry-hover hover:underline transition-colors">${escapeHtml(u.displayName || u.email || '—')}</button>${isSelf ? ` <span class="text-[11px] text-dim ml-1">${t('admin.usersYou')}</span>` : ''}`;
+  }
+
+  function deleteCellHtml(u, isSelf) {
+    if (isSelf) return '';
+    return `<button data-action="delete" data-uid="${escapeHtml(u.id)}" data-name="${escapeHtml(u.displayName || u.email || '—')}" data-email="${escapeHtml(u.email || '')}" class="text-[12px] text-danger hover:underline">${t('admin.usersDelete')}</button>`;
+  }
+
+  function renderTabs() {
+    tabsEl.innerHTML = TABS.map((tab) => {
+      const n = users.filter((u) => normalizeRole(u.role) === tab).length;
+      const on = tab === activeTab;
+      return `<button type="button" data-tab="${tab}" aria-current="${on ? 'page' : 'false'}"
+        class="px-4 py-2.5 text-[14px] font-semibold rounded-t-xl border-b-2 -mb-px transition-colors ${on
+          ? 'border-mango text-blueberry-deep bg-white'
+          : 'border-transparent text-dim hover:text-charcoal'}">
+        ${t(`admin.usersGroup.${tab}`)} <span class="ml-1 font-mono text-[12px] ${on ? 'text-charcoal/50' : 'text-dim'}">${n}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function renderChips() {
+    // Chips filter on lifetime metrics, so they only apply to the clients tab.
+    if (activeTab !== 'customer') { chipsEl.innerHTML = ''; return; }
+    chipsEl.innerHTML = Object.keys(CHIPS).map((key) => {
+      const on = chips.has(key);
+      return `<button type="button" data-chip="${key}" aria-pressed="${on}"
+        class="px-3 py-1.5 rounded-full text-[13px] font-medium border transition-colors ${on
+          ? 'bg-mango border-mango text-charcoal'
+          : 'bg-white border-frost-deep text-charcoal/70 hover:border-mango/40'}">
+        ${t(`admin.usersChip.${key}`)}
+      </button>`;
+    }).join('');
+  }
+
+  function sortableTh(key, label, { right = false, extra = '' } = {}) {
+    const on = sortKey === key;
+    const arrow = on ? (sortDir === 'desc' ? ' ↓' : ' ↑') : '';
+    return `<th data-sort="${key}" role="button" tabindex="0" aria-sort="${on ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}"
+      class="px-3 py-3 whitespace-nowrap cursor-pointer select-none hover:text-charcoal ${right ? 'text-right' : 'text-left'} ${on ? 'text-charcoal' : ''} ${extra}">${escapeHtml(label)}${arrow}</th>`;
+  }
+
+  function renderStaffTable(tab, currentUid) {
+    const list = usersInTab(tab);
+    if (!list.length) {
       rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">${t('admin.usersEmpty')}</div>`;
       return;
     }
+    rows.innerHTML = `
+      <div class="bg-white rounded-2xl border border-frost-deep overflow-x-auto">
+        <table class="w-full text-[14px] min-w-[38rem]">
+          <thead class="bg-frost text-charcoal/70 text-[12px] uppercase tracking-wider">
+            <tr>
+              <th class="text-left px-4 py-3">${t('admin.usersCol.name')}</th>
+              <th class="text-left px-4 py-3">${t('admin.usersCol.email')}</th>
+              <th class="text-left px-4 py-3">${t('admin.usersCol.createdAt')}</th>
+              <th class="text-left px-4 py-3">${t('admin.usersRoleLabel')}</th>
+              <th class="text-right px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((u) => {
+              const isSelf = u.id === currentUid;
+              return `<tr class="border-t border-frost-deep">
+                <td class="px-4 py-3">${nameCellHtml(u, isSelf)}</td>
+                <td class="px-4 py-3 font-mono text-[13px]">${escapeHtml(u.email || '—')}</td>
+                <td class="px-4 py-3 text-dim whitespace-nowrap">${fmtDate(u.createdAt)}</td>
+                <td class="px-4 py-3">${roleCellHtml(u, isSelf)}</td>
+                <td class="px-4 py-3 text-right">${deleteCellHtml(u, isSelf)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
 
-    // Group by role; render in fixed order so admins always appear first.
-    const groups = ROLE_ORDER.map((role) => ({
-      role,
-      members: filtered.filter((u) => normalizeRole(u.role) === role),
-    })).filter((g) => g.members.length > 0);
+  function renderClientsTable(currentUid) {
+    if (statsError) {
+      rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-danger text-[14px]">${t('admin.usersStatsError')}</div>`;
+      return;
+    }
+    if (!stats) {
+      rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">${t('admin.usersStatsLoading')}</div>`;
+      return;
+    }
+    const list = clientList();
+    if (!list.length) {
+      rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">${t('admin.usersEmpty')}</div>`;
+      return;
+    }
+    const c = t('admin.usersCol');
+    // Eight numeric columns don't fit a laptop, let alone a phone: the four
+    // that answer "who is my best customer" stay, the rest appear from lg up.
+    // The wrapper scrolls horizontally either way (BUGS #21).
+    const lg = 'hidden lg:table-cell';
+    rows.innerHTML = `
+      <div class="bg-white rounded-2xl border border-frost-deep overflow-x-auto">
+        <table class="w-full text-[14px] min-w-[46rem]">
+          <thead class="bg-frost text-charcoal/70 text-[12px] uppercase tracking-wider">
+            <tr>
+              ${sortableTh('name', c.name)}
+              ${sortableTh('reservations', c.reservations, { right: true })}
+              ${sortableTh('totalPaid', c.totalPaid, { right: true })}
+              ${sortableTh('longestStay', c.longestStay, { right: true })}
+              ${sortableTh('totalDays', c.totalDays, { right: true, extra: lg })}
+              ${sortableTh('creditsUsed', c.creditsUsed, { right: true })}
+              ${sortableTh('cancellations', c.cancellations, { right: true, extra: lg })}
+              ${sortableTh('noShows', c.noShows, { right: true, extra: lg })}
+              ${sortableTh('lastActivity', c.lastActivity, { extra: lg })}
+              <th class="text-right px-3 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((u) => {
+              const s = statsFor(u);
+              const isSelf = u.id === currentUid;
+              return `<tr class="border-t border-frost-deep">
+                <td class="px-3 py-3">
+                  ${nameCellHtml(u, isSelf)}
+                  <div class="text-[12px] text-dim font-mono">${escapeHtml(u.email || '—')}</div>
+                </td>
+                <td class="px-3 py-3 text-right font-mono">${cell(s.bookings)}</td>
+                <td class="px-3 py-3 text-right font-mono whitespace-nowrap">${cell(s.totalPaid, ` ${t('common.lei')}`)}</td>
+                <td class="px-3 py-3 text-right font-mono whitespace-nowrap">${cell(s.longestStay, ` ${t('admin.usersCol.daysShort')}`)}</td>
+                <td class="px-3 py-3 text-right font-mono ${lg}">${cell(s.totalDays)}</td>
+                <td class="px-3 py-3 text-right font-mono">${cell(s.creditsUsed)}</td>
+                <td class="px-3 py-3 text-right font-mono ${lg}">${cell(s.cancellations)}</td>
+                <td class="px-3 py-3 text-right font-mono ${lg}">${cell(s.noShows)}</td>
+                <td class="px-3 py-3 text-dim whitespace-nowrap ${lg}">${fmtDate(s.lastActivityAt)}</td>
+                <td class="px-3 py-3 text-right">${deleteCellHtml(u, isSelf)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
 
-    rows.innerHTML = groups.map((g) => `
-      <section class="mb-6">
-        <header class="flex items-baseline justify-between mb-2 px-1">
-          <h2 class="font-heading text-[15px] font-bold text-blueberry-deep uppercase tracking-wider">
-            ${t(`admin.usersGroup.${g.role}`)}
-          </h2>
-          <span class="text-[12px] text-dim font-mono">${g.members.length}</span>
-        </header>
-        <div class="bg-white rounded-2xl border border-frost-deep overflow-hidden">
-          <table class="w-full text-[14px]">
-            <thead class="bg-frost text-charcoal/70 text-[12px] uppercase tracking-wider">
-              <tr>
-                <th class="text-left px-4 py-3">${t('admin.usersCol.name')}</th>
-                <th class="text-left px-4 py-3">${t('admin.usersCol.email')}</th>
-                <th class="text-left px-4 py-3">${t('admin.usersCol.createdAt')}</th>
-                <th class="text-left px-4 py-3">${t('admin.usersRoleLabel')}</th>
-                <th class="text-right px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${g.members.map((u) => {
-                const isSelf = u.id === currentUid;
-                const safeName = escapeHtml(u.displayName || u.email || '—');
-                const currentRole = normalizeRole(u.role);
-                return `
-                  <tr class="border-t border-frost-deep">
-                    <td class="px-4 py-3">
-                      <button data-action="view" data-uid="${escapeHtml(u.id)}" class="text-left font-medium text-blueberry hover:text-blueberry-hover hover:underline transition-colors">${escapeHtml(u.displayName || u.email || '—')}</button>${isSelf ? ` <span class="text-[11px] text-dim ml-1">${t('admin.usersYou')}</span>` : ''}
-                    </td>
-                    <td class="px-4 py-3 font-mono text-[13px]">${escapeHtml(u.email || '—')}</td>
-                    <td class="px-4 py-3 text-dim">${fmtDate(u.createdAt)}</td>
-                    <td class="px-4 py-3">
-                      ${isSelf
-                        ? `<span class="text-[13px] text-dim">${t('admin.usersRole.' + currentRole)}</span>`
-                        : `<select data-action="role-change" data-uid="${escapeHtml(u.id)}" data-current="${currentRole}" class="px-2 py-1 rounded-lg border border-frost-deep bg-white text-[13px] focus:outline-none focus:border-mango/40">
-                            ${ROLE_ORDER.map((r) => `<option value="${r}" ${r === currentRole ? 'selected' : ''}>${t('admin.usersRole.' + r)}</option>`).join('')}
-                          </select>`}
-                    </td>
-                    <td class="px-4 py-3 text-right">
-                      ${isSelf
-                        ? ''
-                        : `<button data-action="delete" data-uid="${escapeHtml(u.id)}" data-name="${safeName}" data-email="${escapeHtml(u.email || '')}" class="text-[12px] text-danger hover:underline">${t('admin.usersDelete')}</button>`}
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    `).join('');
+  function render() {
+    const currentUid = getCurrentUser()?.uid;
+    renderTabs();
+    renderChips();
+    // Invoicing export is customers-only, so it belongs to that tab alone.
+    qs('[data-export]', page).classList.toggle('hidden', activeTab !== 'customer');
+    if (activeTab === 'customer') renderClientsTable(currentUid);
+    else renderStaffTable(activeTab, currentUid);
   }
 
   async function reload() {
     try {
       users = await getCollection('users');
       users.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      // A role change moves someone between tabs, and their metrics are
+      // unaffected — but a delete must not leave a stale entry behind, so the
+      // cache is dropped and refetched with the fresh list.
+      stats = null;
       render();
+      ensureStats();
     } catch (err) {
       console.error('AdminUsers: load failed', err);
       rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-danger text-[14px]">${t('admin.usersError')}</div>`;
