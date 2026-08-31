@@ -9,7 +9,7 @@
 // Callers: AdminCheckIns (live list — its snapshot refreshes the rows, so it
 // passes a no-op onDone) and the reservation detail view (re-fetches on done).
 
-import { html, qs, escapeHtml } from '../../utils/dom.js';
+import { html, qs, escapeHtml, setFieldError, clearErrorOnInput } from '../../utils/dom.js';
 import { t } from '../../i18n/index.js';
 import { openModal, confirmModal } from '../core/Modal.js';
 import { showToast } from '../core/Toast.js';
@@ -20,7 +20,7 @@ import { checkInBooking, checkOutBooking, updateBookingDetails } from '../../ser
 import { phoneField, phoneValue } from '../core/PhoneField.js';
 import { dateTimeFieldHtml, wireDateTime } from '../core/FormDateTime.js';
 import { geoFieldsHtml, wireGeoFields, readGeoFields } from '../widgets/BillingFields.js';
-import { isValidEmail, isValidPhone, isValidLicensePlate } from '../../utils/validators.js';
+import { isValidEmail, isValidPhone, isValidLicensePlate, sanitizeCollectedAmount } from '../../utils/validators.js';
 import { bucharestLocalToIso, isoToBucharestLocal } from '../../utils/date.js';
 import { bookingDisplayCode } from '../../utils/bookingCode.js';
 import { isBrokerBooking } from '../../utils/brokerBooking.js';
@@ -502,9 +502,20 @@ export function openCollectPaymentDialog({ orderId, booking }) {
     const form = html`<form class="space-y-3" data-collect-form>
       <h3 class="font-heading font-bold text-xl text-blueberry-deep">${t('checkins.collectTitle')}</h3>
       <div class="rounded-xl bg-mango/10 border border-mango/30 px-4 py-3 text-center">
-        <p class="text-[11px] uppercase tracking-wider text-charcoal/60 font-mono">${t('checkins.amountDue')}</p>
-        <p class="font-heading font-bold text-3xl text-blueberry-deep mt-0.5"><span data-amount-due>${initialAmount}</span> ${t('common.lei')}</p>
+        <label for="collect-amount" class="block text-[11px] uppercase tracking-wider text-charcoal/60 font-mono">${t('checkins.amountDue')}</label>
+        <div class="flex items-center justify-center gap-2 mt-1">
+          <input id="collect-amount" name="collected" type="number" min="0" step="1" inputmode="numeric" disabled
+                 value="${initialAmount}"
+                 class="w-32 px-3 py-2 rounded-xl border border-frost-deep bg-white text-center font-heading font-bold text-2xl text-blueberry-deep focus:outline-none focus:border-blueberry disabled:bg-frost disabled:text-charcoal/50">
+          <span class="font-heading font-bold text-xl text-blueberry-deep">${t('common.lei')}</span>
+        </div>
         <p class="text-[12px] text-dim mt-1">${t('checkins.collectPlate', { plate: booking?.licensePlate || '—' })}</p>
+        <p class="text-[12px] text-dim mt-1" data-amount-hint>${t('checkins.collectAmountLocked')}</p>
+      </div>
+
+      <div class="hidden" data-discount-row>
+        <label class="block text-[13px] font-medium text-charcoal/70 mb-1.5">${t('checkins.discountReasonLabel')}</label>
+        <input name="discountReason" type="text" maxlength="300" placeholder="${escapeHtml(t('checkins.discountReasonPlaceholder'))}" class="w-full px-3 py-2.5 rounded-xl border border-frost-deep bg-white text-[14px] focus:outline-none focus:border-blueberry">
       </div>
 
       <div class="grid sm:grid-cols-2 gap-2">
@@ -530,22 +541,67 @@ export function openCollectPaymentDialog({ orderId, booking }) {
 
       <button type="submit" class="w-full bg-leaf hover:bg-leaf/90 text-white font-semibold text-[15px] py-3 rounded-xl transition-colors">${t('checkins.confirmPayment')}</button>
     </form>`;
+    // The amount owed, as currently known. Starts at the booking's own total
+    // (display-only fallback) and is replaced by the order's authoritative
+    // figure below, which is also what unlocks editing.
+    form.dataset.due = String(initialAmount);
     const modal = openModal(form, { onClose: () => resolve() });
 
     // Hydrate the county/locality dropdowns (lazy dataset).
     wireGeoFields(form, { county: 'county', locality: 'locality', abroad: 'abroad' });
 
-    // Refine the displayed amount from the pending order — its `amount`
-    // includes any pay-at-pickup gross-up, so it's the figure actually owed.
-    if (orderId) {
-      getDocument('pendingOrders', orderId).then((order) => {
+    const amountInput = form.querySelector('[name="collected"]');
+    const amountHint = form.querySelector('[data-amount-hint]');
+    const discountRow = form.querySelector('[data-discount-row]');
+
+    // Reflect the typed amount against what is owed: reveal the reason field
+    // (server-mandatory) as soon as the agent goes below it, and name the
+    // shortfall so a mistyped figure is obvious before it is confirmed.
+    const syncDiscountUi = () => {
+      const due = Number(form.dataset.due);
+      const value = sanitizeCollectedAmount(amountInput.value, due);
+      const short = value != null && value < due;
+      discountRow.classList.toggle('hidden', !short);
+      // Reset the hint when the agent types back up to the full amount —
+      // otherwise a stale "X lei off" line sits under a full collection.
+      amountHint.textContent = !short
+        ? t('checkins.collectAmountEditable', { due })
+        : value === 0
+          ? t('checkins.collectWaivedHint', { due })
+          : t('checkins.collectDiscountHint', { discount: due - value, due });
+    };
+
+    // Refine the amount from the pending order — its `amount` includes any
+    // pay-at-pickup gross-up and any voucher, so it's the figure actually owed
+    // and the ceiling the server validates against. Editing stays LOCKED until
+    // it arrives: the booking's own totalPrice is only a display fallback and
+    // can differ from it, so letting an agent submit an override derived from
+    // the fallback could silently collect the wrong amount. If the fetch fails
+    // the field stays read-only and no override is sent — exactly today's
+    // behaviour, where the server simply charges `pendingOrders.amount`.
+    const unlockAmount = (due) => {
+      form.dataset.due = String(due);
+      amountInput.value = String(due);
+      amountInput.max = String(due);
+      amountInput.disabled = false;
+      amountHint.textContent = t('checkins.collectAmountEditable', { due });
+      syncDiscountUi();
+    };
+    // Say so rather than leaving "loading…" up forever — the agent can still
+    // collect the full amount, they just can't discount this one from here.
+    const keepAmountLocked = () => { amountHint.textContent = t('checkins.collectAmountLockedFailed'); };
+
+    getDocument('pendingOrders', orderId)
+      .then((order) => {
         const due = Number(order?.amount);
-        if (Number.isFinite(due) && due > 0) {
-          const el = form.querySelector('[data-amount-due]');
-          if (el) el.textContent = String(due);
-        }
-      }).catch(() => { /* keep the booking total fallback */ });
-    }
+        if (Number.isFinite(due) && due > 0) unlockAmount(due);
+        else keepAmountLocked();
+      })
+      .catch(keepAmountLocked);
+
+    amountInput.addEventListener('input', syncDiscountUi);
+    clearErrorOnInput(amountInput);
+    clearErrorOnInput(form.discountReason);
 
     form.querySelector('[data-paidby]').addEventListener('change', (e) => {
       if (!e.target.matches('input[name="paidBy"]')) return;
@@ -568,10 +624,36 @@ export function openCollectPaymentDialog({ orderId, booking }) {
         showToast(t('common.error'), 'error');
         return;
       }
-      // #22: confirm the cash/card collection before recording it.
-      const amountDue = form.querySelector('[data-amount-due]')?.textContent?.trim() || '';
+      // The amount is only overridable once the order's authoritative figure
+      // has loaded (see above); until then we send nothing and the server
+      // charges what the order says.
+      const editable = !amountInput.disabled;
+      const due = Number(form.dataset.due);
+      const collected = editable ? sanitizeCollectedAmount(amountInput.value, due) : due;
+      if (editable && collected == null) {
+        showToast(t('checkins.collectAmountInvalid', { due }), 'error');
+        setFieldError(amountInput, true);
+        return;
+      }
+      const reason = form.discountReason?.value.trim() || '';
+      const isDiscount = editable && collected < due;
+      if (isDiscount && !reason) {
+        showToast(t('checkins.discountReasonRequired'), 'error');
+        setFieldError(form.discountReason, true);
+        form.discountReason.focus();
+        return;
+      }
+
+      // #22: confirm the cash/card collection before recording it. A discount
+      // gets its own copy — "confirm collecting 0 lei" reads like a no-op, so
+      // the money being written off is stated explicitly.
       const methodLabel = paidBy === 'cash' ? t('checkins.payCash') : t('checkins.payCard');
-      const confirmed = await confirmModal(t('checkins.collectConfirm', { amount: amountDue, method: methodLabel }), { confirmText: t('checkins.confirmPayment') });
+      const confirmMsg = !isDiscount
+        ? t('checkins.collectConfirm', { amount: collected, method: methodLabel })
+        : collected === 0
+          ? t('checkins.collectConfirmWaived', { due })
+          : t('checkins.collectConfirmDiscounted', { amount: collected, due, discount: due - collected, method: methodLabel });
+      const confirmed = await confirmModal(confirmMsg, { confirmText: t('checkins.confirmPayment') });
       if (!confirmed) return;
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
@@ -584,8 +666,16 @@ export function openCollectPaymentDialog({ orderId, booking }) {
           orderId,
           paidBy,
           payerDetails: { firstName, lastName, locality: geo.locality, county: geo.county, abroad: geo.abroad, address },
+          // Omitted entirely unless the agent actually collected short, so an
+          // ordinary collection keeps hitting the server's untouched path.
+          ...(isDiscount ? { collectedAmount: collected, discountReason: reason } : {}),
         });
-        showToast(t('checkins.toastMarkedPaid'), 'success');
+        showToast(
+          isDiscount
+            ? t(collected === 0 ? 'checkins.toastWaived' : 'checkins.toastMarkedPaidDiscounted', { amount: collected })
+            : t('checkins.toastMarkedPaid'),
+          'success',
+        );
         modal.close();
         resolve();
       } catch (err) {

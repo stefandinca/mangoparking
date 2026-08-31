@@ -1906,6 +1906,10 @@ async function assertAgent(request) {
 // orders, also creates the bookings doc if one doesn't already exist
 // (the pay-at-pickup flow may persist the booking immediately or defer
 // to this step — we handle both shapes).
+//
+// Optional `collectedAmount` (+ mandatory `discountReason`) lets an agent take
+// LESS than the amount due — 0 waives the reservation outright. See the desk
+// discount block below for the guards and what the discount reconciles.
 export const adminMarkOrderPaid = onCall(
   // SmartBill secrets are REQUIRED here: a POS card collection issues a fiscal
   // invoice (decision 1b, 2026-08-05). Shipping that issuance without binding
@@ -1914,8 +1918,8 @@ export const adminMarkOrderPaid = onCall(
   // 2026-08-05 rule change was meant to close.
   { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
   async (request) => {
-    const { uid } = await assertStaff(request);
-    const { orderId, paidBy, payerDetails } = request.data || {};
+    const { uid, role } = await assertStaff(request);
+    const { orderId, paidBy, payerDetails, collectedAmount, discountReason } = request.data || {};
     if (!orderId) throw new HttpsError('invalid-argument', 'Missing orderId');
     if (!['cash', 'card'].includes(paidBy)) {
       throw new HttpsError('invalid-argument', 'paidBy must be cash or card');
@@ -1944,6 +1948,51 @@ export const adminMarkOrderPaid = onCall(
       return { ok: true, alreadyPaid: true };
     }
 
+    // ── Desk discount / waiver ────────────────────────────────────────────
+    // An agent may collect LESS than the reservation is worth — down to 0, which
+    // is how a booking gets given away. `pendingOrders.amount` is the authority
+    // for what is owed (standard price net of any voucher); the client's figure
+    // is only ever a request against it.
+    //
+    // Collecting MORE is refused on purpose: that is a re-price or an overstay,
+    // and both have flows that book the extra into the right accumulator
+    // (`adminRepriceBooking` / `adminChargeOverstay`). Mirror of
+    // `sanitizeCollectedAmount` in src/utils/validators.js.
+    const dueAmount = Math.max(0, Math.round(Number(pending.amount) || 0));
+    let collected = dueAmount;
+    if (collectedAmount !== undefined && collectedAmount !== null && collectedAmount !== '') {
+      const requested = Math.round(Number(collectedAmount));
+      if (!Number.isFinite(requested) || requested < 0) {
+        throw new HttpsError('invalid-argument', 'collectedAmount must be a whole number of lei, 0 or more');
+      }
+      if (requested > dueAmount) {
+        throw new HttpsError('invalid-argument', 'collectedAmount cannot exceed the amount due — re-price the booking or charge an overstay instead');
+      }
+      collected = requested;
+    }
+    const discountAmount = dueAmount - collected;
+    let discount = null;
+    if (discountAmount > 0) {
+      // Extension top-ups accrue onto `extensionPrice` through
+      // applyExtensionSettlement, which refuses a non-positive charge and
+      // would leave `extensionOwed` dangling. Out of scope — refuse loudly
+      // rather than half-settle a booking.
+      if (pending.kind === 'extension') {
+        throw new HttpsError('failed-precondition', 'An extension top-up cannot be discounted — re-price the booking instead');
+      }
+      // Writing money off is a money operation: drivers collect the stated
+      // amount, they do not decide what a reservation costs. Same line
+      // assertAgent draws, without a second read of the user doc.
+      if (!['admin', 'agent', 'staff'].includes(role)) {
+        throw new HttpsError('permission-denied', 'Agent or admin only for a discounted collection');
+      }
+      const reason = String(discountReason || '').trim().slice(0, 300);
+      if (!reason) {
+        throw new HttpsError('invalid-argument', 'discountReason is required when collecting less than the amount due');
+      }
+      discount = { from: dueAmount, to: collected, amount: discountAmount, reason };
+    }
+
     const nowIso = new Date().toISOString();
     const paymentMark = {
       paymentStatus: 'paid',
@@ -1952,6 +2001,18 @@ export const adminMarkOrderPaid = onCall(
       status: 'paid',
       collectedByUid: uid,
       ...(payer ? { payerDetails: payer } : {}),
+      // `amount` is what every downstream money read uses — the cashbook, the
+      // fiscal line, and (via resolveChargedAmount / refundDueFrom) the refund
+      // owed. Move it to what was actually taken and keep the original beside
+      // it so the reservation record can still show the list price.
+      ...(discount ? {
+        amount: collected,
+        discountFrom: discount.from,
+        discountAmount: discount.amount,
+        discountReason: discount.reason,
+        discountedBy: uid,
+        discountedAt: nowIso,
+      } : {}),
     };
 
     // Context for the desk fiscal invoice, filled in by whichever branch runs.
@@ -1966,16 +2027,18 @@ export const adminMarkOrderPaid = onCall(
     let deskInvoice;
 
     if (pending.orderType === 'credits') {
+      // The customer keeps the credits they bought — a discount changes the
+      // price, not the quantity — so only `amount` moves on the ledger row.
       const { balanceDocId: docId, txId } = await creditTokens({
         packId: pending.packId,
         quantity: pending.quantity,
-        amount: pending.amount,
+        amount: collected,
         customerData: pending.customerData,
       });
       await orderRef.update({ ...paymentMark, balanceDocId: docId });
       deskInvoice = {
         refs: [db.collection('tokenTransactions').doc(txId), orderRef],
-        items: creditsDocItems({ amount: Number(pending.amount) || 0 }),
+        items: creditsDocItems({ amount: collected }),
         billing: pending.customerData?.billing,
         email: pending.customerData?.email,
       };
@@ -2004,6 +2067,26 @@ export const adminMarkOrderPaid = onCall(
         paidBy: paymentMark.paidBy,
         collectedByUid: uid,
       };
+      // Reconcile the booking down to what was actually taken. Load-bearing for
+      // refunds, NOT cosmetic: resolveChargedAmount (and its client mirror
+      // refundDueFrom) only trust the order's `amount` while it is > 0 and fall
+      // back to `booking.totalPrice` otherwise — so a waived booking left at the
+      // gross would later be refunded the full list price of money nobody paid.
+      // Same reconciliation the online repay path performs in netopiaCallback.
+      //
+      // `priceBeforeDiscount` keeps the list price the reservation carried, so
+      // the record can still show it and adminMarkOrderUnpaid can put it back
+      // exactly — deriving it from the order would guess wrong wherever the
+      // booking total and the order amount legitimately differ (vouchers).
+      if (discount) {
+        const priorTotal = bookingSnap.exists ? Number(bookingSnap.data().totalPrice) : NaN;
+        patch.totalPrice = collected;
+        patch.basePrice = collected;
+        patch.priceBeforeDiscount = Number.isFinite(priorTotal) ? priorTotal : discount.from;
+        patch.discountReason = discount.reason;
+        patch.discountedBy = uid;
+        patch.discountedAt = nowIso;
+      }
       // If admin captured payer details (the "Încasează acum" form), patch
       // the booking's billing field so cashbook + future invoicing have
       // a complete picture. Merge with the existing billing (e.g. PJ
@@ -2036,12 +2119,13 @@ export const adminMarkOrderPaid = onCall(
       await orderRef.update({ ...paymentMark, bookingId });
       deskInvoice = {
         refs: [bookingRef, orderRef],
-        // pending.amount is what is actually collected (standard price minus
-        // any voucher) — the same figure the collect dialog and the cashbook
-        // use. booking.totalPrice is the gross and would over-invoice.
+        // `collected` is what actually changed hands (standard price minus any
+        // voucher, minus any desk discount) — the same figure the collect
+        // dialog and the cashbook use. booking.totalPrice is the gross and
+        // would over-invoice.
         items: longTermDocItems({
           bookingCode: pending.bookingCode || (bookingSnap.exists ? bookingSnap.data().code : null),
-          amount: Number(pending.amount) || 0,
+          amount: collected,
         }),
         billing: patch.billing || (bookingSnap.exists ? bookingSnap.data().billing : null),
         email: pending.customerData?.email,
@@ -2050,11 +2134,35 @@ export const adminMarkOrderPaid = onCall(
       throw new HttpsError('invalid-argument', `Unknown orderType: ${pending.orderType}`);
     }
 
+    // A discount makes the order-time proforma — issued at the full price —
+    // wrong. Replace it with one for what was actually collected, or simply
+    // drop it when the reservation was waived outright and no money changed
+    // hands (a 0-lei fiscal document is not a thing worth issuing).
+    if (discount && deskInvoice) {
+      await smartbillDeleteProformaSafe({
+        sb: pending.smartbill,
+        refs: deskInvoice.refs,
+        label: `desk discount ${orderId}`,
+      });
+      if (collected > 0) {
+        await smartbillIssueSafe({
+          kind: 'proforma',
+          billing: deskInvoice.billing,
+          email: deskInvoice.email,
+          items: deskInvoice.items,
+          refs: deskInvoice.refs,
+          label: `desk discount ${orderId}`,
+        });
+      }
+    }
+
     // POS card collected at the desk → fiscal invoice, on the same footing as
     // an online card payment. The order-time proforma stays on the doc, exactly
     // as it does on the online flow (proforma → invoice). Best-effort, like
     // every other issuance: a SmartBill failure never breaks the collection.
-    if (paidBy === 'card' && deskInvoice) {
+    // Nothing collected (a full waiver) → no invoice: there is no sale to
+    // document, and SmartBill rejects a zero-total anyway.
+    if (paidBy === 'card' && collected > 0 && deskInvoice) {
       await smartbillIssueSafe({
         kind: 'invoice',
         billing: deskInvoice.billing,
@@ -2070,20 +2178,33 @@ export const adminMarkOrderPaid = onCall(
       entityType: 'pendingOrder',
       entityId: orderId,
       actorUid: uid,
-      payload: { code: pending.bookingCode || null, paidBy: paymentMark.paidBy, orderType: pending.orderType },
+      payload: {
+        code: pending.bookingCode || null,
+        paidBy: paymentMark.paidBy,
+        orderType: pending.orderType,
+        amount: collected,
+        // Only on a discounted collection, so an ordinary row stays as it was.
+        ...(discount ? {
+          discountFrom: discount.from,
+          discountAmount: discount.amount,
+          discountReason: discount.reason,
+          waived: collected === 0,
+        } : {}),
+      },
       timestamp: nowIso,
     });
 
     // Cashbook ledger — only cash. Card payments stay on the order doc
     // but don't enter the cashbook (per ops requirement).
     if (paidBy === 'cash') {
-      // Record what's actually collected: pending.amount is the standard
-      // price minus any voucher (and is what the collect dialog shows). Using
+      // Record what's actually collected: the standard price minus any voucher
+      // and any desk discount (the figure the collect dialog shows). Using
       // totalPrice here would ignore a pay-at-pickup voucher and overstate.
-      const cashAmount = Number(pending.amount) || 0;
+      // A fully waived reservation collects nothing, and recordCashEntry drops
+      // a non-positive amount — so no phantom row lands in the drawer.
       await recordCashEntry({
         agentUid: uid,
-        amount: cashAmount,
+        amount: collected,
         source: pending.orderType === 'credits' ? 'credits-markpaid' : 'longterm-markpaid',
         plate: pending.customerData?.licensePlate || null,
         payerName: payer ? `${payer.firstName} ${payer.lastName}`.trim() : (pending.customerData?.name || null),
@@ -2092,7 +2213,7 @@ export const adminMarkOrderPaid = onCall(
       });
     }
 
-    return { ok: true };
+    return { ok: true, collected, discounted: discountAmount > 0 };
   }
 );
 
@@ -2128,6 +2249,13 @@ export const adminMarkOrderUnpaid = onCall(
     }
 
     const nowIso = new Date().toISOString();
+    // Undo a desk discount too: this is the misclick-recovery path, so an order
+    // reversed after being collected short must go back to owing its full
+    // amount. Leaving `amount` at the reduced figure would quietly make the
+    // discount permanent — the next collection would take the discounted price
+    // as the price, with nothing on screen saying so.
+    const discountedFrom = Number(pending.discountFrom);
+    const undoDiscount = Number.isFinite(discountedFrom) && discountedFrom > 0;
     const reversalMark = {
       paymentStatus: 'unpaid',
       paidAt: null,
@@ -2135,6 +2263,14 @@ export const adminMarkOrderUnpaid = onCall(
       status: 'pending',
       reversedAt: nowIso,
       reversedBy: uid,
+      ...(undoDiscount ? {
+        amount: discountedFrom,
+        discountFrom: FieldValue.delete(),
+        discountAmount: FieldValue.delete(),
+        discountReason: FieldValue.delete(),
+        discountedBy: FieldValue.delete(),
+        discountedAt: FieldValue.delete(),
+      } : {}),
     };
 
     if (pending.orderType === 'longTerm') {
@@ -2158,11 +2294,23 @@ export const adminMarkOrderUnpaid = onCall(
       // the reservation isn't real anymore. Capacity map flips it back
       // to green/available.
       const reservedSpot = booking.spotId;
+      // Restore the list price this reservation carried before it was collected
+      // short, from the figure stamped on the booking at discount time.
+      const priorTotal = Number(booking.priceBeforeDiscount);
+      const restorePrice = Number.isFinite(priorTotal) && priorTotal > 0;
       await bookingRef.update({
         paymentStatus: 'unpaid',
         paidAt: null,
         paidBy: null,
         spotId: null,
+        ...(restorePrice ? {
+          totalPrice: priorTotal,
+          basePrice: priorTotal,
+          priceBeforeDiscount: FieldValue.delete(),
+          discountReason: FieldValue.delete(),
+          discountedBy: FieldValue.delete(),
+          discountedAt: FieldValue.delete(),
+        } : {}),
       });
       if (reservedSpot) {
         try {

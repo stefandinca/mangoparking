@@ -97,8 +97,8 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 | Fn | Line | Auth | Does / side effects |
 |---|---|---|---|
 | `mergeGuestData` | 1446 | authed + **verified email** | Merges guest `plate_*` balances, transactions, and email-matched bookings into the user's uid; patches `users` vehicles/contact. Idempotent, email-scoped, **case-insensitive** (legacy docs stored emails as typed: bookings are matched via a `customerId == null` scan, plate balances via a `plate_*` doc-id range scan). Called from Login, Register **and FinishSignup** (invite completion). Returns zero counts until `email_verified` (unverified password accounts merge on first login after verification). Harvests plates for `users.vehicles` from **both** credit balances and bookings — including bookings already linked to the uid, so an existing profile fills in its plates on the next login without a migration. |
-| `adminMarkOrderPaid` | 1909 | `assertStaff` | Flips a pay-at-pickup `pendingOrders` doc to paid; credits tokens (credits) or creates/patches + spot-reserves the booking (longTerm); records a **cash** `cashEntries` row (cash only); issues the **fiscal invoice for a card collection**; audit-logs. Idempotent. Requires `paidBy ∈ {cash,card}` + `payerDetails`. **Binds `SMARTBILL_SECRETS`** — it was shipped without them on 2026-08-05, so the card invoice failed on every call until 2026-08-21 ([BUGS #35](../admin-flows/BUGS.md)). Note it patches payment fields only and **never touches `status`**, so marking a `no-show` paid leaves it un-check-in-able ([BUGS #36](../admin-flows/BUGS.md)). |
-| `adminMarkOrderUnpaid` | 1948 | `assertStaff` | Misclick reversal of an admin cash/card mark-paid (refuses Netopia-paid). Releases the spot / claws back tokens (only if unused), deletes the **open** cash entry, audit-logs. |
+| `adminMarkOrderPaid` | 1909 | `assertStaff` | Flips a pay-at-pickup `pendingOrders` doc to paid; credits tokens (credits) or creates/patches + spot-reserves the booking (longTerm); records a **cash** `cashEntries` row (cash only); issues the **fiscal invoice for a card collection**; audit-logs. Idempotent. Requires `paidBy ∈ {cash,card}` + `payerDetails`. Optional **`collectedAmount` + `discountReason`** collect **less than is owed** — see [Desk discounts](#desk-discounts--waivers-at-collection) below. **Binds `SMARTBILL_SECRETS`** — it was shipped without them on 2026-08-05, so the card invoice failed on every call until 2026-08-21 ([BUGS #35](../admin-flows/BUGS.md)). Note it patches payment fields only and **never touches `status`**, so marking a `no-show` paid leaves it un-check-in-able ([BUGS #36](../admin-flows/BUGS.md)). |
+| `adminMarkOrderUnpaid` | 1948 | `assertStaff` | Misclick reversal of an admin cash/card mark-paid (refuses Netopia-paid). Releases the spot / claws back tokens (only if unused), deletes the **open** cash entry, **undoes a desk discount** (restores `pendingOrders.amount` from `discountFrom` and the booking's price from `priceBeforeDiscount`), audit-logs. |
 | `cancelPendingCreditOrder` | 2088 | authed (owner or staff) | Customer self-cancel of an **unpaid** pay-at-pickup credit order. Refuses paid orders. |
 
 ### Cashbook
@@ -199,6 +199,51 @@ re-quote replaces the proforma; paid extension and `adminChargeOverstay` append
 a difference proforma (`smartbill.extraProformas`); paid shortening appends a
 **partial storno** (negative-line invoice, `smartbill.partialStornos`) when the
 original was auto-issued. Statuses: `cancelled` | `storno` | `cancel-failed`.
+
+### Desk discounts / waivers at collection
+
+`adminMarkOrderPaid` accepts an optional **`collectedAmount`** (whole lei) plus a
+mandatory **`discountReason`**, so an agent taking payment at the desk can
+collect **less than the reservation is worth — including 0, which gives it
+away**. Added because there was no way to comp a booking: the amount was
+display-only and the callable always charged `pendingOrders.amount`.
+
+Guards:
+- `pendingOrders.amount` is the authority; `collectedAmount` must be
+  `0 ≤ x ≤ amount`. **Over-collecting is refused** — that is a re-price or an
+  overstay (`adminRepriceBooking` / `adminChargeOverstay`), which book the extra
+  into the right accumulator.
+- A discount requires **agent or admin** (drivers may collect the stated amount,
+  not decide what a reservation costs) and a non-empty reason (≤300 chars).
+- **Extension top-ups (`kind: 'extension'`) refuse a discount** — they settle
+  through `applyExtensionSettlement`, which rejects a non-positive charge and
+  would leave `extensionOwed` dangling.
+
+What a discount reconciles (all of it matters — a partial job corrupts money
+reads downstream):
+
+| Surface | Effect |
+|---|---|
+| `pendingOrders` | `amount` → collected, plus `discountFrom` / `discountAmount` / `discountReason` / `discountedBy` / `discountedAt` |
+| `bookings` (longTerm) | `totalPrice` + `basePrice` → collected, plus `priceBeforeDiscount` / `discountReason` / `discountedBy` / `discountedAt` |
+| `tokenTransactions` (credits) | the purchase row's `amount` → collected; **quantity is unchanged** (a discount changes the price, not the credits bought) |
+| Cashbook | records the collected figure; a 0 collection writes **no row** (`recordCashEntry` drops non-positive amounts) |
+| SmartBill | the order-time proforma is deleted and reissued at the collected amount; a **full waiver issues nothing** (no 0-lei document), and the POS-card fiscal invoice is skipped when nothing was collected |
+| `auditLog` | `order_marked_paid` carries `amount`, `discountFrom`, `discountAmount`, `discountReason`, `waived` |
+
+> **Why the booking price moves too.** `resolveChargedAmount` (and its client
+> mirror `refundDueFrom`) only trust the order's `amount` while it is `> 0` and
+> otherwise fall back to `booking.totalPrice`. A waived booking left at the gross
+> would later be refunded the **full list price of money nobody paid** — the same
+> failure mode as [BUGS #2](../admin-flows/BUGS.md). `priceBeforeDiscount` keeps
+> the list price so `adminMarkOrderUnpaid` can restore it exactly.
+
+Client side: the collect dialog's amount becomes an editable field
+(`openCollectPaymentDialog` in `src/components/admin/bookingActions.js`), unlocked
+only once the order's authoritative amount has loaded — if that read fails the
+field stays read-only and **no override is sent**, so the server charges the order
+as before. The clamp is mirrored in `sanitizeCollectedAmount`
+(`src/utils/validators.js`, unit-tested in `tests/validators.test.mjs`).
 
 **Extension "email the client" flow** — a paid booking extended via
 `adminRepriceBooking` with `paidBy:'email'` applies the new dates immediately,

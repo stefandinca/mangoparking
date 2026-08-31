@@ -5,6 +5,7 @@ import {
   isValidEmail, isValidPhone, isValidLicensePlate,
   isValidCui, isValidRegCom, isValidCnp,
   sanitizeFlightNumber, sanitizePassengerCount, sanitizeBrokerName,
+  sanitizeCollectedAmount,
 } from '../src/utils/validators.js';
 
 test('isValidEmail', () => {
@@ -132,4 +133,52 @@ test('sanitizeBrokerName: trims, blank clears to null', () => {
   assert.equal(sanitizeBrokerName('   '), null);
   assert.equal(sanitizeBrokerName(null), null);
   assert.equal(sanitizeBrokerName(undefined), null);
+});
+
+// ── Desk collection amount (discount / giveaway at collect time) ─────────
+// Mirrors the guards in adminMarkOrderPaid. The server re-applies its own
+// copy against pendingOrders.amount, so these two must not drift.
+
+test('sanitizeCollectedAmount: accepts anything from 0 up to the amount due', () => {
+  assert.equal(sanitizeCollectedAmount(220, 220), 220);
+  assert.equal(sanitizeCollectedAmount(100, 220), 100);
+  // 0 is the whole point — that is how a reservation gets given away.
+  assert.equal(sanitizeCollectedAmount(0, 220), 0);
+  assert.equal(sanitizeCollectedAmount('0', 220), 0);
+  assert.equal(sanitizeCollectedAmount('150', 220), 150);
+});
+
+test('sanitizeCollectedAmount: refuses more than is owed', () => {
+  // Over-collecting is a re-price or an overstay, not a collection.
+  assert.equal(sanitizeCollectedAmount(221, 220), null);
+  assert.equal(sanitizeCollectedAmount(1000, 220), null);
+});
+
+test('sanitizeCollectedAmount: refuses negatives and non-numbers', () => {
+  assert.equal(sanitizeCollectedAmount(-1, 220), null);
+  assert.equal(sanitizeCollectedAmount('abc', 220), null);
+  assert.equal(sanitizeCollectedAmount(NaN, 220), null);
+  assert.equal(sanitizeCollectedAmount(Infinity, 220), null);
+});
+
+test('sanitizeCollectedAmount: blank is "nothing typed", never a silent zero', () => {
+  // Number('') is 0, so an empty field would otherwise waive the booking.
+  assert.equal(sanitizeCollectedAmount('', 220), null);
+  assert.equal(sanitizeCollectedAmount('   ', 220), null);
+  assert.equal(sanitizeCollectedAmount(null, 220), null);
+  assert.equal(sanitizeCollectedAmount(undefined, 220), null);
+});
+
+test('sanitizeCollectedAmount: rounds to whole lei', () => {
+  assert.equal(sanitizeCollectedAmount(99.4, 220), 99);
+  assert.equal(sanitizeCollectedAmount(99.6, 220), 100);
+  // Rounding must not sneak past the ceiling.
+  assert.equal(sanitizeCollectedAmount(220.6, 220), null);
+});
+
+test('sanitizeCollectedAmount: an unusable due figure blocks any override', () => {
+  assert.equal(sanitizeCollectedAmount(10, NaN), null);
+  assert.equal(sanitizeCollectedAmount(10, undefined), null);
+  assert.equal(sanitizeCollectedAmount(10, ''), null);
+  assert.equal(sanitizeCollectedAmount(10, -5), null);
 });

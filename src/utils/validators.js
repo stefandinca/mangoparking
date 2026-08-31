@@ -121,3 +121,30 @@ export function sanitizeBrokerName(value) {
   const s = (value == null ? '' : String(value)).trim();
   return s || null;
 }
+
+/**
+ * What an agent may actually collect at the desk against an amount due.
+ *
+ * Whole lei in `[0, due]`. **0 is valid** — that is how a reservation gets
+ * waived outright. Anything above `due` is refused: taking MORE than the
+ * reservation is worth is not a collection, it is a re-price or an overstay
+ * charge, and both have their own flows (`adminRepriceBooking` /
+ * `adminChargeOverstay`) that book the extra money into the right accumulator.
+ *
+ * Mirrors the guards in `adminMarkOrderPaid` (functions/src/index.js) — the
+ * server re-applies them against its own `pendingOrders.amount` and never
+ * trusts this result, so keep the two identical.
+ *
+ * @returns {number|null} the amount, or null when it isn't collectable
+ */
+export function sanitizeCollectedAmount(value, due) {
+  // Blank must NOT coerce to 0 — `Number('')` is 0, so an empty field would
+  // otherwise read as "waive the whole reservation" instead of "nothing typed".
+  if (value == null || String(value).trim() === '') return null;
+  if (due == null || String(due).trim() === '') return null;
+  const max = Math.round(Number(due));
+  if (!Number.isFinite(max) || max < 0) return null;
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n < 0 || n > max) return null;
+  return n;
+}

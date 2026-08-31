@@ -88,6 +88,10 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
     `refundDueFrom` in `src/utils/refundAmount.js`, which applies the same
     precedence for rows predating them). See
     [../features/cashbook-refunds.md](../features/cashbook-refunds.md#the-refund-amount-read-this-before-touching-a-refund-surface).
+  - Desk discount: `priceBeforeDiscount` (the list price before an agent collected
+    short — `totalPrice`/`basePrice` are moved down to what was actually taken so
+    refunds don't over-pay), `discountReason`, `discountedBy`, `discountedAt`.
+    Cleared by `adminMarkOrderUnpaid`, which restores the price.
   - No-show: `noShowAt`, `noShowDetectedBy` (`'scheduled' | 'admin-cancel'`)
   - `brokerName` string|null · `notes` string|null · `createdBy` uid
   - Idempotency: `confirmEmailSentAt`, `reminderCheckinSentAt`, `reminderCheckoutSentAt`,
@@ -166,6 +170,11 @@ and [`firestore.indexes.json`](../../firestore.indexes.json). Sibling docs:
     `adminMarkOrderPaid` (arrival) → `applyExtensionSettlement`. `superseded` marks a request
     replaced by a later re-price.
   - `paidAt` / `paidBy` / `bookingId` / `balanceDocId` (set on fulfilment)
+  - **Desk discount** (an agent collected less than was owed, `adminMarkOrderPaid`):
+    `amount` moves to what was actually taken, and `discountFrom` (the pre-discount
+    amount), `discountAmount`, `discountReason`, `discountedBy`, `discountedAt`
+    record the write-off. `adminMarkOrderUnpaid` restores `amount` and clears them.
+    See [cloud-functions.md](./cloud-functions.md#desk-discounts--waivers-at-collection).
   - `netopiaAction` / `netopiaErrorCode` · repay: `repayInProgress`, `repayAmount`, `repayStartedAt`
   - `collectedByUid`, `payerDetails`, `reversedAt/By`, `cancelledAt/By`, `expiredAt`
   - `bookingCode` — reservation code minted at order time (so the order-time proforma

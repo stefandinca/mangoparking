@@ -1816,6 +1816,16 @@ export default {
     amountDue: 'Sumă de încasat',
     collectPlate: 'Placa {plate}',
     collectFirst: 'Încasează întâi',
+    // Reducere / gratuitate la încasare
+    collectAmountLocked: 'Se încarcă suma exactă…',
+    collectAmountLockedFailed: 'Suma nu a putut fi încărcată — se încasează suma din comandă.',
+    collectAmountEditable: 'De plată: {due} lei. Poți încasa mai puțin (0 = gratuit).',
+    collectAmountInvalid: 'Introdu o sumă între 0 și {due} lei.',
+    collectDiscountHint: 'Reducere de {discount} lei din {due} lei.',
+    collectWaivedHint: 'Gratuit — nu se încasează nimic din cei {due} lei.',
+    discountReasonLabel: 'Motivul reducerii',
+    discountReasonPlaceholder: 'ex. gratuitate aprobată de manager',
+    discountReasonRequired: 'Adaugă motivul reducerii.',
     resendEmail: 'Retrimite emailul',
     resendOk: 'Email de confirmare retrimis pentru {code} către {recipient}.',
     paidBy: 'Metodă plată',
@@ -1837,6 +1847,8 @@ export default {
     toastCheckedIn: 'Check-in efectuat.',
     toastCheckedOut: 'Check-out efectuat.',
     toastMarkedPaid: 'Plată înregistrată.',
+    toastMarkedPaidDiscounted: 'Plată înregistrată cu reducere ({amount} lei încasați).',
+    toastWaived: 'Rezervare oferită gratuit — nu s-a încasat nimic.',
     toastOverstayCharged: 'Depășire încasată ({amount} lei).',
     // Overstay charge dialog
     overstayTitle: 'Taxează depășirea',
@@ -1848,6 +1860,8 @@ export default {
     overstayAlreadyCharged: 'Depășirea a fost deja încasată — poți face check-out.',
     // Collection confirmation (cash/card) + overstay-before-checkout gate
     collectConfirm: 'Confirmi încasarea de {amount} lei ({method})?',
+    collectConfirmDiscounted: 'Confirmi încasarea de {amount} lei în loc de {due} lei ({method})? Se scad {discount} lei.',
+    collectConfirmWaived: 'Confirmi că rezervarea se oferă GRATUIT? Nu se încasează nimic din cei {due} lei.',
     checkoutWithoutOverstay: 'Mașina are o depășire neîncasată de {amount} lei. Faci check-out fără să încasezi?',
     checkoutAnyway: 'Check-out oricum',
     // Errors

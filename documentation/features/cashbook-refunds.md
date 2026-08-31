@@ -51,6 +51,12 @@ the booking's own total** (desk sales never create an order). The derivation
 only runs for bookings cancelled before the pinned fields shipped; the order
 fetch is skipped entirely for rows that already carry one.
 
+Note the middle step only accepts a charged amount **greater than 0**, so a
+reservation waived at the desk falls through to the booking's own total — which
+is exactly why `adminMarkOrderPaid` moves `totalPrice`/`basePrice` down to what
+was collected when it applies a discount. Without that, waiving a booking would
+set up a full-list-price refund of money nobody ever paid.
+
 ## How it works
 
 ### Cashbook
@@ -63,6 +69,15 @@ fetch is skipped entirely for rows that already carry one.
   `agentName`, and a `source` tag (`longterm-direct`, `longterm-markpaid`,
   `credits-direct`, `credits-markpaid`, `longterm-extension`, `overstay`,
   `refund`). Card payments skip it entirely.
+- **A desk discount lands in the drawer at the collected figure.** An agent may
+  collect less than a pay-later reservation is worth — down to 0, which gives it
+  away — via `collectedAmount` + `discountReason` on `adminMarkOrderPaid`. The
+  cashbook row records what was actually taken, and a full waiver writes **no
+  row at all** (`recordCashEntry` drops non-positive amounts), so the drawer
+  never counts money that never arrived. The write-off itself is on the order
+  (`discountFrom` / `discountAmount` / `discountReason` / `discountedBy`) and in
+  the `order_marked_paid` audit row. Full rules:
+  [cloud-functions → Desk discounts](../backend/cloud-functions.md#desk-discounts--waivers-at-collection).
 - **Cash refunds reverse out of the drawer** (2026-08-01). Returning cash to a
   customer physically empties the till, so `adminMarkRefunded` and
   `adminResolvePendingRefund` write a **negative** `cashEntries` row

@@ -88,7 +88,14 @@ what buys back the width the two new columns need. Each carries `title` +
 they move money and a mis-click costs a real transaction, so the mixed
 text/icon row is intentional. Actions: check-in, check-out,
 charge overstay, collect payment, cancel+refund, edit booking details, resend
-confirmation email, reprice, and transfer complete/cancel/delete. **Walk-ins** are
+confirmation email, reprice, and transfer complete/cancel/delete.
+
+**Collect payment takes an editable amount.** The dialog's "sumă de încasat" is
+a field, not a label: an agent (or admin — not a driver) can collect **less than
+is owed, including 0 to give the reservation away**, with a mandatory reason.
+The field unlocks only once the order's authoritative amount has loaded. Rules
+and everything a discount reconciles (booking price, cashbook, SmartBill, audit):
+[cloud-functions → Desk discounts](../backend/cloud-functions.md#desk-discounts--waivers-at-collection). **Walk-ins** are
 created via `CreateTransactionModal` (`openCreateTransactionModal`). Backed by
 callables `checkInBooking`, `checkOutBooking`, `adminMarkOrderPaid`,
 `cancelBookingWithRefund`, `adminChargeOverstay`, `adminRepriceBooking`,
