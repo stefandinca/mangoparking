@@ -40,7 +40,7 @@ import {
 } from './netopia.js';
 import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
 import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendBookingRequoteEmail, sendBookingCancelledEmail, sendExtensionPaidEmail } from './emails.js';
-import { notifyAdminPasswordReset } from './adminNotifications.js';
+import { notifyAdminPasswordReset, notifyAdminDeskDiscount } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
 import {
   SMARTBILL_SECRETS,
@@ -1916,7 +1916,12 @@ export const adminMarkOrderPaid = onCall(
   // them meant every desk card payment since logged "SMARTBILL_CIF secret is
   // empty" and silently stamped smartbill.status='failed' — the exact gap the
   // 2026-08-05 rule change was meant to close.
-  { region: 'europe-west1', cors: true, secrets: SMARTBILL_SECRETS },
+  //
+  // BREVO_API_KEY is bound for the same reason: a discounted collection alerts
+  // rezervari@ and re-confirms the booking to the customer. An unbound secret
+  // would make both sends fail silently — precisely how the card invoice above
+  // was inert for two weeks.
+  { region: 'europe-west1', cors: true, secrets: [...SMARTBILL_SECRETS, BREVO_API_KEY] },
   async (request) => {
     const { uid, role } = await assertStaff(request);
     const { orderId, paidBy, payerDetails, collectedAmount, discountReason } = request.data || {};
@@ -2025,6 +2030,9 @@ export const adminMarkOrderPaid = onCall(
     // and the extension branch returns before then. The falsy guard stays as
     // belt-and-braces for future branches.)
     let deskInvoice;
+    // The booking this collection settled, resolved (it may be created below,
+    // in which case the `pending` snapshot read above still has bookingId null).
+    let settledBookingId = null;
 
     if (pending.orderType === 'credits') {
       // The customer keeps the credits they bought — a discount changes the
@@ -2059,6 +2067,7 @@ export const adminMarkOrderPaid = onCall(
       // If the booking was pre-created at order time (pay-at-pickup
       // longTerm path), flip its payment fields. Otherwise create it now.
       const bookingId = pending.bookingId || await createBookingFromOrder(orderId, pending);
+      settledBookingId = bookingId;
       const bookingRef = db.collection('bookings').doc(bookingId);
       const bookingSnap = await bookingRef.get();
       const patch = {
@@ -2211,6 +2220,50 @@ export const adminMarkOrderPaid = onCall(
         orderId,
         bookingId: pending.bookingId || null,
       });
+    }
+
+    // A write-off is the one money movement with nothing on the other side of
+    // it, so it gets told to rezervari@ and (for a reservation) re-confirmed to
+    // the customer at the price actually paid. Both best-effort and both after
+    // the money is settled: the collection has already happened, and a Brevo
+    // outage must not fail it or leave the agent re-clicking a done action.
+    //
+    // Credit orders need no customer mail here — creditTokens wrote the
+    // purchase row above, and the onTokenTransactionCreated trigger emails
+    // `credit-purchase` with the discounted amount on its own.
+    if (discount) {
+      try {
+        let agentName = uid;
+        try {
+          const u = await db.collection('users').doc(uid).get();
+          agentName = u.exists ? (u.data().displayName || u.data().email || uid) : uid;
+        } catch { /* fall through with the uid */ }
+        await notifyAdminDeskDiscount({
+          code: pending.bookingCode || null,
+          plate: pending.customerData?.licensePlate || null,
+          customerName: pending.customerData?.name || null,
+          customerEmail: pending.customerData?.email || null,
+          originalAmount: discount.from,
+          collectedAmount: collected,
+          discountAmount: discount.amount,
+          reason: discount.reason,
+          paidBy,
+          agentName,
+          orderType: pending.orderType,
+        });
+      } catch (err) {
+        console.warn('desk discount ops alert failed:', err?.message);
+      }
+
+      if (settledBookingId) {
+        try {
+          // Reads the booking fresh, so it quotes the reconciled total (the
+          // patch above already landed) and the now-paid state.
+          await sendBookingConfirmationEmail(settledBookingId);
+        } catch (err) {
+          console.warn('desk discount customer email failed:', err?.message);
+        }
+      }
     }
 
     return { ok: true, collected, discounted: discountAmount > 0 };

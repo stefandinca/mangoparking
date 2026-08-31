@@ -261,6 +261,19 @@ export default async function AdminReservationDetail(container, { bookingId } = 
           // difference between refunding correctly and over-refunding.
           charged != null && Number(charged) !== Number(b.totalPrice) ? row(t('reservations.charged'), money(charged)) : '',
           order?.voucherAmount ? row(t('reservations.voucher'), `${order.promoVoucherCode || ''} −${money(order.voucherAmount)}`) : '',
+          // Desk discount / waiver: totalPrice was moved DOWN to what the agent
+          // actually collected, so without these rows the write-off is
+          // invisible — the card would just show a suspiciously low total.
+          // `priceBeforeDiscount` is stamped by adminMarkOrderPaid.
+          b.priceBeforeDiscount != null ? row(t('reservations.priceBeforeDiscount'), money(b.priceBeforeDiscount)) : '',
+          b.priceBeforeDiscount != null
+            ? row(
+              Number(b.totalPrice) === 0 ? t('reservations.waived') : t('reservations.deskDiscount'),
+              money(Math.max(0, Number(b.priceBeforeDiscount) - Number(b.totalPrice || 0))),
+            )
+            : '',
+          b.discountReason ? row(t('reservations.discountReason'), b.discountReason) : '',
+          b.discountedAt ? row(t('reservations.discountedAt'), fmtDateTime(b.discountedAt, locale)) : '',
           row(t('reservations.basePrice'), money(b.basePrice)),
           b.latePrice ? row(t('reservations.latePrice'), money(b.latePrice)) : '',
           b.extensionPrice ? row(t('reservations.extensionPrice'), money(b.extensionPrice)) : '',

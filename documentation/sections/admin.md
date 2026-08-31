@@ -93,8 +93,11 @@ confirmation email, reprice, and transfer complete/cancel/delete.
 **Collect payment takes an editable amount.** The dialog's "sumă de încasat" is
 a field, not a label: an agent (or admin — not a driver) can collect **less than
 is owed, including 0 to give the reservation away**, with a mandatory reason.
-The field unlocks only once the order's authoritative amount has loaded. Rules
-and everything a discount reconciles (booking price, cashbook, SmartBill, audit):
+The field unlocks only once the order's authoritative amount has loaded. A
+discount alerts rezervari@ (who wrote off how much, why) and — for a
+reservation — re-confirms the booking to the customer at the price actually
+paid. Rules and everything a discount reconciles (booking price, cashbook,
+SmartBill, audit, notifications):
 [cloud-functions → Desk discounts](../backend/cloud-functions.md#desk-discounts--waivers-at-collection). **Walk-ins** are
 created via `CreateTransactionModal` (`openCreateTransactionModal`). Backed by
 callables `checkInBooking`, `checkOutBooking`, `adminMarkOrderPaid`,
@@ -144,6 +147,13 @@ The full record behind one booking — previously ~15 of its ~60 fields were
 visible anywhere. Cards: customer & vehicle · stay · money · payment &
 invoicing · billing · operations. Empty fields are dropped, so a broker row
 shows its ParkVia trail and a web row shows its billing identity.
+
+A **desk discount** shows in the money card: price before the discount, the
+amount written off (labelled *given for free* when the total reached 0), the
+reason and when. Without them the card would just show a suspiciously low total,
+since `totalPrice` is moved down to what was collected. The rows appear only when
+`priceBeforeDiscount` is set; the actor is left to the history block below, which
+resolves a uid to a person.
 
 Three things it surfaces that had no UI at all:
 - **What was actually charged.** `booking.totalPrice` is the gross; the linked

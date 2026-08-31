@@ -257,6 +257,7 @@ reply straight from the alert.
 | `adminNotifyBookingCancelled` (`:189`) | `bookings/{id}` update (status change) | "Rezervare anulată" / "Anulare cu refund de procesat" / "No-show", **and** "Refund procesat" on the `refunded` transition. Claims: `adminCancelNotifiedAt`, `adminRefundNotifiedAt`. |
 | `adminNotifyCreditPurchase` (`:251`) | `tokenTransactions/{id}` create (`type:'purchase'`) | "Credite cumpărate" — quantity, amount, plate, buyer, pay method. Claim: `adminNotifiedAt`. |
 | `notifyAdminPasswordReset` (`:294`) | called from `requestPasswordReset` | "Cerere de resetare parolă". Not a trigger — only invoked after a link was minted (i.e. the account exists), so it can't enumerate accounts. |
+| `notifyAdminDeskDiscount` | called from `adminMarkOrderPaid` | "Reducere acordată la încasare" / "Rezervare oferită gratuit" — code, plate, customer, amount due vs collected, the write-off, the mandatory reason, method, and the agent who granted it. **The one deliberate exception to the customer-initiated-only scope**: collecting a payment changes no `status`, so no trigger sees it, and a write-off is the only money movement with nothing on the other side of it. See [cloud-functions → Desk discounts](./cloud-functions.md#desk-discounts--waivers-at-collection). |
 | `onContactMessageCreated` (`emails.js:517`) | `contactMessages/{id}` create | "Contact site: …" — the site contact form; `replyTo` = the submitter. |
 
 Because these share the same source collections as channel 1's triggers

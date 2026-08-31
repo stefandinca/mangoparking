@@ -97,7 +97,7 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 | Fn | Line | Auth | Does / side effects |
 |---|---|---|---|
 | `mergeGuestData` | 1446 | authed + **verified email** | Merges guest `plate_*` balances, transactions, and email-matched bookings into the user's uid; patches `users` vehicles/contact. Idempotent, email-scoped, **case-insensitive** (legacy docs stored emails as typed: bookings are matched via a `customerId == null` scan, plate balances via a `plate_*` doc-id range scan). Called from Login, Register **and FinishSignup** (invite completion). Returns zero counts until `email_verified` (unverified password accounts merge on first login after verification). Harvests plates for `users.vehicles` from **both** credit balances and bookings — including bookings already linked to the uid, so an existing profile fills in its plates on the next login without a migration. |
-| `adminMarkOrderPaid` | 1909 | `assertStaff` | Flips a pay-at-pickup `pendingOrders` doc to paid; credits tokens (credits) or creates/patches + spot-reserves the booking (longTerm); records a **cash** `cashEntries` row (cash only); issues the **fiscal invoice for a card collection**; audit-logs. Idempotent. Requires `paidBy ∈ {cash,card}` + `payerDetails`. Optional **`collectedAmount` + `discountReason`** collect **less than is owed** — see [Desk discounts](#desk-discounts--waivers-at-collection) below. **Binds `SMARTBILL_SECRETS`** — it was shipped without them on 2026-08-05, so the card invoice failed on every call until 2026-08-21 ([BUGS #35](../admin-flows/BUGS.md)). Note it patches payment fields only and **never touches `status`**, so marking a `no-show` paid leaves it un-check-in-able ([BUGS #36](../admin-flows/BUGS.md)). |
+| `adminMarkOrderPaid` | 1909 | `assertStaff` | Flips a pay-at-pickup `pendingOrders` doc to paid; credits tokens (credits) or creates/patches + spot-reserves the booking (longTerm); records a **cash** `cashEntries` row (cash only); issues the **fiscal invoice for a card collection**; audit-logs. Idempotent. Requires `paidBy ∈ {cash,card}` + `payerDetails`. Optional **`collectedAmount` + `discountReason`** collect **less than is owed** — see [Desk discounts](#desk-discounts--waivers-at-collection) below. **Binds `SMARTBILL_SECRETS` + `BREVO_API_KEY`** (the latter for the discount alert / re-confirmation) — it was shipped without the SmartBill trio on 2026-08-05, so the card invoice failed on every call until 2026-08-21 ([BUGS #35](../admin-flows/BUGS.md)). Note it patches payment fields only and **never touches `status`**, so marking a `no-show` paid leaves it un-check-in-able ([BUGS #36](../admin-flows/BUGS.md)). |
 | `adminMarkOrderUnpaid` | 1948 | `assertStaff` | Misclick reversal of an admin cash/card mark-paid (refuses Netopia-paid). Releases the spot / claws back tokens (only if unused), deletes the **open** cash entry, **undoes a desk discount** (restores `pendingOrders.amount` from `discountFrom` and the booking's price from `priceBeforeDiscount`), audit-logs. |
 | `cancelPendingCreditOrder` | 2088 | authed (owner or staff) | Customer self-cancel of an **unpaid** pay-at-pickup credit order. Refuses paid orders. |
 
@@ -230,6 +230,8 @@ reads downstream):
 | Cashbook | records the collected figure; a 0 collection writes **no row** (`recordCashEntry` drops non-positive amounts) |
 | SmartBill | the order-time proforma is deleted and reissued at the collected amount; a **full waiver issues nothing** (no 0-lei document), and the POS-card fiscal invoice is skipped when nothing was collected |
 | `auditLog` | `order_marked_paid` carries `amount`, `discountFrom`, `discountAmount`, `discountReason`, `waived` |
+| Ops alert | `notifyAdminDeskDiscount` mails rezervari@ (who wrote off how much, why, on which reservation) |
+| Customer | a discounted **longTerm** collection re-sends `booking-longterm-confirm` at the reconciled total; **credits need nothing** — `creditTokens` writes the purchase row and `onTokenTransactionCreated` already emails `credit-purchase` at the discounted amount |
 
 > **Why the booking price moves too.** `resolveChargedAmount` (and its client
 > mirror `refundDueFrom`) only trust the order's `amount` while it is `> 0` and
@@ -237,6 +239,25 @@ reads downstream):
 > would later be refunded the **full list price of money nobody paid** — the same
 > failure mode as [BUGS #2](../admin-flows/BUGS.md). `priceBeforeDiscount` keeps
 > the list price so `adminMarkOrderUnpaid` can restore it exactly.
+
+Both sends are best-effort and run **after** the money is settled — a Brevo
+outage must not fail a collection that already happened. `adminMarkOrderPaid`
+therefore binds **`BREVO_API_KEY` alongside `SMARTBILL_SECRETS`**; an unbound
+secret would make both fail silently, which is exactly how the POS-card invoice
+sat inert for two weeks ([BUGS #35](../admin-flows/BUGS.md)).
+
+The ops alert is the one deliberate exception to `adminNotifications.js`'s
+"customer-initiated only" rule. It *is* a staff action — and that is the point:
+every other money movement reaches rezervari@ on its own, so a write-off, the
+one movement with nothing on the other side of it, would otherwise be visible
+only to whoever thought to open `/admin/audit`.
+
+The write-off is surfaced on the reservation record's **money card**
+(`AdminReservationDetail.js`): price before discount, the amount written off
+(labelled *given for free* when the total reached 0), the reason, and when. They
+render only when `priceBeforeDiscount` is set, so an ordinary booking is
+unchanged. The actor is deliberately **not** shown there — `discountedBy` is a
+raw uid; the booking's own audit history resolves it to a person.
 
 Client side: the collect dialog's amount becomes an editable field
 (`openCollectPaymentDialog` in `src/components/admin/bookingActions.js`), unlocked
@@ -295,7 +316,8 @@ activity so staff aren't pinged for their own desk actions.
 | `adminNotifyBookingCancelled` | 189 | `bookings/{id}` update | Status change → cancelled / refund-pending / no-show / refunded. Claims: `adminCancelNotifiedAt`, `adminRefundNotifiedAt`. |
 | `adminNotifyCreditPurchase` | 251 | `tokenTransactions/{id}` create | Credit purchase (`type='purchase'`). Claim: `adminNotifiedAt`. |
 
-`notifyAdminPasswordReset` (exported, not a trigger) is called from `requestPasswordReset`.
+`notifyAdminPasswordReset` and `notifyAdminDeskDiscount` (exported, not triggers) are
+called from `requestPasswordReset` and `adminMarkOrderPaid` respectively.
 
 ---
 

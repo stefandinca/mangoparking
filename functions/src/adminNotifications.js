@@ -291,6 +291,51 @@ export const adminNotifyCreditPurchase = onDocumentCreated(
 // Not a Firestore trigger — called directly from the requestPasswordReset
 // callable AFTER a reset link was generated (i.e. the account exists), so it
 // never fires for unknown emails and can't be used to enumerate accounts.
+// ── desk discount / waiver ───────────────────────────────────────────────
+// Called directly from adminMarkOrderPaid (not a trigger — collecting a
+// payment changes no `status`, so nothing an onDocumentUpdated watcher would
+// catch, and the amounts it needs live across the order AND the booking).
+//
+// The one deliberate exception to the customer-initiated-only rule at the top
+// of this file: this IS a staff action, and that is exactly why it is worth
+// sending. Every other money event reaches rezervari@ on its own, so a
+// write-off — the one movement with nothing on the other side of it — would
+// otherwise be visible only to whoever thinks to open /admin/audit.
+export async function notifyAdminDeskDiscount({
+  code, plate, customerName, customerEmail,
+  originalAmount, collectedAmount, discountAmount, reason,
+  paidBy, agentName, orderType,
+}) {
+  const waived = Number(collectedAmount) === 0;
+  const label = orderType === 'credits' ? 'Credite' : 'Rezervare';
+  return notifyAdmin({
+    subject: waived
+      ? `GRATUIT acordat: ${code || '—'} — ${normalizePlate(plate) || '—'}`
+      : `Reducere ${discountAmount} lei: ${code || '—'} — ${normalizePlate(plate) || '—'}`,
+    heading: waived ? 'Rezervare oferită gratuit' : 'Reducere acordată la încasare',
+    intro: waived
+      ? `Nu s-a încasat nimic din cei ${originalAmount} lei.`
+      : `S-au încasat ${collectedAmount} lei din ${originalAmount} lei.`,
+    rows: [
+      ['Tip', escHtml(label)],
+      ['Cod', escHtml(code || '—')],
+      ['Plăcuță', escHtml(normalizePlate(plate) || '—')],
+      ['Client', escHtml(customerName || '—')],
+      ['Email', mailto(customerEmail)],
+      ['De plată', `${escHtml(String(originalAmount ?? 0))} lei`],
+      ['Încasat', `<strong>${escHtml(String(collectedAmount ?? 0))} lei</strong>`],
+      ['Reducere', `<strong>${escHtml(String(discountAmount ?? 0))} lei</strong>`],
+      ['Motiv', escHtml(reason || '—')],
+      ['Metodă', escHtml(paidBy === 'card' ? 'Card' : 'Numerar')],
+      ['Acordată de', escHtml(agentName || '—')],
+      ['Data', escHtml(fmtDateTime(new Date().toISOString()))],
+    ],
+    note: 'Acțiune de birou — vezi jurnalul de acțiuni (/admin/audit) pentru istoricul complet.',
+    replyTo: replyToOf(customerEmail, customerName),
+    tags: ['desk-discount'],
+  });
+}
+
 export async function notifyAdminPasswordReset({ email, displayName }) {
   return notifyAdmin({
     subject: `Resetare parolă cerută: ${displayName || email}`,
