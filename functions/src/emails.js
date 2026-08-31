@@ -255,6 +255,18 @@ export async function sendBookingConfirmationEmail(bookingId) {
 
   const paid = isBroker || booking.paymentStatus !== 'unpaid';
   const discountPct = paid ? 0 : await getOnlineDiscount();
+
+  // Desk discount / waiver. `adminMarkOrderPaid` moves `totalPrice` DOWN to
+  // what the agent actually collected, so without these the email states a
+  // mysteriously low total — "Total plătit: 0 lei" with nothing explaining it.
+  // `priceBeforeDiscount` is the list price stamped at discount time.
+  const chargedAmount = Number(booking.totalPrice) || 0;
+  const beforeDiscount = Number(booking.priceBeforeDiscount);
+  const discounted = Number.isFinite(beforeDiscount) && beforeDiscount > chargedAmount;
+  // "Achitat online" is wrong for money taken at the desk, and absurd for a
+  // reservation given away — but the wording is localized, so the template
+  // branches on these flags rather than receiving a ready-made string.
+  const paidAtDesk = booking.paidBy === 'admin-cash' || booking.paidBy === 'admin-card';
   // Pay-online recovery link — the orderId is in the URL; the /pay page
   // re-enters Netopia for an existing pay-at-pickup order, applying the
   // online discount.
@@ -283,6 +295,16 @@ export async function sendBookingConfirmationEmail(bookingId) {
       // prepaid broker booking (our figures aren't the ones the customer
       // agreed to) and name who they booked through instead.
       broker: isBroker,
+      // Desk collection wording + the discount breakdown. Absent params
+      // resolve to '' in Brevo, i.e. falsy, so every other sender of this
+      // template keeps its current rendering.
+      paidAtDesk,
+      discounted,
+      ...(discounted ? {
+        waived: chargedAmount === 0,
+        originalAmount: Math.round(beforeDiscount),
+        discountAmount: Math.round(beforeDiscount - chargedAmount),
+      } : {}),
     },
   });
   return result?.ok

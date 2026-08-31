@@ -37,12 +37,23 @@
 <td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">🚗 Vehicle</td>
 <td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-family:'JetBrains Mono',Consolas,monospace;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{{ params.plate }}</td>
 </tr>
-{# Broker/prepaid paid the broker at the broker's price: show NO payment info — no method, no amount. Comments must stay on ONE line (Brevo's lexer rejects a newline inside {# #}). #}
+{# Broker/prepaid paid the broker at the broker's price: show NO payment info — no method, no amount. Comments must stay on ONE line and must not contain the closing delimiter. #}
 {% if not params.broker %}
 <tr>
 <td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">💳 Payment</td>
-<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{% if params.paid %}Paid online{% else %}Pay on arrival{% endif %}</td>
+<td style="padding:8px 0;font-size:14px;color:#1A1A1A;font-weight:600;text-align:right;border-top:1px solid #EDE3CC;">{% if params.waived %}Free of charge{% else %}{% if params.paidAtDesk %}Paid at the location{% else %}{% if params.paid %}Paid online{% else %}Pay on arrival{% endif %}{% endif %}{% endif %}</td>
 </tr>
+{# A desk discount moved totalAmount down to what was collected: show the list price and the reduction so the total is explained, not just low. Comments must stay on ONE line and must not contain the closing delimiter. #}
+{% if params.discounted %}
+<tr>
+<td style="padding:8px 0;font-size:14px;color:#666;border-top:1px solid #EDE3CC;">Standard price</td>
+<td style="padding:8px 0;font-size:14px;color:#666;text-align:right;border-top:1px solid #EDE3CC;text-decoration:line-through;">{{ params.originalAmount }} lei</td>
+</tr>
+<tr>
+<td style="padding:8px 0;font-size:14px;color:#4FBD46;border-top:1px solid #EDE3CC;font-weight:600;">{% if params.waived %}Given free of charge{% else %}Discount applied{% endif %}</td>
+<td style="padding:8px 0;font-size:14px;color:#4FBD46;font-weight:700;text-align:right;border-top:1px solid #EDE3CC;">−{{ params.discountAmount }} lei</td>
+</tr>
+{% endif %}
 <tr>
 <td style="padding:12px 0 4px;font-size:14px;color:#666;border-top:1px solid #EDE3CC;font-weight:600;">Total {% if params.paid %}paid{% else %}due on arrival{% endif %}</td>
 <td style="padding:12px 0 4px;font-size:18px;color:#0F2D66;font-weight:700;text-align:right;border-top:1px solid #EDE3CC;">{{ params.totalAmount }} lei</td>

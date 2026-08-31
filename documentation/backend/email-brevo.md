@@ -51,7 +51,7 @@ every template with an ID:
 | `signup-welcome` | 4 / 5 | `onUserCreated` |
 | `password-reset` | 6 / 7 | `requestPasswordReset` |
 | `admin-invite` | 8 / 1 | `adminSendInvite` |
-| `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail`. **Broker/prepaid bookings** (ParkVia, Parkos et al.) pass `broker:true`, which strips the entire payment block — method, total and the pay-online promo — see [Broker bookings](#broker--prepaid-bookings-carry-no-payment-information). |
+| `booking-longterm-confirm` | 2 / 9 | `onBookingCreated`, `sendBookingConfirmationEmail`, `sendRepayPaidEmail`. **Payment wording is four-way**, not paid/unpaid: `waived` → "oferit gratuit", else `paidAtDesk` (`paidBy` is `admin-cash`/`admin-card`) → "achitat la fața locului", else `paid` → "achitat online", else "plata la sosire" — desk collections used to claim "achitat online". With `discounted` it also prints **standard price (struck) + the reduction** above the total, because a desk discount moves `totalPrice` down to what was collected and the total would otherwise just look mysteriously low. **Broker/prepaid bookings** (ParkVia, Parkos et al.) pass `broker:true`, which strips the entire payment block — method, total and the pay-online promo — see [Broker bookings](#broker--prepaid-bookings-carry-no-payment-information). |
 | `booking-refunded` | 22 / 21 | `sendRefundIssuedEmail` |
 | `booking-cancelled` | 29 / 30 | `sendBookingCancelledEmail` — cancellation confirmation; with `refundPending:true`, adds a "refund on its way" box (card vs desk wording via `channel`). |
 | `booking-repriced` | 28 / 27 | `sendBookingRepricedEmail`, `sendExtensionPaidEmail`, `sendBookingRequoteEmail` — extension payment request (pay online w/ discount, or at arrival) + its paid follow-up; with `requote:true`, the unpaid-re-quote variant showing the new total instead of a difference. |
@@ -145,11 +145,16 @@ Template edits need a push to reach customers:
 
 **Two template-syntax traps, both learned the hard way:**
 
-1. **`{# … #}` comments must stay on ONE line.** A newline inside one makes
-   Brevo reject the whole push with
+1. **`{# … #}` comments must stay on ONE line, and must not contain `#}`.** A
+   newline inside one makes Brevo reject the whole push with
    `invalid_parameter … Newline not permitted in a single-line comment`.
    The API validates before writing, so a bad template fails loudly rather than
    corrupting the live one — but the push does abort partway through a batch.
+   A comment that *quotes* the closing delimiter is worse, because it pushes
+   fine: the lexer closes at the first `#}` and the remainder (`). #}`) renders
+   as literal text in the email. Two comments in
+   `booking-longterm-confirm-{ro,en}` did exactly that until 2026-08-31 — the
+   irony being that the sentence which leaked was the one explaining the rule.
 2. **Test an absent param with `{% if not params.x %}`, never `{% if params.x == false %}`.**
    Brevo resolves a missing param to `''`, and `'' == false` is falsy — so the
    `== false` form silently *hides* a block for every sender that doesn't pass
