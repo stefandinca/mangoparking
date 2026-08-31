@@ -338,6 +338,17 @@ old modal. The router matches on path only, so this lives behind the same
 - **"What did this person do"**: a date range (the shared preset/custom bar),
   a stat row — check-ins, check-outs, reservations created, payments taken,
   total actions — and the paginated list of those actions.
+- **Customers get lifetime figures instead of those tiles** (fixed 2026-09-01).
+  The action tiles count `auditLog` rows where the person is the **actor**, and
+  a customer is the *subject* of admin actions, never their author — so every
+  customer profile showed five zeros at every range, which read as a bug even
+  though the counting was correct. Customers now see reservations, total paid,
+  longest stay, credits used and cancellations, from `buildSingleUserStats()`
+  (the single-user sibling of the Clients tab's `buildUserStats`, so both
+  surfaces report the same figures). These are **lifetime** and not period-
+  scoped, which the caption states, since the range bar above still governs the
+  action list. That list stays for customers too — a customer self-cancel does
+  write an audit row with the customer as actor.
 - Rows come from `auditLog` **where they are the actor**. Actor matching has to
   cover both writer shapes (`actorUid` server-side, `userEmail` client-side),
   which one Firestore query can't do, so the page reuses the capped range query
@@ -368,7 +379,12 @@ restriction would be cosmetic.
   Filters apply to the whole range, then the result is **paginated
   client-side** (25/page) — a cursor page would filter only its own slice.
 - The range query is capped at `AUDIT_RANGE_MAX` (1000). Hitting the cap shows
-  a notice rather than truncating silently.
+  a notice rather than truncating silently. ⚠️ **The 30-day window now exceeds
+  that cap** — 1,222 rows in the 30 days to 2026-09-01 — so the default view on
+  this page *and* on the users staff tabs under-reports until the cap is raised
+  or the actor queries get their own composite indexes
+  (`actorUid`+`timestamp`, `userId`+`timestamp`). The notice fires, so it is
+  visible rather than silent, but the counts are a floor.
 - Range, page and search are mirrored into the URL, so a refresh or a shared
   link reopens the same view.
 - Rows render through the shared `auditFormat.js` helpers (`actionStyle`,

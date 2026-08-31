@@ -1334,6 +1334,8 @@ export default {
     statPayments: 'Plăți încasate',
     statTotal: 'Total acțiuni',
     noActivity: 'Nicio acțiune a acestui utilizator în perioada selectată',
+    lifetimeNote: 'Cifre pe toată durata contului — nu depind de perioada selectată. Intervalul de mai sus filtrează doar lista de acțiuni.',
+    lifetimeError: 'Statisticile clientului nu au putut fi încărcate.',
     notFound: 'Utilizatorul nu a fost găsit',
   },
 

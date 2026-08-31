@@ -12,7 +12,7 @@
 // users). The single path queries just that user's rows (unlimited, so the
 // total isn't truncated the way the modal's 50-row preview is).
 
-import { getCollection, where } from '../firebase/db.js';
+import { getCollection, getDocument, where } from '../firebase/db.js';
 import { t } from '../i18n/index.js';
 
 function billingName(b) {
@@ -206,6 +206,28 @@ export async function buildUsersExport(users) {
   const idx = await loadUserAggregates();
   const rows = users.map((u) => userRow(u, bookingsForUser(idx, u), idx.txByCid.get(u.id) || []));
   return { headers: exportHeaders(), rows };
+}
+
+/**
+ * Lifetime stats for ONE user, querying only their rows rather than pulling
+ * the whole collections the way buildUserStats does for the list. Same
+ * `userTotals` shape, so the profile page and the Clients tab report identical
+ * figures for the same person.
+ *
+ * Errors propagate: the caller renders a failure state, because a zeroed stat
+ * block that actually means "the read failed" is indistinguishable from a
+ * customer who genuinely never booked.
+ */
+export async function buildSingleUserStats(user) {
+  const uid = user?.id;
+  const email = user?.email;
+  const [byId, byEmail, txns, balance] = await Promise.all([
+    uid ? getCollection('bookings', where('customerId', '==', uid)) : Promise.resolve([]),
+    email ? getCollection('bookings', where('contact.email', '==', email)) : Promise.resolve([]),
+    uid ? getCollection('tokenTransactions', where('customerId', '==', uid)) : Promise.resolve([]),
+    uid ? getDocument('tokenBalances', uid).catch(() => null) : Promise.resolve(null),
+  ]);
+  return userTotals(mergeBookings(byId, byEmail), txns, balance);
 }
 
 // Single user: query just this user's rows (unlimited) and build one row.

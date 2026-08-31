@@ -1334,6 +1334,8 @@ export default {
     statPayments: 'Payments taken',
     statTotal: 'Total actions',
     noActivity: 'No actions by this user in this period',
+    lifetimeNote: 'Lifetime figures — not affected by the selected period. The range above filters the action list only.',
+    lifetimeError: 'Client statistics could not be loaded.',
     notFound: 'User not found',
   },
 

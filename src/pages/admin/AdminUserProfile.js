@@ -3,7 +3,16 @@
 // "What did this person DO, in this period." Reached by clicking a name in the
 // users list. The period-scoped block counts and lists the actions they
 // performed — check-ins, check-outs, reservations created, payments collected,
-// refunds — read from `auditLog` where THEY are the actor. Under it sit the
+// refunds — read from `auditLog` where THEY are the actor.
+//
+// That question only makes sense for STAFF. A customer is the subject of admin
+// actions, never their actor, so those tiles were structurally 0 on every
+// customer profile at every range — which read as a bug even though the
+// counting was right. Customers therefore get LIFETIME figures instead
+// (reservations, spend, longest stay, credits used, cancellations), the same
+// set the Clients tab shows, via buildSingleUserStats. The activity list below
+// stays for everyone: a customer self-cancel does write an audit row with the
+// customer as actor. Under it sit the
 // same read-only detail sections the user modal renders (profile, vehicles,
 // billing, credits, vouchers, their bookings + credit ledger), reused from
 // UserDetailModal rather than duplicated.
@@ -29,6 +38,7 @@ import { rangeBarHtml, mountRangePicker, pagerHtml } from '../../components/admi
 import { renderUserSections } from '../../components/admin/UserDetailModal.js';
 import { bucharestLocalToIso } from '../../utils/date.js';
 import { normalizeRole } from '../../utils/permissions.js';
+import { buildSingleUserStats } from '../../services/userExportService.js';
 
 const PAGE_SIZE = 25;
 
@@ -70,8 +80,12 @@ export default async function AdminUserProfile(container, { uid } = {}) {
   let capped = false;
   let loading = true;
   let rangeFp = null;
+  // Customers get lifetime figures instead of the actor tiles (see renderStats).
+  let lifetime = null;
+  let lifetimeError = false;
 
   const user = await getDocument('users', userId).catch(() => null);
+  const isCustomer = normalizeRole(user?.role) === 'customer';
 
   updateMeta({
     title: `${user?.displayName || user?.email || t('admin.users')} — Admin — ManGO Parking`,
@@ -131,6 +145,30 @@ export default async function AdminUserProfile(container, { uid } = {}) {
   }
 
   function renderStats() {
+    // A CUSTOMER is never the actor of an admin action — they are its subject —
+    // so the staff tiles below are structurally zero for them, at any range.
+    // Their real figures are lifetime ones, the same set the Clients tab shows,
+    // and they are NOT period-scoped (hence the caption; the range bar still
+    // governs the activity list underneath, where a self-cancel can appear).
+    if (isCustomer) {
+      if (lifetimeError) {
+        statsEl.innerHTML = `<div class="col-span-full text-[14px] text-danger">${escapeHtml(t('userProfile.lifetimeError'))}</div>`;
+        return;
+      }
+      if (!lifetime) {
+        statsEl.innerHTML = `<div class="col-span-full text-[14px] text-dim">${escapeHtml(t('common.loading'))}</div>`;
+        return;
+      }
+      const lei = (n) => `${Number(n || 0).toLocaleString(locale === 'en' ? 'en-GB' : 'ro-RO')} ${t('common.lei')}`;
+      statsEl.innerHTML = [
+        statTile('admin.usersCol.reservations', lifetime.bookings),
+        statTile('admin.usersCol.totalPaid', lei(lifetime.totalPaid)),
+        statTile('admin.usersCol.longestStay', `${lifetime.longestStay} ${t('admin.usersCol.daysShort')}`),
+        statTile('admin.usersCol.creditsUsed', lifetime.creditsUsed),
+        statTile('admin.usersCol.cancellations', lifetime.cancellations + lifetime.noShows),
+      ].join('') + `<p class="col-span-full text-[12px] text-dim -mt-1">${escapeHtml(t('userProfile.lifetimeNote'))}</p>`;
+      return;
+    }
     if (loading) {
       statsEl.innerHTML = `<div class="col-span-full text-[14px] text-dim">${escapeHtml(t('common.loading'))}</div>`;
       return;
@@ -185,6 +223,20 @@ export default async function AdminUserProfile(container, { uid } = {}) {
       </div>`;
   }
 
+  // Lifetime figures don't depend on the window, so they are fetched once
+  // rather than on every range change.
+  async function loadLifetime() {
+    if (!isCustomer || !user) return;
+    try {
+      lifetime = await buildSingleUserStats({ id: userId, email: user.email });
+      lifetimeError = false;
+    } catch (err) {
+      console.error('AdminUserProfile: lifetime stats failed', err);
+      lifetimeError = true;
+    }
+    renderStats();
+  }
+
   async function load() {
     loading = true;
     renderWindowBar();
@@ -217,6 +269,7 @@ export default async function AdminUserProfile(container, { uid } = {}) {
   initAdminNav(pageEl);
   container.appendChild(pageEl);
   load();
+  loadLifetime();
   // The static detail sections load themselves (balance, vouchers, bookings,
   // credit ledger) — same renderer the user modal uses.
   renderUserSections(user, sectionsEl);
