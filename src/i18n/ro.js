@@ -656,6 +656,14 @@ export default {
       noShows: 'No-show',
       lastActivity: 'Ultima activitate',
       daysShort: 'zile',
+      // Coloane pe tab-urile de staff (perioada selectată)
+      checkins: 'Check-in',
+      checkouts: 'Check-out',
+      reservationsMade: 'Rezervări create',
+      payments: 'Plăți încasate',
+      cashCollected: 'Numerar încasat',
+      openCash: 'Numerar nedepus',
+      lastActive: 'Ultima activitate',
     },
     usersRole: {
       customer: 'Client',
@@ -699,6 +707,9 @@ export default {
     },
     usersStatsLoading: 'Se calculează statisticile clienților…',
     usersStatsError: 'Statisticile clienților nu au putut fi încărcate.',
+    usersStaffLoading: 'Se calculează activitatea echipei…',
+    usersStaffError: 'Activitatea echipei nu a putut fi încărcată.',
+    usersStaffCapped: 'Perioada depășește limita de afișare, așa că cifrele de mai jos sunt minime, nu totaluri. Alege un interval mai scurt.',
     usersDetail: {
       close: 'Închide',
       loading: 'Se încarcă…',

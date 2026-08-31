@@ -42,6 +42,23 @@ export async function listClosedEntries({ agentUid, days = 30 } = {}) {
   return rows.sort((a, b) => String(b.paidAt || '').localeCompare(String(a.paidAt || '')));
 }
 
+/**
+ * Every cash entry COLLECTED in a window, whatever its closed state — windowed
+ * on `paidAt` (when the money was taken), not on `closedAt` like
+ * listClosedEntries, which answers a different question and misses anything
+ * still open. Range on a single field, so no composite index.
+ *
+ * Deliberately does NOT swallow its error: the caller is a per-agent money
+ * column, and an empty result that silently means "read failed" is the
+ * masked-failure trap (BUGS #17).
+ */
+export async function listEntriesBetween({ fromIso, toIso } = {}) {
+  const constraints = [];
+  if (fromIso) constraints.push(where('paidAt', '>=', fromIso));
+  if (toIso) constraints.push(where('paidAt', '<=', toIso));
+  return getCollection('cashEntries', ...constraints);
+}
+
 // Past closed reports for one agent (omit agentUid → all reports, admin-side).
 export async function listReports({ agentUid, days = 90 } = {}) {
   const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();

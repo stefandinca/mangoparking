@@ -655,6 +655,14 @@ export default {
       noShows: 'No-shows',
       lastActivity: 'Last activity',
       daysShort: 'days',
+      // Columns on the staff tabs (selected period)
+      checkins: 'Check-ins',
+      checkouts: 'Check-outs',
+      reservationsMade: 'Reservations made',
+      payments: 'Payments taken',
+      cashCollected: 'Cash collected',
+      openCash: 'Cash not deposited',
+      lastActive: 'Last active',
     },
     usersRole: {
       customer: 'Customer',
@@ -700,6 +708,9 @@ export default {
     },
     usersStatsLoading: 'Computing client statistics…',
     usersStatsError: 'Client statistics could not be loaded.',
+    usersStaffLoading: 'Computing team activity…',
+    usersStaffError: 'Team activity could not be loaded.',
+    usersStaffCapped: 'This period exceeds the display limit, so the figures below are minimums, not totals. Pick a shorter range.',
     usersDetail: {
       close: 'Close',
       loading: 'Loading…',

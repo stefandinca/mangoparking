@@ -294,6 +294,30 @@ still counts. Loaded lazily the first time the Clients tab opens and cached for
 the page session; the three staff tabs cost nothing beyond the `users` read.
 A failure shows an error, not an innocent-looking empty table.
 
+The three **staff tabs** carry period-scoped activity per person, read from
+`auditLog` rows where they are the actor: check-ins, check-outs, reservations
+created, payments taken, plus **cash collected** and **cash not yet deposited**
+from `cashEntries`, and last active. Sortable like the clients columns. A
+range bar (today / 7d / 30d / custom, default **30 days**) drives the window —
+"checked in 385 cars" means nothing without one. The window matters for cost
+too: `listAuditRange` caps at 1,000 rows, and a range that hits the cap shows a
+notice saying the figures are minimums rather than letting a truncated range
+read as the whole story.
+
+Two deliberate details. **Cash collected is windowed** (by `paidAt`, via the
+new `listEntriesBetween` — `listClosedEntries` windows on `closedAt` and misses
+anything still open), while **cash not deposited is point-in-time**: money in
+someone's drawer right now, not during the period. And the **role selector sits
+second, right after the name** on staff tabs — with ten columns the table is
+wider than the content area (the sidebar takes 272px, so viewport breakpoints
+over-estimate the room by that much) and a trailing selector ends up behind a
+horizontal scroll, which is no place for the main reason to open the tab.
+
+Action counts use the same action lists as `ACTOR_STAT_TILES`, so a number here
+matches that person's [profile page](#user-profile--adminusersuid-adminuserprofilejs)
+rather than quietly disagreeing with it. Note ~270 audit rows belong to deleted
+accounts, so per-person columns will not sum to the org-wide total.
+
 Other actions: search, **role change** (`adminChangeUserRole`, confirms on admin/demotion),
 **delete** (`adminDeleteUser`), and two add paths: direct create (email +
 password, `adminCreateUser`) or **email invite** (magic link, `adminSendInvite` —

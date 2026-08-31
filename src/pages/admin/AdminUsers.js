@@ -24,6 +24,11 @@ import { getCurrentUser } from '../../firebase/auth.js';
 import { isValidEmail } from '../../utils/validators.js';
 import { buildUsersExport, buildUserStats } from '../../services/userExportService.js';
 import { buildCsv, downloadCsv, todayStamp } from '../../utils/csv.js';
+import { listAuditRange } from '../../services/auditService.js';
+import { listEntriesBetween, listAllOpenEntries } from '../../services/cashbookService.js';
+import { isActorRow, countActions, windowToIso } from '../../components/admin/auditFormat.js';
+import { rangeBarHtml, mountRangePicker } from '../../components/admin/ListControls.js';
+import { bucharestLocalToIso } from '../../utils/date.js';
 
 const adminCreateUserFn = httpsCallable(functions, 'adminCreateUser');
 const adminSendInviteFn = httpsCallable(functions, 'adminSendInvite');
@@ -70,6 +75,33 @@ const EMPTY_STATS = {
   totalDays: 0, cancellations: 0, noShows: 0, lastActivityAt: null, creditBalance: 0,
 };
 
+// ── Staff tabs: what each person DID in the selected window ──────────────
+// Counted off auditLog rows where they are the actor. The action lists mirror
+// ACTOR_STAT_TILES (auditFormat.js) so a number here matches the same number
+// on that person's profile page rather than quietly disagreeing with it.
+const STAFF_ACTIONS = {
+  checkins:     ['booking_checkin', 'check_in'],
+  checkouts:    ['booking_checkout', 'check_out'],
+  reservations: ['booking_created'],
+  payments:     ['order_marked_paid', 'admin_credits_granted'],
+};
+
+const STAFF_SORTS = {
+  name:          { num: false, get: (u) => (u.displayName || u.email || '').toLowerCase() },
+  checkins:      { num: true,  get: (u, s) => s.checkins },
+  checkouts:     { num: true,  get: (u, s) => s.checkouts },
+  reservations:  { num: true,  get: (u, s) => s.reservations },
+  payments:      { num: true,  get: (u, s) => s.payments },
+  cashCollected: { num: true,  get: (u, s) => s.cashCollected },
+  openCash:      { num: true,  get: (u, s) => s.openCash },
+  lastActive:    { num: false, get: (u, s) => String(s.lastActiveAt || '') },
+};
+
+const EMPTY_STAFF = {
+  checkins: 0, checkouts: 0, reservations: 0, payments: 0,
+  actions: 0, cashCollected: 0, openCash: 0, lastActiveAt: null,
+};
+
 export default async function AdminUsers(container) {
   // /admin/users?uid=… is the single-user profile. The router strips the query
   // before matching, so both views live behind this one route entry — which
@@ -100,6 +132,17 @@ export default async function AdminUsers(container) {
   let sortKey = 'reservations';
   let sortDir = 'desc';
   const chips = new Set();
+  // Staff tabs carry their own sort (different columns) and their own window —
+  // "checked in 385 cars" is meaningless without a period, unlike a customer's
+  // lifetime value. 30 days by default: ~485 audit rows/month at current
+  // volume, comfortably inside listAuditRange's 1000-row cap.
+  let staffSortKey = 'checkins';
+  let staffSortDir = 'desc';
+  let staffWindow = '30d';
+  let staffStats = null;
+  let staffError = false;
+  let staffCapped = false;
+  let rangeFp = null;
 
   const page = AdminLayout('/admin/users', `
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -126,6 +169,7 @@ export default async function AdminUsers(container) {
       class="w-full max-w-md mb-3 px-4 py-2.5 rounded-xl border border-frost-deep bg-white text-[15px] focus:outline-none focus:border-mango/40 transition-colors">
 
     <div data-chips class="flex flex-wrap gap-2 mb-5"></div>
+    <div data-window-bar class="flex flex-wrap items-center gap-2 mb-5"></div>
 
     <div data-rows>
       <div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">…</div>
@@ -139,6 +183,7 @@ export default async function AdminUsers(container) {
   const filterInput = qs('[data-filter]', page);
   const tabsEl = qs('[data-tabs]', page);
   const chipsEl = qs('[data-chips]', page);
+  const windowBarEl = qs('[data-window-bar]', page);
 
   filterInput.addEventListener('input', (e) => {
     filter = String(e.target.value || '').toLowerCase();
@@ -155,6 +200,18 @@ export default async function AdminUsers(container) {
     url.searchParams.set('tab', activeTab);
     window.history.replaceState(null, '', url.pathname + url.search);
     ensureStats();
+    ensureStaffStats();
+    render();
+  });
+
+  // Range presets on the staff tabs. Changing the window invalidates the
+  // tallies, so they are dropped and refetched.
+  page.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-window]');
+    if (!btn) return;
+    staffWindow = btn.dataset.window;
+    staffStats = null;
+    ensureStaffStats();
     render();
   });
 
@@ -173,9 +230,17 @@ export default async function AdminUsers(container) {
     const th = e.target.closest('[data-sort]');
     if (!th) return;
     const key = th.dataset.sort;
-    if (!SORTS[key]) return;
-    if (sortKey === key) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
-    else { sortKey = key; sortDir = SORTS[key].num ? 'desc' : 'asc'; }
+    const table = activeTab === 'customer' ? SORTS : STAFF_SORTS;
+    if (!table[key]) return;
+    if (activeTab === 'customer') {
+      if (sortKey === key) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+      else { sortKey = key; sortDir = table[key].num ? 'desc' : 'asc'; }
+    } else if (staffSortKey === key) {
+      staffSortDir = staffSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      staffSortKey = key;
+      staffSortDir = table[key].num ? 'desc' : 'asc';
+    }
     render();
   });
   qs('[data-create]', page).addEventListener('click', () => openCreateModal(reload));
@@ -214,6 +279,65 @@ export default async function AdminUsers(container) {
   // Lifetime metrics are only needed by the clients tab, so they are fetched
   // the first time it is shown and cached for the page session. A failure is
   // surfaced, not swallowed into an innocent-looking empty table (BUGS #17).
+  const staffFor = (u) => (staffStats && staffStats.get(u.id)) || EMPTY_STAFF;
+
+  function staffList(tab) {
+    const list = usersInTab(tab);
+    const spec = STAFF_SORTS[staffSortKey] || STAFF_SORTS.name;
+    const dir = staffSortDir === 'asc' ? 1 : -1;
+    return list.slice().sort((a, b) => {
+      const va = spec.get(a, staffFor(a));
+      const vb = spec.get(b, staffFor(b));
+      if (spec.num) return (Number(va) - Number(vb)) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }
+
+  // Per-staff activity for the selected window. One audit range query plus the
+  // cash reads, then everything is tallied in memory — the actor lives on the
+  // row under two different field names (server `actorUid` vs client
+  // `userEmail`), which one Firestore query can't express, exactly as the
+  // profile page and the audit page already handle it.
+  let staffPromise = null;
+  function ensureStaffStats() {
+    if (activeTab === 'customer' || staffStats || staffPromise || !users.length) return;
+    const { fromIso, toIso } = windowToIso(staffWindow, bucharestLocalToIso);
+    staffPromise = Promise.all([
+      listAuditRange({ fromIso, toIso }),
+      listEntriesBetween({ fromIso, toIso }),
+      // Open cash is a point-in-time fact — money still in someone's drawer
+      // right now — so it is deliberately NOT windowed.
+      listAllOpenEntries(),
+    ]).then(([audit, cashInWindow, openCash]) => {
+      staffCapped = !!audit.capped;
+      const map = new Map();
+      for (const u of users) {
+        if (normalizeRole(u.role) === 'customer') continue;
+        const mine = audit.rows.filter((r) => isActorRow(r, { uid: u.id, email: u.email }));
+        const cash = cashInWindow.filter((c) => c.agentUid === u.id);
+        const open = openCash.filter((c) => c.agentUid === u.id);
+        const sum = (arr) => arr.reduce((n, c) => n + (Number(c.amount) || 0), 0);
+        map.set(u.id, {
+          checkins: countActions(mine, STAFF_ACTIONS.checkins),
+          checkouts: countActions(mine, STAFF_ACTIONS.checkouts),
+          reservations: countActions(mine, STAFF_ACTIONS.reservations),
+          payments: countActions(mine, STAFF_ACTIONS.payments),
+          actions: mine.length,
+          cashCollected: Math.round(sum(cash)),
+          openCash: Math.round(sum(open)),
+          // Most recent action in the window; the rows come back newest-first.
+          lastActiveAt: mine.length ? mine[0].timestamp : null,
+        });
+      }
+      staffStats = map;
+      staffError = false;
+    }).catch((err) => {
+      console.error('AdminUsers: staff stats load failed', err);
+      staffError = true;
+    }).finally(() => { staffPromise = null; render(); });
+    render();
+  }
+
   let statsPromise = null;
   function ensureStats() {
     if (activeTab !== 'customer' || stats || statsPromise) return;
@@ -374,44 +498,104 @@ export default async function AdminUsers(container) {
   }
 
   function sortableTh(key, label, { right = false, extra = '' } = {}) {
-    const on = sortKey === key;
-    const arrow = on ? (sortDir === 'desc' ? ' ↓' : ' ↑') : '';
-    return `<th data-sort="${key}" role="button" tabindex="0" aria-sort="${on ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}"
+    const staff = activeTab !== 'customer';
+    const on = (staff ? staffSortKey : sortKey) === key;
+    const dir = staff ? staffSortDir : sortDir;
+    const arrow = on ? (dir === 'desc' ? ' ↓' : ' ↑') : '';
+    return `<th data-sort="${key}" role="button" tabindex="0" aria-sort="${on ? (dir === 'desc' ? 'descending' : 'ascending') : 'none'}"
       class="px-3 py-3 whitespace-nowrap cursor-pointer select-none hover:text-charcoal ${right ? 'text-right' : 'text-left'} ${on ? 'text-charcoal' : ''} ${extra}">${escapeHtml(label)}${arrow}</th>`;
   }
 
   function renderStaffTable(tab, currentUid) {
-    const list = usersInTab(tab);
+    if (staffError) {
+      rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-danger text-[14px]">${t('admin.usersStaffError')}</div>`;
+      return;
+    }
+    if (!staffStats) {
+      rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">${t('admin.usersStaffLoading')}</div>`;
+      return;
+    }
+    const list = staffList(tab);
     if (!list.length) {
       rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-dim text-[14px]">${t('admin.usersEmpty')}</div>`;
       return;
     }
-    rows.innerHTML = `
+    const c = t('admin.usersCol');
+    // The role selector sits SECOND, right after the name, not at the far end
+    // like on the clients table. Changing a role is the reason to open a staff
+    // tab; with ten columns the table is wider than the content area (the
+    // sidebar eats 272px, so viewport-based breakpoints over-estimate the room
+    // by that much) and a trailing selector ends up off-screen behind a
+    // horizontal scroll. Delete stays last — destructive and rarely wanted.
+    const lg = 'hidden xl:table-cell';
+    // The window is capped, so the counts below it are a floor, not a total —
+    // say so rather than let a truncated range read as the whole story.
+    const capNote = staffCapped
+      ? `<div class="mb-3 text-[13px] text-charcoal/70 bg-mango/10 border border-mango/30 rounded-xl px-4 py-2.5">${t('admin.usersStaffCapped')}</div>`
+      : '';
+    rows.innerHTML = `${capNote}
       <div class="bg-white rounded-2xl border border-frost-deep overflow-x-auto">
-        <table class="w-full text-[14px] min-w-[38rem]">
+        <table class="w-full text-[14px] min-w-[44rem]">
           <thead class="bg-frost text-charcoal/70 text-[12px] uppercase tracking-wider">
             <tr>
-              <th class="text-left px-4 py-3">${t('admin.usersCol.name')}</th>
-              <th class="text-left px-4 py-3">${t('admin.usersCol.email')}</th>
-              <th class="text-left px-4 py-3">${t('admin.usersCol.createdAt')}</th>
-              <th class="text-left px-4 py-3">${t('admin.usersRoleLabel')}</th>
-              <th class="text-right px-4 py-3"></th>
+              ${sortableTh('name', c.name)}
+              <th class="text-left px-3 py-3">${t('admin.usersRoleLabel')}</th>
+              ${sortableTh('checkins', c.checkins, { right: true })}
+              ${sortableTh('checkouts', c.checkouts, { right: true })}
+              ${sortableTh('reservations', c.reservationsMade, { right: true, extra: lg })}
+              ${sortableTh('payments', c.payments, { right: true, extra: lg })}
+              ${sortableTh('cashCollected', c.cashCollected, { right: true })}
+              ${sortableTh('openCash', c.openCash, { right: true })}
+              ${sortableTh('lastActive', c.lastActive, { extra: lg })}
+              <th class="text-right px-3 py-3"></th>
             </tr>
           </thead>
           <tbody>
             ${list.map((u) => {
+              const s = staffFor(u);
               const isSelf = u.id === currentUid;
+              // Cash still in a drawer is the one number worth a colour: it is
+              // money the business is owed a reckoning for, not an achievement.
+              const openCell = s.openCash > 0
+                ? `<span class="font-semibold text-mango-dark">${nfmt(s.openCash)} ${t('common.lei')}</span>`
+                : `<span class="text-dim">0</span>`;
               return `<tr class="border-t border-frost-deep">
-                <td class="px-4 py-3">${nameCellHtml(u, isSelf)}</td>
-                <td class="px-4 py-3 font-mono text-[13px]">${escapeHtml(u.email || '—')}</td>
-                <td class="px-4 py-3 text-dim whitespace-nowrap">${fmtDate(u.createdAt)}</td>
-                <td class="px-4 py-3">${roleCellHtml(u, isSelf)}</td>
-                <td class="px-4 py-3 text-right">${deleteCellHtml(u, isSelf)}</td>
+                <td class="px-3 py-3">
+                  ${nameCellHtml(u, isSelf)}
+                  <div class="text-[12px] text-dim font-mono">${escapeHtml(u.email || '—')}</div>
+                </td>
+                <td class="px-3 py-3">${roleCellHtml(u, isSelf)}</td>
+                <td class="px-3 py-3 text-right font-mono">${cell(s.checkins)}</td>
+                <td class="px-3 py-3 text-right font-mono">${cell(s.checkouts)}</td>
+                <td class="px-3 py-3 text-right font-mono ${lg}">${cell(s.reservations)}</td>
+                <td class="px-3 py-3 text-right font-mono ${lg}">${cell(s.payments)}</td>
+                <td class="px-3 py-3 text-right font-mono whitespace-nowrap">${cell(s.cashCollected, ` ${t('common.lei')}`)}</td>
+                <td class="px-3 py-3 text-right font-mono whitespace-nowrap">${openCell}</td>
+                <td class="px-3 py-3 text-dim whitespace-nowrap ${lg}">${fmtDate(s.lastActiveAt)}</td>
+                <td class="px-3 py-3 text-right">${deleteCellHtml(u, isSelf)}</td>
               </tr>`;
             }).join('')}
           </tbody>
         </table>
       </div>`;
+  }
+
+  function renderWindowBar() {
+    // Tear the picker down BEFORE its input leaves the DOM — flatpickr mounts
+    // its calendar on document.body and an orphan swallows later taps.
+    if (rangeFp) { try { rangeFp.destroy(); } catch { /* noop */ } rangeFp = null; }
+    if (activeTab === 'customer') { windowBarEl.innerHTML = ''; return; }
+    windowBarEl.innerHTML = rangeBarHtml(staffWindow);
+    rangeFp = mountRangePicker(windowBarEl, {
+      activeWindow: staffWindow,
+      locale,
+      onPick: (range) => {
+        staffWindow = range;
+        staffStats = null;
+        ensureStaffStats();
+        render();
+      },
+    });
   }
 
   function renderClientsTable(currentUid) {
@@ -479,6 +663,7 @@ export default async function AdminUsers(container) {
     const currentUid = getCurrentUser()?.uid;
     renderTabs();
     renderChips();
+    renderWindowBar();
     // Invoicing export is customers-only, so it belongs to that tab alone.
     qs('[data-export]', page).classList.toggle('hidden', activeTab !== 'customer');
     if (activeTab === 'customer') renderClientsTable(currentUid);
@@ -493,8 +678,10 @@ export default async function AdminUsers(container) {
       // unaffected — but a delete must not leave a stale entry behind, so the
       // cache is dropped and refetched with the fresh list.
       stats = null;
+      staffStats = null;
       render();
       ensureStats();
+      ensureStaffStats();
     } catch (err) {
       console.error('AdminUsers: load failed', err);
       rows.innerHTML = `<div class="bg-white rounded-2xl border border-frost-deep text-center py-10 text-danger text-[14px]">${t('admin.usersError')}</div>`;
@@ -502,6 +689,13 @@ export default async function AdminUsers(container) {
   }
 
   reload();
+
+  // Router cleanup — an orphaned flatpickr calendar lives on document.body and
+  // would outlive this page, swallowing taps meant for the next one (the leak
+  // fixed in AdminCheckIns, and the reason AdminAudit returns the same).
+  return () => {
+    if (rangeFp) { try { rangeFp.destroy(); } catch { /* noop */ } rangeFp = null; }
+  };
 }
 
 function fmtDate(iso) {
