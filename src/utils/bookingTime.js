@@ -10,6 +10,15 @@ import { anyToIso } from './date.js';
 // starts owing extra days. Mirrored by AdminCheckIns' OVERDUE_THRESHOLD_MS.
 export const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
+// The grace the PRICING engine applies once at the end of a stay — mirrors
+// BILLING_GRACE_MS in functions/src/pricingValidate.js, GRACE_MS in
+// functions/src/roTime.js, and the local copies in BookingLongTerm.js /
+// CreateTransactionModal.js. Numerically the same 2h as OVERDUE_THRESHOLD_MS
+// but a different question: that one decides when the board SHOWS a car as
+// late, this one decides what the customer is CHARGED. Treating them as
+// interchangeable is what let overstayInfo bill days the pricer never would.
+export const BILLING_GRACE_MS = 2 * 60 * 60 * 1000;
+
 export function fmtDateTime(iso, locale) {
   iso = anyToIso(iso);
   if (!iso) return '—';
@@ -85,18 +94,44 @@ export function perCreditPrice(packs) {
   return rates.length ? Math.round(Math.min(...rates)) : 0;
 }
 
-// Extra days owed when a car is checked out after its pick-up time. Uses
-// the same 2h end-of-booking grace as the billing engine, and values each
-// extra day at the booking's own daily rate (totalPrice / days). Returns
-// null when there's nothing extra to collect. Drives the late-check-out
-// warning so an agent never silently completes an overstay.
+// The instant a booking stops being covered by what the customer already paid
+// and starts owing another day.
+//
+// Long-term: NOT the scheduled pick-up. The price was derived as
+// max(1, ceil((pickup - dropoff - 2h) / 24h)) days measured FROM THE DROP-OFF,
+// so the stay is paid up to `dropoff + 2h + days × 24h`. Rounding up means that
+// is normally LATER than the booked pick-up — a 6d12h45m stay is sold as 7 days
+// and the rest of that 7th day belongs to the customer. Anchoring on the
+// pick-up instead billed those hours twice (LT-VARZW / LT-HXT69, 2026-09-04:
+// 20 lei demanded 11h15m before the stay had actually run out).
+//
+// Commuter (credit): 20:00 local on the check-in day plus the same grace —
+// there is no drop-off/pick-up span to price against.
+function overstayFreeUntilMs(b) {
+  if (b.type !== 'credit') {
+    const dropoff = Date.parse(anyToIso(b.dropoffAt) || '');
+    const days = Number(b.days) || 0;
+    if (Number.isFinite(dropoff) && days > 0) {
+      return dropoff + BILLING_GRACE_MS + days * 86_400_000;
+    }
+    // No usable drop-off (a legacy or malformed row): fall back to the pick-up
+    // anchor. Over-estimating is better than silently never charging again.
+  }
+  const dl = pickupDeadlineMs(b);
+  return dl == null ? null : dl + OVERDUE_THRESHOLD_MS;
+}
+
+// Extra days owed when a car is still on the lot past everything the customer
+// paid for, valued at the booking's own daily rate (totalPrice / days). Returns
+// null when there is nothing extra to collect. Drives the late-check-out
+// warning, so it must never invent a day the pricer would not bill.
 // `now` is injectable for tests only — production callers omit it.
 export function overstayInfo(b, perCredit = 0, now = Date.now()) {
-  const dl = pickupDeadlineMs(b);
-  if (dl == null) return null;
-  const overMs = now - dl - OVERDUE_THRESHOLD_MS;
+  const freeUntil = overstayFreeUntilMs(b);
+  if (freeUntil == null) return null;
+  const overMs = now - freeUntil;
   if (overMs <= 0) return null;
-  const daysLate = Math.max(1, Math.ceil(overMs / 86_400_000));
+  const daysLate = Math.ceil(overMs / 86_400_000);
   // Long-term: the booking's own daily rate. Commuter: each extra day is
   // another credit, valued at the standard per-credit price.
   let perDay;

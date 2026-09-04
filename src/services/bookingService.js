@@ -145,13 +145,20 @@ export async function checkInBooking(bookingId, spotId = null) {
 /**
  * Check out a booking
  */
-export async function checkOutBooking(bookingId) {
+export async function checkOutBooking(bookingId, { waivedOverstay = 0 } = {}) {
   const old = await getDocument('bookings', bookingId);
   if (!old) throw new Error(`Booking ${bookingId} not found`);
+  const nowIso = new Date().toISOString();
+  // An agent may release a car past an overstay the board says is owed (the
+  // "check out anyway" override). Stamp what was skipped: that path moves no
+  // money, so without this the whole event is invisible and takings collected
+  // by hand can never be reconciled against it (reported 2026-09-04).
+  const waived = Math.round(Number(waivedOverstay) || 0);
   await updateDocument('bookings', bookingId, {
     status: 'completed',
-    checkoutTimestamp: new Date().toISOString(),
-    completedAt: new Date().toISOString(),
+    checkoutTimestamp: nowIso,
+    completedAt: nowIso,
+    ...(waived > 0 ? { overstayWaivedAmount: waived, overstayWaivedAt: nowIso } : {}),
   });
   if (old.spotId) {
     await updateSpotStatus(old.spotId, 'available').catch((err) => {
@@ -164,7 +171,11 @@ export async function checkOutBooking(bookingId) {
     const normPlate = String(old.licensePlate).toUpperCase().replace(/[\s-]/g, '');
     if (normPlate) await removeDocument('activeCheckIns', normPlate).catch(() => {});
   }
-  await auditLog('booking_checkout', 'booking', bookingId, { status: old.status }, { status: 'completed', code: old.code || null });
+  await auditLog('booking_checkout', 'booking', bookingId, { status: old.status }, {
+    status: 'completed',
+    code: old.code || null,
+    ...(waived > 0 ? { overstayWaived: waived } : {}),
+  });
 }
 
 /**

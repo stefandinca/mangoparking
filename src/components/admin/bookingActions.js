@@ -800,17 +800,22 @@ export async function runBookingAction({ action, booking, dataset = {} }, { loca
       const alreadyCharged = !!booking.overstayChargedAt;
       const over = overstayInfo(booking, creditPerDay);
       let proceed;
+      // How much the agent walked past. Only set when they declined to collect
+      // an overstay the board says is owed — the check-out then carries the
+      // figure into its audit row, since nothing else on that path records it.
+      let waivedOverstay = 0;
       if (over && over.amount > 0 && !alreadyCharged) {
         const charged = await openOverstayDialog({ booking, perCredit: creditPerDay });
         proceed = charged || await confirmModal(
           t('checkins.checkoutWithoutOverstay', { amount: over.amount }),
           { danger: true, confirmText: t('checkins.checkoutAnyway') },
         );
+        if (proceed && !charged) waivedOverstay = over.amount;
       } else {
         proceed = await openCheckActionConfirm({ booking, action: 'checkout', locale, over: null, overstayCharged: alreadyCharged });
       }
       if (!proceed) return false;
-      await checkOutBooking(bookingId);
+      await checkOutBooking(bookingId, { waivedOverstay });
       showToast(t('checkins.toastCheckedOut'), 'success');
       return done();
     }

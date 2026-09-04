@@ -171,9 +171,23 @@ upcoming ──check-in──▶ active ──check-out──▶ completed
   `extensionPrice`, never re-marks the booking paid). Paid + fewer days → refund
   queue. Full mechanics in [backend/cloud-functions.md](../backend/cloud-functions.md).
 - **Overstay** — a late pick-up is charged via the `adminChargeOverstay`
-  callable; the rate is `settings/commuterPolicy.latePickupDailyRate`
-  (default 49), applied per started day past the planned end
-  (`longTermService.computeLateFee`).
+  callable. The board suggests `extra days × the booking's own daily rate`
+  (`totalPrice / days`) and the agent can edit the figure before collecting.
+  `settings/commuterPolicy.latePickupDailyRate` and
+  `longTermService.computeLateFee` are **not** on this path — `computeLateFee`
+  is dead code, imported nowhere.
+  **What counts as late (fixed 2026-09-04):** not the scheduled pick-up. The
+  price was derived as `max(1, ceil((pickup - dropoff - 2h) / 24h))` days
+  measured **from the drop-off**, so the stay is paid up to
+  `dropoff + 2h + days × 24h`. Because `days` is rounded up, that instant is
+  normally *later* than the booked pick-up — a 6d12h45m stay is sold as 7 days
+  and the rest of the 7th day belongs to the customer. `overstayFreeUntilMs`
+  in `src/utils/bookingTime.js` encodes this; the invariant is that
+  `overstayInfo().daysLate` never exceeds what the pricer would bill for the
+  same instant (swept hour-by-hour in `tests/bookingTime.test.mjs`).
+  A car past its booked pick-up still shows as **overdue** on the board — that
+  is an operational signal (who is still on the lot), deliberately separate from
+  what is owed.
 - **No-show** — the `markNoShows` scheduled job flags upcoming bookings whose
   window passed without a check-in.
 - **Spot reservation** — `reserveAvailableSpot` (`index.js:198`) grabs the first

@@ -67,6 +67,26 @@ test('describeAction: booking reference prefers entityCode > payload code > id f
   assert.ok(describeAction(row, 'ro').includes('aTUFw5tp')); // last resort only
 });
 
+test('describeAction: a check-out that skipped an owed overstay names the amount', () => {
+  // Reported 2026-09-04 (LT-VARZW / LT-HXT69): an agent may confirm "check out
+  // anyway" past an overstay the board says is owed, and until now that left no
+  // trace at all — so money taken by hand could not be reconciled against the
+  // takings afterwards. The row has to carry the figure that was skipped.
+  const row = {
+    action: 'booking_checkout',
+    entityId: 'aTUFw5tpQ2mHb',
+    newValueObj: { status: 'completed', code: 'LT-VARZW', overstayWaived: 20 },
+  };
+  assert.equal(describeAction(row, 'ro'), 'Check-out rezervare LT-VARZW (depășire de 20 lei neîncasată)');
+  assert.equal(describeAction(row, 'en'), 'Booking LT-VARZW checked out (20 lei overstay not collected)');
+});
+
+test('describeAction: an ordinary check-out reads exactly as before', () => {
+  const row = { action: 'booking_checkout', entityId: 'aTUFw5tpQ2mHb', newValueObj: { code: 'LT-VARZW' } };
+  assert.equal(describeAction(row, 'ro'), 'Check-out rezervare LT-VARZW');
+  assert.equal(describeAction(row, 'en'), 'Booking LT-VARZW checked out');
+});
+
 test('describeAction: booking_edited names the changed fields, skips updatedAt', () => {
   const row = {
     action: 'booking_edited',

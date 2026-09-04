@@ -181,8 +181,18 @@ export function describeAction(item, locale, entityCode = '') {
       return ro
         ? `Check-in rezervare ${idShort}${nv.spotId ? ` la locul ${nv.spotId}` : ''}`
         : `Booking ${idShort} checked in${nv.spotId ? ` at spot ${nv.spotId}` : ''}`;
-    case 'booking_checkout':
-      return ro ? `Check-out rezervare ${idShort}` : `Booking ${idShort} checked out`;
+    case 'booking_checkout': {
+      // An overstay the board said was owed but the agent released the car
+      // without collecting. Naming the figure is the only record that it
+      // happened — nothing else is written on that path.
+      const skipped = Number(nv.overstayWaived) || 0;
+      const note = skipped > 0
+        ? (ro ? ` (depășire de ${skipped} lei neîncasată)` : ` (${skipped} lei overstay not collected)`)
+        : '';
+      return ro
+        ? `Check-out rezervare ${idShort}${note}`
+        : `Booking ${idShort} checked out${note}`;
+    }
     case 'booking_created':
       return ro
         ? `Rezervare nouă${nv.code ? ` (${nv.code})` : ''}`

@@ -173,9 +173,15 @@ standalone action and not a balance lookup.
    transaction. Overstay now also applies to **commuters**: their deadline is
    **20:00 Europe/Bucharest on the check-in day** (operating-hours end, matching
    the 7PM "overnight fee" reminder), +2h grace → past 22:00 they owe extra
-   days valued at the per-credit price. Long-term still uses scheduled pick-up +
-   the booking's own daily rate. (`pickupDeadlineMs`/`overstayInfo` in
-   `AdminCheckIns.js`.)
+   days valued at the per-credit price. Long-term is valued at the booking's own
+   daily rate, counted from **the end of the days it paid for**
+   (`dropoff + 2h + days × 24h`), *not* from the scheduled pick-up — see the
+   Overstay bullet in [features/long-term-bookings.md](../features/long-term-bookings.md)
+   and BUGS #37. (`pickupDeadlineMs`/`overstayInfo` in `utils/bookingTime.js`.)
+   Skipping an owed overstay via **"check out anyway"** now stamps
+   `overstayWaivedAmount` / `overstayWaivedAt` on the booking and names the
+   figure in the `booking_checkout` audit row — that path moves no money, so
+   without it the event left no trace at all.
 4. **[FIXED] `activeCheckIns` lifecycle.** `checkOutBooking` now frees the spot
    **and** deletes `activeCheckIns/{normalizedPlate}`; cancel does the same (Bug 2).
    Remaining by design: the Check-in tab (`checkInBooking`, long-term) does not
