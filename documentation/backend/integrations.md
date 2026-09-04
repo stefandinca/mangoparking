@@ -289,8 +289,10 @@ retention, admin live page, reconciliation, GDPR signage):
 - **ANAF** — live, cached 24h, degrades to manual entry, feeds PJ billing capture.
 - **Flight status** — live but dormant; flip on with one env var / secret + redeploy,
   cached 15 min, staff-only.
-- **SmartBill** — live (v1.2 Phase 2/4): proforma on every order, fiscal invoice on
-  online-payment confirm, storno on cancel; best-effort, never breaks a money flow.
+- **SmartBill** — live (v1.2 Phase 2/4): proforma on every *online* order, fiscal invoice
+  on online-payment confirm, storno on cancel; best-effort, never breaks a money flow.
+  An unpaid (pay-at-pickup) reservation issues nothing until the desk collects
+  (decision 1c, 2026-09-04).
   e-Factura + retry queue (Phase 7/8) still planned.
 - **ParkVia** — live since 2026-07-23; polls every 15 min and imports ParkVia reservations as
   broker bookings, reconciles cancellations/amendments, reports no-shows back.

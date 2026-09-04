@@ -170,7 +170,9 @@ ANAF results are cached in `lookupCache/{cui_*}` for 24h.
 ## Shipped downstream
 
 - **SmartBill fiscal invoicing consumes this captured identity** (v1.2 Phase 2/4, live):
-  proforma on every order, fiscal invoice on online-payment confirm, storno on cancel.
+  proforma on every *online* order, fiscal invoice on online-payment confirm, storno on
+  cancel. A pay-at-pickup reservation issues nothing until the money is collected
+  (decision 1c, 2026-09-04).
   `checkBillingComplete()` (server) validates the mandatory PF/PJ fields before issuing;
   a record that fails it stamps `smartbill.status='failed'` instead. See
   [roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md).

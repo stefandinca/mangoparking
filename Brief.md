@@ -51,10 +51,12 @@ Two products run side by side:
   (no programmatic refund); the JSON-REST migration that would automate them is
   planned, not built (see `documentation/roadmap/v.1.4_netopia_v2_migration.md`)
 - **Email**: Brevo transactional templates
-- **Invoicing**: SmartBill — **live** (v1.2 Phase 2/4): proforma on every order, fiscal
-  invoice on online-payment confirm, storno on cancel. Best-effort (never breaks a money
-  flow). Since 2026-08-05 the document follows the payment **method**: card
-  (online or POS) → fiscal invoice; cash at the location → proforma only.
+- **Invoicing**: SmartBill — **live** (v1.2 Phase 2/4): proforma on every *online* order,
+  fiscal invoice on online-payment confirm, storno on cancel. Best-effort (never breaks a
+  money flow). Since 2026-08-05 the document follows the payment **method**: card
+  (online or POS) → fiscal invoice; cash at the location → proforma only. Since
+  2026-09-04 it also follows the payment **moment**: an unpaid reservation gets no
+  document at all — the desk raises it when it collects, for what it collected.
   e-Factura + retry queue planned
 - **Fonts**: Nunito (headings), DM Sans (body), JetBrains Mono (mono)
 - **Colors**: mango `#FDBB30`, blueberry `#1E5BD6` / hover `#1947A8` / deep `#0F2D66`,

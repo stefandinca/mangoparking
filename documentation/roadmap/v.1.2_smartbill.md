@@ -14,7 +14,10 @@
 > 2026-08-05 by decision 1b**: the document now follows the payment *method*,
 > so a POS **card** payment issues a fiscal invoice (including via
 > `adminMarkOrderPaid`, which previously issued nothing) while **cash** at the
-> location still gets a proforma only.
+> location still gets a proforma only. **Decision 1c (2026-09-04)** then moved
+> *when*: an unpaid reservation issues nothing at all, and the desk raises the
+> document when it collects. The whole rule now lives in
+> `functions/src/fiscalDoc.js`, unit-tested in `functions/test/fiscalDoc.test.js`.
 >
 > **Phase 4 live (2026-07-17):** cancellation → **storno, always** (client
 > decision same day: no anulare even on the issue day — a reversing invoice is
@@ -77,7 +80,25 @@ Documentation: <https://api.smartbill.ro/>
 | **Cash** at the location | **proforma only** — its fiscal invoice stays manual | same paths, `paidBy: 'cash'` |
 | Broker / prepaid | nothing | broker never routes money through us |
 
-Implemented as `deskDocKind(paidBy)` / `deskExtraField(paidBy)` in `functions/src/index.js` — one helper, applied at every desk issuance site, so the rule can't drift between them. A card desk sale issues an invoice **instead of** a proforma (not both), except on a pay-at-pickup order where the order-time proforma already exists and is kept — exactly as the online flow keeps its own.
+Implemented as `deskDocKind(paidBy)` / `deskExtraField(paidBy)`, since 2026-09-04 in `functions/src/fiscalDoc.js` — applied at every desk issuance site, so the rule can't drift between them. A card desk sale issues an invoice **instead of** a proforma (not both).
+
+1c. **The document follows the money, not the booking** (client decision 2026-09-04) — a reservation that has not been paid for issues **nothing**.
+
+The report was simply *"daca un client face rezervare cu plata la ridicare sistemul face deja proforma. Nu prea vad rostul."* He was right. That proforma was never emailed, never shown in the app, and **deleted again** by the housekeeping whenever the reservation expired, cancelled or no-showed: **20 of the 54 issued on that flow were created and destroyed without ever documenting a transaction.** Its one real job — giving the accountant a SmartBill record for a *cash* desk sale — is done better at collection time, when the amount is final.
+
+| Moment | Before | Now |
+|---|---|---|
+| Online order created | proforma | proforma (unchanged — it *is* the payment request preceding the card charge) |
+| Pay-at-pickup order created | proforma | **nothing** |
+| Desk "pay later" reservation created | proforma | **nothing** |
+| Unpaid booking re-quoted | delete + reissue proforma at the new total | delete only (nothing to replace) |
+| Desk collects **cash** | nothing (the order-time proforma stood) | **proforma**, for the amount actually collected |
+| Desk collects **card** | fiscal invoice | fiscal invoice (unchanged) |
+| Reservation waived (0 lei) | delete the proforma | delete the proforma (unchanged) |
+
+Orders created before this change still carry their order-time proforma; `collectionDocs({ hasLiveProforma })` keeps them from being given a second one, so no backfill or migration is needed.
+
+**Deliberately left alone:** the emailed extension request (`adminRepriceBooking` with `paidBy: 'email'`) still raises a proforma for money not yet collected. That one *is* sent to the customer as a payment request with a pay-online link, so it is a different case — revisit only if the client asks.
 
 Money **not yet collected** is always a proforma regardless of how it will later be paid: an unpaid pay-later reservation, the order-time document on a pay-at-pickup order, an emailed extension payment request. A proforma is a request for money; only collected money gets a fiscal document.
 

@@ -160,7 +160,8 @@ failure. "Idempotent" means a repeat call is a safe no-op.
 + `lastError`; the money flow always completes).
 
 **The document follows the payment METHOD** (client decision 2026-08-05,
-replacing the earlier "all pay-at-location is manual" rule):
+replacing the earlier "all pay-at-location is manual" rule) **and the payment
+MOMENT** (decision 1c, 2026-09-04: money not yet collected produces nothing):
 
 | Money | Document |
 |---|---|
@@ -168,14 +169,25 @@ replacing the earlier "all pay-at-location is manual" rule):
 | Card **at the POS** | **fiscal invoice** |
 | **Cash** at the location | **proforma only** — fiscal invoice raised manually |
 | Broker / prepaid | nothing |
-| Not yet collected (pay-later, order-time, emailed extension request) | proforma |
+| **Not yet collected** (pay-at-pickup order, desk "pay later") | **nothing** — raised at collection |
+| Emailed extension request (`paidBy: 'email'`) | proforma — it is genuinely sent to the customer as a payment request |
 
-One helper — `deskDocKind(paidBy)` (+ `deskExtraField` for appended overstay /
-extension documents) — is applied at every desk issuance site so the rule can't
-drift between them. `adminMarkOrderPaid` **issues a fiscal invoice for a card
-collection** (it previously issued nothing, which is how a month of POS card
-takings ended up with no documents); a cash collection still issues nothing
-because the order-time proforma from `createPayment` already stands.
+The rule lives in **`functions/src/fiscalDoc.js`** — `orderTimeDocKind` (what a
+reservation produces when it is created), `collectionDocs` (what a desk
+collection produces, given what the order already carries) and
+`deskDocKind`/`deskExtraField` — pure and unit-tested in
+`functions/test/fiscalDoc.test.js`, applied at every issuance site so the rule
+can't drift between them. It was moved out of `index.js` on 2026-09-04 after
+two policy changes in a month, the first of which (#35) shipped inert for two
+weeks because nothing could test it.
+
+`adminMarkOrderPaid` **issues a fiscal invoice for a card collection** (it
+previously issued nothing, which is how a month of POS card takings ended up
+with no documents) and, since decision 1c, **raises the proforma for a cash
+collection** — that document used to be created when the reservation was made.
+An order that still carries an order-time proforma (created online, or booked
+before 2026-09-04) is not given a second: `collectionDocs({ hasLiveProforma })`
+guards it, so no migration was needed.
 
 Outcomes land under `smartbill.{proforma,invoice,status,lastError}` on
 `pendingOrders` / `bookings` / `tokenTransactions`; the field is server-written
@@ -195,7 +207,8 @@ Wired into
 `cancelBookingWithRefund` (+ its no-show branch, unpaid only — paid no-shows
 forfeit and keep their invoice), `cancelPendingCreditOrder`, and the scheduled
 `markNoShows` / `expireStaleHolds`. Reprice (4b): `adminRepriceBooking` unpaid
-re-quote replaces the proforma; paid extension and `adminChargeOverstay` append
+re-quote **deletes** the now-wrong proforma and issues no replacement (an
+unpaid booking carries no document since decision 1c); paid extension and `adminChargeOverstay` append
 a difference proforma (`smartbill.extraProformas`); paid shortening appends a
 **partial storno** (negative-line invoice, `smartbill.partialStornos`) when the
 original was auto-issued. Statuses: `cancelled` | `storno` | `cancel-failed`.
@@ -228,7 +241,7 @@ reads downstream):
 | `bookings` (longTerm) | `totalPrice` + `basePrice` → collected, plus `priceBeforeDiscount` / `discountReason` / `discountedBy` / `discountedAt` |
 | `tokenTransactions` (credits) | the purchase row's `amount` → collected; **quantity is unchanged** (a discount changes the price, not the credits bought) |
 | Cashbook | records the collected figure; a 0 collection writes **no row** (`recordCashEntry` drops non-positive amounts) |
-| SmartBill | the order-time proforma is deleted and reissued at the collected amount; a **full waiver issues nothing** (no 0-lei document), and the POS-card fiscal invoice is skipped when nothing was collected |
+| SmartBill | a proforma that exists and is now wrong is deleted and reissued at the collected amount; where none exists (pay-at-pickup, post-2026-09-04) a cash collection raises one at that amount; a **full waiver issues nothing** (no 0-lei document) and drops any standing proforma, and the POS-card fiscal invoice is skipped when nothing was collected |
 | `auditLog` | `order_marked_paid` carries `amount`, `discountFrom`, `discountAmount`, `discountReason`, `waived` |
 | Ops alert | `notifyAdminDeskDiscount` mails rezervari@ (who wrote off how much, why, on which reservation) |
 | Customer | a discounted **longTerm** collection re-sends `booking-longterm-confirm` at the reconciled total; **credits need nothing** — `creditTokens` writes the purchase row and `onTokenTransactionCreated` already emails `credit-purchase` at the discounted amount |
@@ -374,9 +387,10 @@ three bind `PARKOS_SECRETS`. Mapping is quarantined in `functions/src/parkos.js`
   The JSON-REST "v2" migration that would automate this is planned, not built
   (see [../roadmap/v.1.4_netopia_v2_migration.md](../roadmap/v.1.4_netopia_v2_migration.md)).
 - **SmartBill invoicing is live on the paid flows (Phases 2 + 4)** — proforma on
-  every order, **storno on cancel**, and a fiscal invoice whenever the money is
-  collected **by card** (online or POS — decision 1b, 2026-08-05); cash at the
-  location keeps its proforma-only treatment. Only the retry queue and e-Factura
+  every **online** order, **storno on cancel**, and a fiscal invoice whenever the
+  money is collected **by card** (online or POS — decision 1b, 2026-08-05); cash
+  at the location keeps its proforma-only treatment, raised at collection rather
+  than at booking (decision 1c, 2026-09-04). Only the retry queue and e-Factura
   (Phase 7/8) remain planned, and documents are deliberately not surfaced in-app
   (see [../roadmap/v.1.2_smartbill.md](../roadmap/v.1.2_smartbill.md)).
   *(This note previously listed storno as planned, contradicting the Phase 4

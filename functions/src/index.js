@@ -42,6 +42,7 @@ import { BREVO_API_KEY, sendBrevoEmail, sendBrevoRaw } from './brevo.js';
 import { sendRepayPaidEmail, sendRefundIssuedEmail, sendBookingConfirmationEmail, sendBookingRepricedEmail, sendBookingRequoteEmail, sendBookingCancelledEmail, sendExtensionPaidEmail } from './emails.js';
 import { notifyAdminPasswordReset, notifyAdminDeskDiscount } from './adminNotifications.js';
 import { computeAuthoritativeLongTermTotal, computeAuthoritativePackPrice, resolveVoucher } from './pricingValidate.js';
+import { deskDocKind, deskExtraField, orderTimeDocKind, collectionDocs } from './fiscalDoc.js';
 import {
   SMARTBILL_SECRETS,
   listSeries,
@@ -604,33 +605,6 @@ function creditsDocItems({ amount }) {
   }];
 }
 
-// Which fiscal document money collected AT THE DESK produces.
-//
-// Client decision 2026-08-05, superseding the earlier "all pay-at-location is
-// manual" rule (roadmap decision 1a):
-//   • cash at the location → proforma only; its fiscal invoice stays manual
-//   • card on the POS      → fiscal invoice, exactly like an online card payment
-//
-// It replaced, not supplemented: a card desk sale issues an invoice INSTEAD of
-// a proforma, so nothing has to be reconciled against a stray estimate.
-//
-// Money NOT yet collected is always a proforma regardless of how it will later
-// be paid — an unpaid pay-later reservation, the order-time document on a
-// pay-at-pickup order, an emailed extension request. A proforma is a request
-// for money; only collected money gets a fiscal document.
-//
-// Prompted by a client report: a month of POS card takings had no invoices in
-// SmartBill, because desk card was filed with cash under the old rule.
-function deskDocKind(paidBy) {
-  return paidBy === 'card' ? 'invoice' : 'proforma';
-}
-
-// The smartbill.* key an APPENDED desk document lands under (overstay charges,
-// extension top-ups — several can accumulate on one booking).
-function deskExtraField(paidBy) {
-  return paidBy === 'card' ? 'extraInvoices' : 'extraProformas';
-}
-
 // Issue one SmartBill document (kind: 'proforma' | 'invoice') and stamp the
 // outcome onto every given doc ref via dot-path updates (so an invoice stamp
 // never clobbers the earlier proforma block). NEVER throws.
@@ -1119,14 +1093,18 @@ export const createPayment = onRequest(
 
     await getFirestore().collection('pendingOrders').doc(orderId).set(pendingDoc);
 
-    // v1.2: every order gets a proforma up front — the fiscal invoice follows
-    // only when payment confirms online (netopiaCallback). Voucher-covered
-    // free orders returned earlier and get no documents (nothing was charged).
-    {
+    // An ONLINE order gets its proforma up front: that document is the payment
+    // request preceding the card charge, and netopiaCallback turns it into the
+    // fiscal invoice on confirm. A PAY-AT-PICKUP order gets nothing here — the
+    // document follows the money, raised by adminMarkOrderPaid for the amount
+    // actually collected (client decision 2026-09-04; see fiscalDoc.js).
+    // Voucher-covered free orders returned earlier and get no documents.
+    const orderDocKind = orderTimeDocKind({ paymentMethod });
+    if (orderDocKind) {
       const refs = [getFirestore().collection('pendingOrders').doc(orderId)];
       if (pendingDoc.bookingId) refs.push(getFirestore().collection('bookings').doc(pendingDoc.bookingId));
       await smartbillIssueSafe({
-        kind: 'proforma',
+        kind: orderDocKind,
         billing: cdClean.billing,
         email: cdClean.email,
         items: orderType === 'longTerm'
@@ -2020,12 +1998,13 @@ export const adminMarkOrderPaid = onCall(
       } : {}),
     };
 
-    // Context for the desk fiscal invoice, filled in by whichever branch runs.
+    // Context for the desk document, filled in by whichever branch runs.
     // A POS card payment collected here gets a fiscal invoice (2026-08-05
-    // decision); cash issues nothing — the order-time proforma from
-    // createPayment stands and its invoice is raised manually. Before that
-    // decision this callable issued no document at all, which is how a month
-    // of POS takings ended up with nothing in SmartBill.
+    // decision); cash gets the proforma, which since 2026-09-04 is raised HERE
+    // rather than when the reservation was made — its fiscal invoice is still
+    // the accountant's to raise. Before the 2026-08-05 decision this callable
+    // issued no document at all, which is how a month of POS takings ended up
+    // with nothing in SmartBill.
     // (No initializer: every path that reaches the issuance below assigns it,
     // and the extension branch returns before then. The falsy guard stays as
     // belt-and-braces for future branches.)
@@ -2143,43 +2122,48 @@ export const adminMarkOrderPaid = onCall(
       throw new HttpsError('invalid-argument', `Unknown orderType: ${pending.orderType}`);
     }
 
-    // A discount makes the order-time proforma — issued at the full price —
-    // wrong. Replace it with one for what was actually collected, or simply
-    // drop it when the reservation was waived outright and no money changed
-    // hands (a 0-lei fiscal document is not a thing worth issuing).
-    if (discount && deskInvoice) {
-      await smartbillDeleteProformaSafe({
-        sb: pending.smartbill,
-        refs: deskInvoice.refs,
-        label: `desk discount ${orderId}`,
-      });
-      if (collected > 0) {
+    // Which documents this collection produces. Since 2026-09-04 an unpaid
+    // reservation carries no proforma, so a CASH collection raises one here for
+    // the amount actually taken. Orders that still carry one — created online,
+    // or booked before that change — keep it rather than being given a second,
+    // unless a desk discount made it wrong, in which case it is replaced. Card
+    // collections get the fiscal invoice instead (decision 1b, 2026-08-05).
+    // All best-effort: a SmartBill failure never breaks the collection. The
+    // rule itself lives in fiscalDoc.js, where it can be tested.
+    const docs = collectionDocs({
+      paidBy,
+      collected,
+      hasLiveProforma: !!pending.smartbill?.proforma?.number && !pending.smartbill?.proformaDeleted,
+      discounted: !!discount,
+    });
+    if (deskInvoice) {
+      if (docs.deleteProforma) {
+        await smartbillDeleteProformaSafe({
+          sb: pending.smartbill,
+          refs: deskInvoice.refs,
+          label: `desk collect ${orderId}`,
+        });
+      }
+      if (docs.issueProforma) {
         await smartbillIssueSafe({
           kind: 'proforma',
           billing: deskInvoice.billing,
           email: deskInvoice.email,
           items: deskInvoice.items,
           refs: deskInvoice.refs,
-          label: `desk discount ${orderId}`,
+          label: `desk collect ${orderId}`,
         });
       }
-    }
-
-    // POS card collected at the desk → fiscal invoice, on the same footing as
-    // an online card payment. The order-time proforma stays on the doc, exactly
-    // as it does on the online flow (proforma → invoice). Best-effort, like
-    // every other issuance: a SmartBill failure never breaks the collection.
-    // Nothing collected (a full waiver) → no invoice: there is no sale to
-    // document, and SmartBill rejects a zero-total anyway.
-    if (paidBy === 'card' && collected > 0 && deskInvoice) {
-      await smartbillIssueSafe({
-        kind: 'invoice',
-        billing: deskInvoice.billing,
-        email: deskInvoice.email,
-        items: deskInvoice.items,
-        refs: deskInvoice.refs,
-        label: `desk card ${orderId}`,
-      });
+      if (docs.issueInvoice) {
+        await smartbillIssueSafe({
+          kind: 'invoice',
+          billing: deskInvoice.billing,
+          email: deskInvoice.email,
+          items: deskInvoice.items,
+          refs: deskInvoice.refs,
+          label: `desk card ${orderId}`,
+        });
+      }
     }
 
     await db.collection('auditLog').add({
@@ -3613,16 +3597,18 @@ export const adminCreateLongtermBooking = onCall(
       });
     }
 
-    // v1.2: proforma up front for desk-created reservations too (cash, card
-    // and pay-later; the pay-at-location fiscal invoice stays manual). Broker
-    // money never passes through us (ParkVia et al. bill the customer), so
-    // broker reservations get no SmartBill documents.
-    if (paidBy !== 'broker') {
-      // card → fiscal invoice; cash → proforma; pay-later → proforma (nothing
-      // collected yet, and its invoice follows from adminMarkOrderPaid if the
-      // client eventually pays by card). See deskDocKind.
+    // Card → fiscal invoice; cash → proforma; broker → nothing (ParkVia et al.
+    // bill the customer, no money passes through us). Pay-later → nothing yet
+    // either: it is the same unpaid reservation the public funnel makes, and
+    // since 2026-09-04 its document is raised at collection instead. See
+    // orderTimeDocKind in fiscalDoc.js.
+    const deskBookingDocKind = orderTimeDocKind({
+      paymentMethod: payLater ? 'pay-at-pickup' : 'admin',
+      paidBy,
+    });
+    if (deskBookingDocKind) {
       await smartbillIssueSafe({
-        kind: payLater ? 'proforma' : deskDocKind(paidBy),
+        kind: deskBookingDocKind,
         billing: billingClean,
         email: payerEmailNorm,
         items: longTermDocItems({ bookingCode, amount: total }),
@@ -4418,19 +4404,13 @@ export const adminRepriceBooking = onCall(
         payload: { code: b.code || null, requote: true, newDropoff, newPickupAt, days: newCalc.days, oldTotal, newTotal: newCalc.expected },
         timestamp: nowIso,
       });
-      // v1.2 Phase 4b: the payment request changed → replace the proforma
-      // (delete the old non-fiscal one, issue a fresh one at the new total).
+      // The booking is unpaid, so since 2026-09-04 it carries no document at
+      // all — the desk raises one when it collects. Drop whatever a booking
+      // made before that change still has: its dates and total just moved, so
+      // it is now simply wrong. Nothing replaces it.
       {
         const sbRefs = [ref, ...(b.paymentId ? [db.collection('pendingOrders').doc(b.paymentId)] : [])];
         await smartbillDeleteProformaSafe({ sb: b.smartbill, refs: sbRefs, label: `requote ${bookingId}` });
-        await smartbillIssueSafe({
-          kind: 'proforma',
-          billing: b.billing,
-          email: b.contact?.email,
-          items: longTermDocItems({ bookingCode: b.code, amount: newCalc.expected }),
-          refs: sbRefs,
-          label: `requote ${bookingId}`,
-        });
       }
       // The cost changed on a booking the customer hasn't paid yet — tell them
       // the new total, with the usual pay-online (discounted) / pay-at-arrival
